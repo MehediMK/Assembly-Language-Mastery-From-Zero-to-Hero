@@ -466,72 +466,438 @@ export const CHAPTERS_LEVEL_2: Chapter[] = [
     ]
   },
   {
-    id: 7,
-    slug: 'chapter-7-arithmetic-logical',
-    level: 2,
-    levelTitle: 'Core Assembly Programming',
-    title: 'Chapter 7: Arithmetic and Logical Instructions',
-    subtitle: 'High Precision Integer Math, Bit Manipulation, and Status Flags',
-    learningObjectives: [
-      'Master integer arithmetic instructions: add, sub, inc, dec, neg, mul, imul, div, idiv.',
-      'Understand how arithmetic instructions affect CPU flags (CF, ZF, SF, OF).',
-      'Explore logical instructions: and, or, xor, not, test.',
-      'Learn shift and rotate instructions (shl, shr, sar, rol, ror).',
-      'Write complete programs for factorial, power of two, and popcount.'
+    "id": 7,
+    "slug": "chapter-7-arithmetic-logical",
+    "level": 2,
+    "levelTitle": "Core Assembly Programming",
+    "title": "Chapter 7: Arithmetic and Logical Instructions",
+    "subtitle": "High Precision Integer Math, Bit Manipulation, and Status Flags",
+    "learningObjectives": [
+      "Master integer arithmetic instructions: add, sub, inc, dec, neg, imul, idiv, and their unsigned variants.",
+      "Understand how arithmetic instructions affect CPU flags (CF, ZF, SF, OF).",
+      "Explore logical instructions: and, or, xor, not, test.",
+      "Learn shift and rotate instructions and their use in multiplication, division, and bit manipulation.",
+      "Apply arithmetic and logical instructions to solve practical problems.",
+      "Understand the difference between signed and unsigned operations.",
+      "Write complete programs that perform calculations and output results (or exit with codes)."
     ],
-    prerequisites: ['Chapters 1–6'],
-    keyConcepts: [
-      'Arithmetic instructions set flags indicating zero, overflow, sign, and carry.',
-      'Shifts multiply/divide by powers of 2; sar preserves sign bit.',
-      'Popcount counts number of set bits.'
+    "prerequisites": [
+      "Solid understanding of data movement and addressing modes (Chapter 6).",
+      "Familiarity with binary, hexadecimal, two’s complement, and data sizes (Chapter 2).",
+      "Basic knowledge of program structure and the build process (Chapters 1–5)."
     ],
-    diagramType: 'arithmetic_logical',
-    sections: [
+    "keyConcepts": [
+      "Arithmetic instructions operate on integers and set flags to indicate overflow, zero, sign, and carry.",
+      "Multiplication and division have special forms requiring rax/rdx registers.",
+      "Logical instructions manipulate bits and are used for masking, setting, clearing, and testing.",
+      "Shift instructions provide fast multiplication/division by powers of two; arithmetic shifts preserve sign.",
+      "Rotate instructions move bits circularly.",
+      "Signed vs unsigned operations require different conditional jumps and sometimes different instructions (e.g., idiv vs div, imul vs mul)."
+    ],
+    "diagramType": "arithmetic_logical",
+    "sections": [
       {
-        id: 'sec-7-1',
-        title: '7.1 Bit Manipulation & Popcount',
-        content: `Popcount algorithm in assembly using shifts and tests:`,
-        codeSnippets: [
+        "id": "sec-7-1",
+        "title": "7.1 Addition and Subtraction",
+        "content": ""
+      },
+      {
+        "id": "sec-7-1-1",
+        "title": "7.1.1 add and sub",
+        "content": "Syntax:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'popcount.asm',
-            code: `section .text
-    global _start
-_start:
-    mov rax, 0x0F0F0F0F0F0F0F0F   ; value to count bits in
-    xor rbx, rbx                  ; bit counter
-count_loop:
-    test rax, rax
-    jz done
-    mov rdx, rax
-    and rdx, 1                    ; isolate lowest bit
-    add rbx, rdx                  ; add to count
-    shr rax, 1                    ; shift right logical
-    jmp count_loop
-done:
-    mov rdi, rbx                  ; exit code = 32
-    mov rax, 60
-    syscall`
+            "language": "nasm",
+            "title": "7.1.1 add and sub — listing 1",
+            "code": "add destination, source   ; destination = destination + source\nsub destination, source   ; destination = destination - source",
+            "explanation": "The destination can be a register or memory; the source can be a register, memory, or immediate. Both operands cannot be memory simultaneously.\n\nExamples:"
+          },
+          {
+            "language": "nasm",
+            "title": "7.1.1 add and sub — listing 2",
+            "code": "add rax, rbx          ; rax = rax + rbx\nsub rax, 10           ; rax = rax - 10\nadd qword [rsp], 5    ; memory = memory + 5\nsub rcx, [rdx]        ; rcx = rcx - memory[rdx]",
+            "explanation": "These instructions modify all status flags:\n- ZF set if result is zero.\n- SF set if result is negative (MSB = 1).\n- CF set if unsigned overflow (carry out of MSB) or borrow.\n- OF set if signed overflow (result too large for signed interpretation)."
+          }
+        ]
+      },
+      {
+        "id": "sec-7-1-2",
+        "title": "7.1.2 inc and dec",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.1.2 inc and dec — listing 1",
+            "code": "inc destination   ; destination = destination + 1\ndec destination   ; destination = destination - 1",
+            "explanation": "These are shorter than add dest, 1 and do not affect the Carry Flag (CF), but they do affect ZF, SF, OF. This is important when CF must be preserved across a counter update."
+          }
+        ]
+      },
+      {
+        "id": "sec-7-1-3",
+        "title": "7.1.3 neg – Negate",
+        "content": "\n\nClarification: neg and not followed by add 1 produce the same integer result, but their final flags can differ. For example, neg of zero clears CF; not of zero followed by add 1 sets CF.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.1.3 neg – Negate — listing 1",
+            "code": "neg destination   ; destination = 0 - destination (two's complement)",
+            "explanation": "This is equivalent to not destination followed by add destination, 1. It affects flags like sub.\n\nExample:"
+          },
+          {
+            "language": "nasm",
+            "title": "7.1.3 neg – Negate — listing 2",
+            "code": "mov rax, 5\nneg rax        ; rax = -5"
+          }
+        ]
+      },
+      {
+        "id": "sec-7-2",
+        "title": "7.2 Multiplication",
+        "content": "x86-64 provides several forms of multiplication. The unsigned version is mul; the signed version is imul. The one-operand form uses rax implicitly, while two- and three-operand forms are more flexible."
+      },
+      {
+        "id": "sec-7-2-1",
+        "title": "7.2.1 Unsigned Multiplication: mul",
+        "content": "One-operand form:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.2.1 Unsigned Multiplication: mul — listing 1",
+            "code": "mul source",
+            "explanation": "- If source is 8-bit: ax = al * source (result in ax).\n- If source is 16-bit: dx:ax = ax * source.\n- If source is 32-bit: edx:eax = eax * source.\n- If source is 64-bit: rdx:rax = rax * source.\n\nThe high part of the result (e.g., rdx) is non-zero if overflow occurs (unsigned overflow). The flags CF and OF are set if the high part is non-zero.\n\nExample:"
+          },
+          {
+            "language": "nasm",
+            "title": "7.2.1 Unsigned Multiplication: mul — listing 2",
+            "code": "mov rax, 100\nmov rbx, 200\nmul rbx          ; rdx:rax = 100 * 200 = 20000 (rdx=0, rax=20000)"
+          }
+        ]
+      },
+      {
+        "id": "sec-7-2-2",
+        "title": "7.2.2 Signed Multiplication: imul",
+        "content": "imul has three forms:\n\nOne-operand form (signed): Same as mul, but for signed values. rdx:rax = rax * source (sign-extended). Flags are set similarly.\n\nTwo-operand form:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.2.2 Signed Multiplication: imul — listing 1",
+            "code": "imul dest, source   ; dest = dest * source",
+            "explanation": "Both operands must be the same size (register or memory for source, register for dest). The result is truncated to the size of dest. Flags are set if the truncated result does not fit (i.e., overflow).\n\nThree-operand form:"
+          },
+          {
+            "language": "nasm",
+            "title": "7.2.2 Signed Multiplication: imul — listing 2",
+            "code": "imul dest, source1, immediate   ; dest = source1 * immediate",
+            "explanation": "source1 can be register or memory; dest must be a register; immediate is a constant. This is the most common form.\n\nExamples:"
+          },
+          {
+            "language": "nasm",
+            "title": "7.2.2 Signed Multiplication: imul — listing 3",
+            "code": "imul rax, rbx        ; rax = rax * rbx (signed)\nimul rax, rcx, 10    ; rax = rcx * 10\nimul rbx, qword [rsp] ; rbx = rbx * memory",
+            "explanation": "Note: mul only has one-operand form; for unsigned multiplication with a constant, use imul (the two/three-operand forms are signed, but for non-negative values the result is the same). For unsigned multiplication with two registers, use mul or combine with imul if values are known non-negative."
+          }
+        ]
+      },
+      {
+        "id": "sec-7-2-3",
+        "title": "7.2.3 Detecting Overflow in Multiplication",
+        "content": "- For one-operand mul/imul, check CF/OF after the instruction (set if high part is non-zero).\n- For two/three-operand imul, CF/OF are set if the result is truncated (i.e., the true product does not fit in the destination).\n\nClarification: For unsigned mul, a nonzero upper half sets CF and OF. For signed imul, overflow means the full product cannot be represented by sign-extending the lower half. A negative product can have an all-ones upper half with CF and OF clear. Reference: Intel Software Developer’s Manual, Volume 2A, IMUL."
+      },
+      {
+        "id": "sec-7-3",
+        "title": "7.3 Division",
+        "content": "Division is more involved. The dividend is twice the size of the divisor. For 64-bit division:\n- Dividend in rdx:rax (128 bits).\n- Divisor specified as operand.\n- Quotient in rax, remainder in rdx."
+      },
+      {
+        "id": "sec-7-3-1",
+        "title": "7.3.1 Unsigned Division: div",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.3.1 Unsigned Division: div — listing 1",
+            "code": "div source",
+            "explanation": "- If source is 8-bit: ax / source → quotient in al, remainder in ah.\n- 16-bit: dx:ax / source → quotient in ax, remainder in dx.\n- 32-bit: edx:eax / source → quotient in eax, remainder in edx.\n- 64-bit: rdx:rax / source → quotient in rax, remainder in rdx.\n\nBefore unsigned 64-bit division, you must zero-extend rax into rdx (typically xor rdx, rdx or mov rdx, 0).\n\nExample:"
+          },
+          {
+            "language": "nasm",
+            "title": "Divide 100 by 7 (unsigned)",
+            "code": "; Divide 100 by 7 (unsigned)\nmov rax, 100\nxor rdx, rdx        ; clear high 64 bits\nmov rbx, 7\ndiv rbx             ; rax = 14 (quotient), rdx = 2 (remainder)"
+          }
+        ]
+      },
+      {
+        "id": "sec-7-3-2",
+        "title": "7.3.2 Signed Division: idiv",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.3.2 Signed Division: idiv — listing 1",
+            "code": "idiv source",
+            "explanation": "Same as div, but for signed values. Before signed division, you must sign-extend rax into rdx using cqo (convert quadword to octaword) or cdq for 32-bit.\n\nExample:"
+          },
+          {
+            "language": "nasm",
+            "title": "Divide -100 by 7 (signed)",
+            "code": "; Divide -100 by 7 (signed)\nmov rax, -100\ncqo                 ; sign-extend rax into rdx:rax\nmov rbx, 7\nidiv rbx            ; rax = -14 (quotient), rdx = -2 (remainder)",
+            "explanation": "Important: If the quotient does not fit in the destination register (e.g., dividing by zero, or overflow like -2^63 / -1), a division error exception occurs."
+          }
+        ]
+      },
+      {
+        "id": "sec-7-3-3",
+        "title": "7.3.3 Checking for Division Overflow",
+        "content": "- Divisor zero → division by zero exception.\n- For signed: rax = -2^63 and divisor -1 → overflow.\n- For unsigned: if rdx >= divisor, quotient will not fit in 64 bits.\n\nAlways ensure divisor is non-zero and the quotient fits."
+      },
+      {
+        "id": "sec-7-4",
+        "title": "7.4 Logical Instructions",
+        "content": "Logical instructions perform bitwise operations. They are crucial for masking, setting/clearing bits, and testing values."
+      },
+      {
+        "id": "sec-7-4-1",
+        "title": "7.4.1 and, or, xor, not",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.4.1 and, or, xor, not — listing 1",
+            "code": "and dest, src    ; dest = dest & src\nor  dest, src    ; dest = dest | src\nxor dest, src    ; dest = dest ^ src\nnot dest         ; dest = ~dest (one’s complement)",
+            "explanation": "and, or, xor affect flags: ZF, SF, PF (parity), CF cleared, OF cleared. not does not affect flags.\n\nCommon idioms:\n- Zero a register: xor rax, rax (faster and shorter than mov rax, 0).\n- Clear certain bits (mask): and rax, 0xFF keeps low byte.\n- Set certain bits: or rax, 0x80 sets bit 7.\n- Toggle bits: xor rax, 0x01 toggles bit 0.\n- Invert all bits: not rax."
+          }
+        ]
+      },
+      {
+        "id": "sec-7-4-2",
+        "title": "7.4.2 test – Bitwise Test",
+        "content": "\n\nClarification: test reg, reg does have two explicit operands: both name the same register. It avoids an immediate operand and preserves the register value. Its performance relative to cmp reg, 0 depends on the processor and surrounding instructions.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.4.2 test – Bitwise Test — listing 1",
+            "code": "test dest, src   ; performs dest & src, sets flags, discards result",
+            "explanation": "test is used to check if bits are set without modifying the destination. It sets ZF if the result is zero (i.e., no overlapping bits), SF if MSB of result is set, etc.\n\nExamples:"
+          },
+          {
+            "language": "nasm",
+            "title": "7.4.2 test – Bitwise Test — listing 2",
+            "code": "test rax, rax      ; ZF set if rax == 0\njz   is_zero\ntest al, 1         ; check if bit 0 set (odd)\njnz  is_odd\ntest rax, 0xFF     ; check if any of low 8 bits set\njz   low_bits_clear",
+            "explanation": "test is preferred over cmp reg, 0 because it is faster and does not require a second operand."
+          }
+        ]
+      },
+      {
+        "id": "sec-7-5",
+        "title": "7.5 Shift and Rotate Instructions",
+        "content": "Shifts and rotates move bits left or right. They are used for fast multiplication/division by powers of two, bit extraction, and encoding/decoding."
+      },
+      {
+        "id": "sec-7-5-1",
+        "title": "7.5.1 Shift Instructions",
+        "content": "- shl dest, count : Shift left logical. Fills with zeros on right. Equivalent to multiplying by 2^count (unsigned or signed positive).\n- shr dest, count : Shift right logical. Fills with zeros on left. Equivalent to unsigned division by 2^count.\n- sar dest, count : Shift right arithmetic. Fills with sign bit on left. Equivalent to signed division by 2^count (rounds toward negative infinity for negative numbers).\n\ncount can be an immediate or the cl register (for variable shifts). In 64-bit mode, shift count is masked to 6 bits (0–63). For 32-bit operands, masked to 5 bits.\n\nFlags:\n- CF contains the last bit shifted out.\n- ZF, SF, OF set based on result (OF only defined for shift count 1).\n- If count is 0, flags are unaffected.\n\nExamples:\n\nClarification: The shift-count mask depends on operand width: 64-bit operands use six count bits; 8-, 16-, and 32-bit operands use five. These are the ordinary scalar shift instructions shown here.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.5.1 Shift Instructions — listing 1",
+            "code": "shl rax, 1        ; rax *= 2\nshr rax, 4        ; unsigned rax /= 16\nsar rax, 1        ; signed rax /= 2 (rounds down)\nmov cl, 3\nshl rax, cl       ; shift by 3 bits"
+          }
+        ]
+      },
+      {
+        "id": "sec-7-5-2",
+        "title": "7.5.2 Rotate Instructions",
+        "content": "- rol dest, count : Rotate left. Bits shifted out on left re-enter on right.\n- ror dest, count : Rotate right. Bits shifted out on right re-enter on left.\n- rcl dest, count : Rotate left through carry.\n- rcr dest, count : Rotate right through carry.\n\nRotates are used in cryptography, hash functions, and bit permutations.\n\nExamples:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.5.2 Rotate Instructions — listing 1",
+            "code": "rol rax, 8        ; rotate left 8 bits\nror rbx, 4        ; rotate right 4 bits"
+          }
+        ]
+      },
+      {
+        "id": "sec-7-5-3",
+        "title": "7.5.3 Shift vs Rotate Example",
+        "content": "Consider al = 0b10110011:\n\n- shl al, 1 → al = 0b01100110, CF=1.\n- shr al, 1 → al = 0b01011001, CF=1.\n- sar al, 1 → al = 0b11011001 (sign bit was 1), CF=1.\n- rol al, 1 → al = 0b01100111, CF=1.\n- ror al, 1 → al = 0b11011001, CF=1.\n\nClarification: Each example starts again from AL = 0b10110011; the listed shifts and rotates are independent, not a sequence."
+      },
+      {
+        "id": "sec-7-6",
+        "title": "7.6 Signed vs Unsigned Operations",
+        "content": "The CPU does not inherently know whether a value is signed or unsigned; the programmer must use the correct instructions and conditional jumps."
+      },
+      {
+        "id": "sec-7-6-1",
+        "title": "7.6.1 Arithmetic",
+        "content": "- Addition and subtraction are the same for signed and unsigned (two’s complement). Flags allow detecting overflow:\n  - CF indicates unsigned overflow.\n  - OF indicates signed overflow.\n- Multiplication: imul for signed, mul for unsigned (one-operand form). Two/three-operand imul works for both if values are non-negative, but for signed semantics use imul.\n- Division: idiv for signed, div for unsigned.\n\nClarification: The low half of a product is the same for signed and unsigned interpretations of the same operand bits. Two- and three-operand imul can therefore compute the low-half unsigned result too; its CF/OF flags still indicate signed overflow, not unsigned overflow."
+      },
+      {
+        "id": "sec-7-6-2",
+        "title": "7.6.2 Comparison and Jumps",
+        "content": "After cmp or sub, use:\n- Signed jumps: jg, jge, jl, jle.\n- Unsigned jumps: ja, jae, jb, jbe.\n\nUsing the wrong jump is a common bug. For example:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.6.2 Comparison and Jumps — listing 1",
+            "code": "cmp rax, rbx      ; compare as signed or unsigned? Depends on interpretation.\njl  less_signed   ; signed less\njb  less_unsigned ; unsigned less"
+          }
+        ]
+      },
+      {
+        "id": "sec-7-6-3",
+        "title": "7.6.3 Example: Finding Maximum",
+        "content": "Unsigned maximum:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.6.3 Example: Finding Maximum — listing 1",
+            "code": "cmp rax, rbx\ncmovb rax, rbx    ; if rax < rbx (unsigned), rax = rbx",
+            "explanation": "Signed maximum:"
+          },
+          {
+            "language": "nasm",
+            "title": "7.6.3 Example: Finding Maximum — listing 2",
+            "code": "cmp rax, rbx\ncmovl rax, rbx    ; if rax < rbx (signed), rax = rbx"
+          }
+        ]
+      },
+      {
+        "id": "sec-7-7",
+        "title": "7.7 Practical Examples",
+        "content": ""
+      },
+      {
+        "id": "sec-7-7-1",
+        "title": "7.7.1 Program: Compute Factorial (Iterative)",
+        "content": "Compute factorial of 5 (120) and exit with code (low byte = 120).",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.7.1 Program: Compute Factorial (Iterative) — listing 1",
+            "code": "section .text\n    global _start\n\n_start:\n    mov rax, 1          ; result\n    mov rcx, 1          ; counter\nloop_start:\n    cmp rcx, 5\n    jg  done\n    imul rax, rcx       ; rax *= rcx\n    inc rcx\n    jmp loop_start\ndone:\n    mov rdi, rax        ; exit code = 120\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-7-7-2",
+        "title": "7.7.2 Program: Check if Power of Two",
+        "content": "A number is a power of two if it has exactly one bit set. Use test with rax-1.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.7.2 Program: Check if Power of Two — listing 1",
+            "code": "section .text\n    global _start\n\n_start:\n    mov rax, 16         ; test number\n    test rax, rax\n    jz  not_power       ; zero is not power of two\n    lea rbx, [rax - 1]  ; rbx = rax - 1\n    test rax, rbx\n    jnz not_power       ; if (rax & (rax-1)) != 0, not power of two\n    ; is power of two\n    mov rdi, 1          ; exit code 1\n    jmp exit\nnot_power:\n    mov rdi, 0          ; exit code 0\nexit:\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-7-7-3",
+        "title": "7.7.3 Program: Count Set Bits (Popcount)",
+        "content": "Count the number of 1 bits in a 64-bit value using shifts and tests.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "7.7.3 Program: Count Set Bits (Popcount) — listing 1",
+            "code": "section .text\n    global _start\n\n_start:\n    mov rax, 0x0F0F0F0F0F0F0F0F   ; value to count bits in\n    xor rbx, rbx          ; counter\ncount_loop:\n    test rax, rax\n    jz  done\n    mov rdx, rax\n    and rdx, 1            ; isolate lowest bit\n    add rbx, rdx          ; add to count\n    shr rax, 1            ; shift right logical\n    jmp count_loop\ndone:\n    mov rdi, rbx          ; exit code = number of bits (32 for 0x0F0F...)\n    mov rax, 60\n    syscall"
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-7-1',
-        title: 'Exercise 7.1: Sum of Squares',
-        description: 'Compute 1² + 2² + ... + 10² = 385. Exit with sum mod 256.',
-        solution: `xor rax, rax\nmov rcx, 1\n.loop:\ncmp rcx, 10\njg .done\nmov rbx, rcx\nimul rbx, rbx\nadd rax, rbx\ninc rcx\njmp .loop\n.done:`,
-        solutionLanguage: 'nasm'
+        "id": "ex-7-1",
+        "title": "Exercise 7.1: Sum of Squares",
+        "description": "Compute the sum of squares from 1 to 10 (1² + 2² + ... + 10² = 385). Use imul to compute squares. Exit with the sum (low byte = 129? Actually 385 mod 256 = 129). Confirm with echo $?.",
+        "solution": "section .text\nglobal _start\n_start:\n    xor rax, rax        ; sum\n    mov rcx, 1          ; counter\nloop_start:\n    cmp rcx, 10\n    jg done\n    mov rbx, rcx\n    imul rbx, rbx       ; rbx = rcx^2\n    add rax, rbx\n    inc rcx\n    jmp loop_start\ndone:\n    mov rdi, rax        ; 385 -> low byte = 129\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-7-2",
+        "title": "Exercise 7.2: GCD Using Euclidean Algorithm",
+        "description": "Implement the Euclidean algorithm to compute the greatest common divisor of two numbers (e.g., 48 and 18 → GCD = 6). Use division or repeated subtraction. Exit with GCD.",
+        "solution": "section .text\nglobal _start\n_start:\n    mov rax, 48\n    mov rbx, 18\ngcd_loop:\n    cmp rbx, 0\n    je done\n    xor rdx, rdx        ; clear for div\n    div rbx             ; rax = quotient, rdx = remainder\n    mov rax, rbx        ; new a = b\n    mov rbx, rdx        ; new b = remainder\n    jmp gcd_loop\ndone:\n    mov rdi, rax        ; gcd = 6\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-7-3",
+        "title": "Exercise 7.3: Bit Reversal",
+        "description": "Write a program that reverses the bits of a byte (e.g., 10110010 → 01001101). Use shifts and rotates. Exit with the reversed byte.",
+        "solution": "section .text\nglobal _start\n_start:\n    mov al, 0b10110010   ; value to reverse\n    xor bl, bl           ; result\n    mov cl, 8            ; loop count\nreverse_loop:\n    shr al, 1            ; shift out LSB into CF\n    rcl bl, 1            ; rotate carry into result (from left? Actually rcl rotates left through carry: bl = bl<<1 + CF)\n    dec cl\n    jnz reverse_loop\n    ; bl = reversed bits: 0b01001101 = 0x4D = 77\n    movzx rdi, bl\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-7-4",
+        "title": "Exercise 7.4: Signed Division with Negative Numbers",
+        "description": "Compute (−27) / 5 using idiv. What are quotient and remainder? According to C semantics, quotient = -5, remainder = -2. Verify. Exit with remainder (as low byte).",
+        "solution": "section .text\nglobal _start\n_start:\n    mov rax, -27\n    mov rbx, 5\n    cqo                 ; sign-extend rax into rdx:rax\n    idiv rbx            ; quotient -5 (rax), remainder -2 (rdx)\n    ; exit with remainder: rdx = -2, low byte = 0xFE = 254\n    mov rdi, rdx\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-7-5",
+        "title": "Exercise 7.5: Logical Masking",
+        "description": "Given a 64-bit value in rax, clear bits 3–5, set bits 7 and 8, toggle bit 0. Start with rax = 0xFFFFFFFFFFFFFFFF. Show the final result (should be 0xFFFFFFFFFFFFFEFE? Let's compute: clear bits 3-5 means mask off bits 3,4,5. Set bits 7 and 8. Toggle bit 0. Starting all ones: clear bits 3-5 gives ...1111111111111111111111111111111111111111111111111111111110001111? Actually all ones: bit 3,4,5 are ones, clearing them yields zeros. Set bits 7,8 (they are already ones, stay ones). Toggle bit 0: it's one, becomes zero. Final: bits 3-5 zero, bit 0 zero, others one. Represent in hex: 0xFFFFFFFFFFFFFFC7? Wait, bits 0,3,4,5 clear = 111...1110001111? We'll compute in solution.)",
+        "solution": "section .text\nglobal _start\n_start:\n    mov rax, 0xFFFFFFFFFFFFFFFF\n    ; clear bits 3-5: mask off bits 3,4,5 => AND with ~(0b00111000)\n    and rax, ~0b00111000   ; ~0x38 = 0xFFFFFFFFFFFFFFC7\n    ; set bits 7 and 8: OR with 0b110000000 = 0x180\n    or  rax, 0x180\n    ; toggle bit 0: XOR with 1\n    xor rax, 1\n    ; Final: \n    ; Start all ones.\n    ; Clear bits 3,4,5 -> bits become 0 at positions 3,4,5.\n    ; Set bits 7,8 -> already 1, stay 1.\n    ; Toggle bit 0 -> becomes 0.\n    ; Result: all ones except bits 0,3,4,5 zero.\n    ; Hex: 0xFFFFFFFFFFFFFFC7? Wait, bit 0 is zero, bits 3-5 zero, so value = 0xFFFFFFFFFFFFFFC7? Let's compute:\n    ; All ones: 0xFFFFFFFFFFFFFFFF\n    ; Clear bits 3,4,5: mask = ~0x38 = 0xFFFFFFFFFFFFFFC7, so after AND: 0xFFFFFFFFFFFFFFC7.\n    ; OR with 0x180: bits 7,8 set, but they are already 1 (since C7 has bit7=1, bit8=1). So stays 0xFFFFFFFFFFFFFFC7.\n    ; XOR with 1: toggles bit0 from 1 to 0, so final = 0xFFFFFFFFFFFFFFC6.\n    ; Exit code low byte = 0xC6 = 198\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Resolved result: 0xFFFFFFFFFFFFFFC6. Clearing bits 3–5 gives 0xFFFFFFFFFFFFFFC7; bits 7 and 8 are already set; toggling bit 0 gives C6 in the low byte. The expected exit code is 198. The tentative values in the source exercise are intermediate guesses, not the final answer."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Explain the difference between shr and sar.',
-        answer: 'shr shifts bits right and inserts 0 at the MSB (unsigned division). sar shifts right while replicating the MSB sign bit (signed division preserving negative numbers).'
+        "question": "What is the difference between mul and imul? When would you use each?",
+        "answer": "mul performs unsigned multiplication and uses the accumulator implicitly, producing a double-width result. imul performs signed multiplication and also has two- and three-operand forms. Use the form appropriate to the signedness, required result width, and overflow check."
+      },
+      {
+        "question": "How do you prepare for signed 64-bit division? Explain cqo.",
+        "answer": "Put the signed 64-bit dividend in RAX and execute cqo to sign-extend it into RDX:RAX, then idiv with a nonzero divisor. The quotient is in RAX and remainder in RDX. Also guard against a quotient that cannot fit, such as the most negative signed value divided by −1."
+      },
+      {
+        "question": "What is the effect of xor rax, rax? Why is it preferred over mov rax, 0?",
+        "answer": "xor rax, rax clears RAX because a value XORed with itself is zero. It is a compact zeroing idiom, but it changes flags. Use mov when preserving the existing flags matters."
+      },
+      {
+        "question": "Describe the difference between shr and sar. Provide an example where sar is necessary.",
+        "answer": "shr shifts bits right and inserts 0 at the MSB (unsigned division). sar shifts right while replicating the MSB sign bit (signed division preserving negative numbers). For example, shifting −3 right by one with sar gives −2 by repeating the sign bit. shr instead treats the bits as unsigned. sar rounds negative values down; idiv truncates toward zero."
+      },
+      {
+        "question": "How can you test if a number is even using logical instructions?",
+        "answer": "Use test rax, 1 followed by jz is_even. An even integer has bit zero clear, so the AND test produces zero and sets ZF without modifying RAX."
+      },
+      {
+        "question": "What does the test instruction do? Give an example of checking if a specific bit is set.",
+        "answer": "test computes a bitwise AND for flag updates and discards the result. For example, test rax, 8 followed by jnz bit3_set checks bit 3 without changing RAX."
+      },
+      {
+        "question": "Explain the flags set by add when overflow occurs (signed and unsigned).",
+        "answer": "CF indicates an unsigned carry out of the operand width, while OF indicates that the signed sum does not fit. ZF indicates a zero result and SF copies the result’s most significant bit. CF and OF can differ for the same operation."
+      },
+      {
+        "question": "How would you compute rax % 8 (remainder) using logical instructions instead of division?",
+        "answer": "For unsigned RAX, and rax, 7 keeps the low three bits and gives the remainder modulo 8. This also works for nonnegative signed values, but not for the signed division remainder of a negative number, which can be negative."
+      },
+      {
+        "question": "What is the purpose of rcl and rcr? How do they use the carry flag?",
+        "answer": "rcl and rcr rotate bits through CF, treating the carry flag as an additional bit. rcl shifts the old CF into the low bit and moves the old high bit into CF; rcr does the reverse. The bit-reversal solution uses shr to produce a carry bit and rcl to insert it into the result."
+      },
+      {
+        "question": "Write a short snippet to multiply rax by 10 without using imul or mul.",
+        "answer": "lea rax, [rax + rax*4] computes 5 × RAX; shl rax, 1 doubles it to 10 × the original value. The result wraps at the register width, and shl changes flags."
       }
     ],
-    summary: ['Integer arithmetic is fast and hardware-mapped.', 'Bit manipulation is foundational for low-level systems.']
+    "summary": [
+      "Arithmetic instructions include add, sub, inc, dec, neg, mul, imul, div, idiv.",
+      "Multiplication and division use implicit registers (rax, rdx) for wide results.",
+      "Signed division requires sign-extension (cqo), unsigned division requires zero-extension (xor rdx, rdx).",
+      "Logical instructions (and, or, xor, not, test) manipulate bits; test is used for bit testing without modifying operands.",
+      "Shift instructions (shl, shr, sar) provide fast multiplication/division by powers of two; arithmetic shifts preserve sign.",
+      "Rotate instructions (rol, ror) move bits circularly.",
+      "Distinguish signed vs unsigned operations and use appropriate conditional jumps.",
+      "In the next chapter, we’ll explore control flow in depth: comparisons, branches, and loops."
+    ]
   },
   {
     id: 8,
