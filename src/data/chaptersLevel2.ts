@@ -1877,91 +1877,378 @@ export const CHAPTERS_LEVEL_2: Chapter[] = [
     ]
   },
   {
-    id: 10,
-    slug: 'chapter-10-procedures-calling-conventions',
-    level: 2,
-    levelTitle: 'Core Assembly Programming',
-    title: 'Chapter 10: Procedures, Calling Conventions, and the Stack Frame',
-    subtitle: 'System V AMD64 ABI, 16-Byte Stack Alignment, and C Function Interoperability',
-    learningObjectives: [
-      'Master the call and ret instructions and return address mechanics.',
-      'Understand the System V AMD64 ABI calling convention on Linux.',
-      'Pass arguments via registers (rdi, rsi, rdx, rcx, r8, r9) and the stack.',
-      'Set up stack frames with frame pointer rbp or frame pointer omission.',
-      'Enforce strict 16-byte stack alignment before call.'
+    "id": 10,
+    "slug": "chapter-10-procedures-calling-conventions",
+    "level": 2,
+    "levelTitle": "Core Assembly Programming",
+    "title": "Chapter 10: Procedures, Calling Conventions, and the Stack Frame",
+    "subtitle": "System V AMD64 ABI, 16-Byte Stack Alignment, and C Function Interoperability",
+    "learningObjectives": [
+      "Understand the concept of procedures (functions, subroutines) and how they are implemented in assembly.",
+      "Master the call and ret instructions and how they manage the return address on the stack.",
+      "Comprehend calling conventions, particularly the System V AMD64 ABI used on Linux.",
+      "Learn how to pass arguments to procedures using registers and the stack.",
+      "Understand the role of the stack frame and how to use a frame pointer (rbp) to access arguments and local variables.",
+      "Write procedures with proper prologues and epilogues.",
+      "Handle functions with more than six arguments and understand stack alignment requirements.",
+      "Apply these concepts to create modular, reusable assembly code."
     ],
-    prerequisites: ['Chapters 1–9'],
-    keyConcepts: [
-      'First 6 integer/pointer arguments are passed in rdi, rsi, rdx, rcx, r8, r9.',
-      'Return value is delivered in rax.',
-      'Stack must be 16-byte aligned before call instruction.',
-      'Callee-saved registers: rbx, rbp, r12, r13, r14, r15.'
+    "prerequisites": [
+      "Solid understanding of the stack, registers, and addressing modes (Chapters 3 and 6).",
+      "Familiarity with control flow, loops, and jumps (Chapter 8).",
+      "Basic knowledge of arrays and memory operations (Chapter 9).",
+      "Ability to write and assemble simple programs (Chapters 1–5)."
     ],
-    diagramType: 'procedures_stack',
-    sections: [
+    "keyConcepts": [
+      "Procedure: A named block of code that can be called and returns control to the caller.",
+      "call pushes the return address onto the stack and jumps to the procedure; ret pops the return address and jumps back.",
+      "Calling convention: A set of rules for how arguments are passed, values returned, and registers preserved.",
+      "System V AMD64 ABI: The standard calling convention on 64-bit Linux. First six integer arguments go in rdi, rsi, rdx, rcx, r8, r9; additional arguments are passed on the stack. Return value in rax. Stack must be 16-byte aligned before a call.",
+      "Stack frame: A region on the stack reserved for a function call, containing return address, saved registers, arguments, and local variables.",
+      "Frame pointer (rbp): Often used to provide stable access to arguments and locals throughout the function.",
+      "Prologue and epilogue set up and tear down the stack frame."
+    ],
+    "diagramType": "procedures_stack",
+    "sections": [
       {
-        id: 'sec-10-1',
-        title: '10.1 System V AMD64 ABI Calling Convention',
-        content: `Linux x86-64 uses the System V AMD64 ABI:
-• Arguments 1-6: rdi, rsi, rdx, rcx, r8, r9
-• Arguments 7+: Pushed onto stack in reverse order
-• Return value: rax (and rdx if 128-bit struct)
-• Caller-saved: rax, rcx, rdx, rsi, rdi, r8-r11 (scratch registers)
-• Callee-saved: rbx, rbp, r12-r15 (must be preserved across call)
-• Stack alignment: rsp must be aligned to 16 bytes immediately before call.`
+        "id": "sec-10-1",
+        "title": "10.1 Introduction to Procedures",
+        "content": "A procedure (also called a function or subroutine) is a self-contained block of code that performs a specific task. Procedures allow code reuse, modularity, and better organization. In assembly, a procedure is simply a label followed by code that ends with a ret instruction.\n\nWhy use procedures?\n- Avoid code duplication.\n- Simplify complex programs by breaking them into smaller, manageable parts.\n- Enable recursion and modular design.\n- Facilitate debugging and testing.\n\nIn high-level languages, functions are a fundamental construct. In assembly, procedures require explicit management of the stack, arguments, and return values."
       },
       {
-        id: 'sec-10-2',
-        title: '10.2 Seven Arguments Example with Stack Frame',
-        content: `Passing 7 arguments where 7th argument is passed on the stack:`,
-        codeSnippets: [
+        "id": "sec-10-1-1",
+        "title": "10.1.1 The call and ret Instructions",
+        "content": "The call instruction transfers control to a procedure and saves the return address (the address of the next instruction after call) on the stack. The ret instruction pops the return address from the stack and jumps to it, resuming execution in the caller.\n\nSyntax:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'sum_seven.asm',
-            code: `; sum_seven: first 6 in rdi..r9, 7th argument on stack at [rsp+8]
-sum_seven:
-    add rdi, rsi
-    add rdi, rdx
-    add rdi, rcx
-    add rdi, r8
-    add rdi, r9
-    mov rax, [rsp+8]    ; load 7th argument
-    add rax, rdi
-    ret
-
-_start:
-    mov rdi, 1
-    mov rsi, 2
-    mov rdx, 3
-    mov rcx, 4
-    mov r8, 5
-    mov r9, 6
-    push 7              ; 7th arg
-    call sum_seven      ; sum = 28
-    add rsp, 8          ; clean up stack
-    mov rdi, rax
-    mov rax, 60
-    syscall`
+            "language": "nasm",
+            "title": "10.1.1 The call and ret Instructions — listing 1",
+            "code": "call procedure_label      ; direct call\ncall rax                  ; indirect call (address in register)\ncall qword [rsp]          ; indirect call (address in memory)\n\nret                       ; return to caller\nret imm16                 ; return and pop imm16 bytes from stack (used for some calling conventions)"
+          }
+        ]
+      },
+      {
+        "id": "sec-10-1-2",
+        "title": "10.1.2 How call Works",
+        "content": "1. Push the 64-bit value of RIP (the address of the next instruction) onto the stack. This decrements RSP by 8 and stores the return address.\n2. Load RIP with the target address (procedure label or address in register/memory).\n3. Execution continues at the procedure."
+      },
+      {
+        "id": "sec-10-1-3",
+        "title": "10.1.3 How ret Works",
+        "content": "1. Pop the top 8 bytes from the stack into RIP. This increments RSP by 8.\n2. Execution resumes at the instruction following the original call.\n\nImportant: The stack must be properly balanced. If a procedure leaves extra values on the stack, ret will pop the wrong value as the return address, causing a crash."
+      },
+      {
+        "id": "sec-10-2",
+        "title": "10.2 Basic Procedure Structure",
+        "content": "A procedure typically has three parts:\n\n1. Prologue: Save the caller’s base pointer (if using a frame pointer), set up the frame pointer, and allocate space for local variables.\n2. Body: The actual code of the procedure, accessing arguments and locals as needed.\n3. Epilogue: Restore the stack pointer and base pointer, and return."
+      },
+      {
+        "id": "sec-10-2-1",
+        "title": "10.2.1 Example: A Simple Procedure",
+        "content": "Let’s write a procedure that adds two integers and returns the sum.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "add_two.asm",
+            "code": "; add_two.asm\nsection .text\n    global _start\n\n; Procedure: add\n; Inputs: rdi = first integer, rsi = second integer\n; Output: rax = sum\nadd:\n    mov rax, rdi\n    add rax, rsi\n    ret\n\n_start:\n    mov rdi, 5\n    mov rsi, 10\n    call add           ; rax = 15\n\n    ; Exit with sum as exit code (low byte)\n    mov rdi, rax\n    mov rax, 60        ; sys_exit\n    syscall",
+            "explanation": "Explanation:\n- add does not use any local variables, so no prologue/epilogue beyond ret is needed.\n- Arguments are passed in rdi and rsi according to the System V AMD64 ABI.\n- The result is returned in rax.\n- The caller sets up arguments, calls the procedure, and then uses the result."
+          }
+        ]
+      },
+      {
+        "id": "sec-10-2-2",
+        "title": "10.2.2 Saving and Restoring Registers",
+        "content": "If a procedure modifies callee-saved registers (rbx, rbp, r12–r15), it must preserve their original values. Typically, they are pushed on the stack in the prologue and popped in the epilogue.\n\nClarification: The source note reverses the usual push-count rule. At ABI function entry RSP is 8 modulo 16; one 8-byte push aligns it, while two pushes leave it 8 modulo 16. Include all local allocations and saved registers when calculating alignment before nested calls. A leaf procedure need not adjust RSP just to return.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "10.2.2 Saving and Restoring Registers — listing 1",
+            "code": "my_proc:\n    push rbx            ; save rbx\n    push r12            ; save r12\n    ; ... use rbx and r12 ...\n    pop r12\n    pop rbx\n    ret",
+            "explanation": "Note: rsp must be kept aligned. If you push an odd number of registers, adjust rsp accordingly (e.g., by subtracting an extra 8 bytes) before any call inside the procedure."
+          }
+        ]
+      },
+      {
+        "id": "sec-10-3",
+        "title": "10.3 Calling Conventions",
+        "content": "A calling convention defines:\n- How arguments are passed (registers and/or stack).\n- How return values are delivered.\n- Which registers the caller must save (caller-saved) and which the callee must preserve (callee-saved).\n- Stack alignment and cleanup responsibilities."
+      },
+      {
+        "id": "sec-10-3-1",
+        "title": "10.3.1 System V AMD64 ABI (Linux)",
+        "content": "For 64-bit Linux, the calling convention is the System V AMD64 ABI.\n\nArgument passing:\n- First six integer/pointer arguments are passed in registers, in order: rdi, rsi, rdx, rcx, r8, r9.\n- Additional arguments are passed on the stack, pushed in reverse order (so the 7th argument is at the lowest address of the stack arguments).\n- Floating-point arguments use xmm0–xmm7 (covered in Chapter 14).\n\nReturn value:\n- Integer/pointer return value in rax (and rdx if 128-bit).\n- Floating-point return in xmm0.\n\nStack alignment:\n- The stack pointer (rsp) must be 16-byte aligned before a call instruction is executed.\n- At function entry, rsp is 8 mod 16 (because the return address was pushed). Therefore, to maintain alignment for any subsequent calls, the callee often subtracts a multiple of 16 plus 8 from rsp in its prologue (if it uses a frame pointer) or ensures that after prologue, rsp is aligned properly.\n\nRegisters:\n- Caller-saved: rax, rcx, rdx, rsi, rdi, r8–r11. The caller must save these if it needs them after the call.\n- Callee-saved: rbx, rbp, r12–r15. The callee must preserve these (save and restore if modified).\n\nStack cleanup: The caller is responsible for removing stack arguments (if any) after the call. The callee does not clean up stack arguments unless the convention specifies otherwise (e.g., stdcall on Windows).\n\nClarification: For the scalar examples here, entry RSP is 8 modulo 16. After push rbp, allocate a multiple of 16 for aligned nested calls, not a multiple of 16 plus 8. Linux ELF process entry at _start has RSP aligned to 16; _start was not entered through call. The register rules above describe common scalar types; aggregates and vector types have additional ABI rules. stdcall is a historical 32-bit convention, not the Windows x64 convention."
+      },
+      {
+        "id": "sec-10-3-2",
+        "title": "10.3.2 Example: Passing Six Arguments",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "10.3.2 Example: Passing Six Arguments — listing 1",
+            "code": "section .text\n    global _start\n\n; sum_six: add six integers\n; Inputs: rdi, rsi, rdx, rcx, r8, r9\n; Output: rax = sum\nsum_six:\n    add rdi, rsi\n    add rdi, rdx\n    add rdi, rcx\n    add rdi, r8\n    add rdi, r9\n    mov rax, rdi\n    ret\n\n_start:\n    mov rdi, 1\n    mov rsi, 2\n    mov rdx, 3\n    mov rcx, 4\n    mov r8, 5\n    mov r9, 6\n    call sum_six       ; rax = 21\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-10-3-3",
+        "title": "10.3.3 Passing More Than Six Arguments",
+        "content": "The 7th and subsequent arguments are placed on the stack. The caller pushes them in reverse order before the call, and the caller also cleans up the stack after the call (by adding to rsp).\n\nExample: Pass seven arguments (1..7) and sum them.\n\nClarification: The original caller violates call-site alignment. Reserve padding before pushing the seventh argument; remove both the padding and argument afterward. The corrected program below exits with 28.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source: seven arguments (misaligned call)",
+            "code": "section .text\n    global _start\n\n; sum_seven: rdi..r9 = first six, 7th argument on stack\n; Stack layout at entry:\n;   [rsp]      = return address\n;   [rsp+8]    = 7th argument (because caller pushed it before call)\nsum_seven:\n    add rdi, rsi\n    add rdi, rdx\n    add rdi, rcx\n    add rdi, r8\n    add rdi, r9\n    mov rax, [rsp+8]    ; load 7th argument\n    add rdi, rax\n    mov rax, rdi\n    ret\n\n_start:\n    ; Prepare arguments\n    mov rdi, 1\n    mov rsi, 2\n    mov rdx, 3\n    mov rcx, 4\n    mov r8, 5\n    mov r9, 6\n    push 7              ; push 7th argument (value 7, as 64-bit)\n    call sum_seven      ; sum = 28\n    add rsp, 8          ; clean up stack (remove pushed argument)\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "Note: The stack must be 16-byte aligned before the call. In the above, before push 7, rsp is aligned (maybe), pushing 7 makes it misaligned by 8, but the call will push return address, making it aligned again? Actually, the ABI requires alignment before the call itself. The caller must ensure that rsp is 16-byte aligned at the point of the call instruction. If we push an argument, we must account for that. In typical code, the caller may use sub rsp, 8 before pushing or ensure that after pushing arguments, rsp is 16-byte aligned. In this simple example, we ignore alignment for brevity, but in real code you must manage it carefully. We'll discuss later."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected runnable seven-argument call",
+            "code": "section .text\n    global _start\n\n; sum_seven: rdi..r9 = first six, 7th argument on stack\n; Stack layout at entry:\n;   [rsp]      = return address\n;   [rsp+8]    = 7th argument (because caller pushed it before call)\nsum_seven:\n    add rdi, rsi\n    add rdi, rdx\n    add rdi, rcx\n    add rdi, r8\n    add rdi, r9\n    mov rax, [rsp+8]    ; load 7th argument\n    add rdi, rax\n    mov rax, rdi\n    ret\n\n_start:\n    ; Prepare arguments\n    mov rdi, 1\n    mov rsi, 2\n    mov rdx, 3\n    mov rcx, 4\n    mov r8, 5\n    mov r9, 6\n    sub rsp, 8          ; padding before stack arguments\n    push 7              ; push 7th argument (value 7, as 64-bit)\n    call sum_seven      ; sum = 28\n    add rsp, 16          ; clean up stack (remove pushed argument)\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "At callee entry the seventh argument remains at [rsp+8]. The caller removes 16 bytes after return."
+          }
+        ]
+      },
+      {
+        "id": "sec-10-3-4",
+        "title": "10.3.4 Stack Alignment Details",
+        "content": "The System V ABI requires that the stack pointer be aligned to 16 bytes immediately before the call instruction. This means that when the callee begins, rsp is 8 mod 16 (because the return address was pushed). To maintain alignment for any nested calls, the callee's prologue often does:\n\n- push rbp (makes rsp 0 mod 16 if it was 8 mod 16 before the push)\n- mov rbp, rsp\n- sub rsp, N where N is a multiple of 16 (or multiple of 16 + 8 to account for local variables? Actually, after push rbp, rsp is aligned to 16. Then subtracting a multiple of 16 keeps alignment for calls inside the function.)\n\nIf the function does not use a frame pointer, it might do:\n- sub rsp, 8 to realign, then sub rsp, N for locals.\n\nExample with frame pointer:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "10.3.4 Stack Alignment Details — listing 1",
+            "code": "my_func:\n    push rbp          ; rsp becomes 0 mod 16 (if it was 8 mod 16 before)\n    mov rbp, rsp      ; rbp now points to saved rbp; rsp aligned\n    sub rsp, 16       ; allocate 16 bytes for locals; rsp still 16-aligned\n    ; ... calls inside are now aligned\n    mov rsp, rbp      ; deallocate\n    pop rbp\n    ret",
+            "explanation": "If the function needs an odd number of pushes or wants to allocate an odd amount, it should adjust to keep alignment."
+          }
+        ]
+      },
+      {
+        "id": "sec-10-4",
+        "title": "10.4 Stack Frame and Frame Pointer",
+        "content": "A stack frame is the collection of all data pushed onto the stack for a single function invocation: return address, saved registers, arguments (beyond the first six), and local variables. Using a frame pointer (rbp) provides a fixed reference point for accessing these items, even if the stack pointer changes during the function (e.g., due to pushes/pops for temporary storage)."
+      },
+      {
+        "id": "sec-10-4-1",
+        "title": "10.4.1 Standard Prologue and Epilogue (with Frame Pointer)",
+        "content": "Prologue:\n\nClarification: mov rsp, rbp discards stack storage but does not restore registers saved there. Reload or pop any modified callee-saved registers before discarding their slots. The simple epilogue shown is sufficient only when no other registers need restoration.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "10.4.1 Standard Prologue and Epilogue (with Frame Pointer) — listing 1",
+            "code": "push rbp          ; save caller's base pointer\nmov rbp, rsp      ; set current base pointer\nsub rsp, N        ; allocate N bytes for local variables",
+            "explanation": "After this, the stack layout (from high to low address) is:"
+          },
+          {
+            "language": "text",
+            "title": "10.4.1 Standard Prologue and Epilogue (with Frame Pointer) — listing 2",
+            "code": "[Higher addresses]\n...\nReturn Address            (at rbp+8)\nSaved RBP                 (at rbp, also rsp after push rbp)\nLocal variables           (below rbp, accessed as [rbp - offset])\nSaved registers (if any)  (below locals, if pushed)\n...\n[Lower addresses, rsp points to lowest allocated address]",
+            "explanation": "Epilogue:"
+          },
+          {
+            "language": "nasm",
+            "title": "10.4.1 Standard Prologue and Epilogue (with Frame Pointer) — listing 3",
+            "code": "mov rsp, rbp      ; deallocate locals and any other pushes (restore rsp to rbp)\npop rbp           ; restore caller's base pointer\nret",
+            "explanation": "The leave instruction is equivalent to mov rsp, rbp followed by pop rbp, and is often used as a single-instruction epilogue."
+          }
+        ]
+      },
+      {
+        "id": "sec-10-4-2",
+        "title": "10.4.2 Accessing Arguments and Locals with rbp",
+        "content": "- Arguments passed on the stack (7th and beyond) are at positive offsets from rbp: [rbp+16], [rbp+24], etc. (The first stack argument is at rbp+16 because: rbp points to saved rbp, rbp+8 is return address, rbp+16 is the first stack argument.)\n- Local variables are at negative offsets: [rbp-8], [rbp-16], etc.\n\nExample: Function that uses local variables and a stack argument.\n\nClarification: The abbreviated caller does not specify its incoming alignment. From an aligned call site, reserve 8 padding bytes before push 7 and clean up 16 bytes afterward.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "sum_with_locals: sum first six args (registers) and a 7th stack arg, using locals.",
+            "code": "; sum_with_locals: sum first six args (registers) and a 7th stack arg, using locals.\n; Inputs: rdi..r9, 7th argument on stack at [rbp+16] after prologue.\nsum_with_locals:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16          ; allocate 16 bytes for two qword locals\n\n    ; Save callee-saved registers if needed (not used here)\n    ; Store sum of first six in local1 at [rbp-8]\n    mov rax, rdi\n    add rax, rsi\n    add rax, rdx\n    add rax, rcx\n    add rax, r8\n    add rax, r9\n    mov [rbp-8], rax      ; local1 = sum of first six\n\n    ; Load 7th argument from [rbp+16]\n    mov rax, [rbp+16]\n    add rax, [rbp-8]      ; total sum\n    ; store in local2\n    mov [rbp-16], rax\n\n    ; Return sum in rax\n    mov rax, [rbp-16]\n\n    mov rsp, rbp\n    pop rbp\n    ret",
+            "explanation": "In the caller:"
+          },
+          {
+            "language": "nasm",
+            "title": "10.4.2 Accessing Arguments and Locals with rbp — listing 2",
+            "code": "    ; set rdi..r9, then push 7\n    push 7\n    call sum_with_locals\n    add rsp, 8"
+          },
+          {
+            "language": "nasm",
+            "title": "Aligned caller with seven arguments",
+            "code": "; Assume RSP is 16-byte aligned here.\n    mov edi, 1\n    mov esi, 2\n    mov edx, 3\n    mov ecx, 4\n    mov r8d, 5\n    mov r9d, 6\n    sub rsp, 8\n    push 7\n    call sum_with_locals\n    add rsp, 16",
+            "explanation": "Returns 28 in RAX. Padding is above the argument, so [rbp+16] remains correct."
+          }
+        ]
+      },
+      {
+        "id": "sec-10-4-3",
+        "title": "10.4.3 Using rsp Instead of rbp (Frame Pointer Omission)",
+        "content": "In optimized code, the frame pointer may be omitted to free up rbp for general use. The compiler then uses rsp as the base for all local and argument accesses, adjusting offsets as needed. This is more complex but can improve performance.\n\nExample (simple, no pushes/pops after prologue):\n\nClarification: After sub rsp, 24 the return address is [rsp+24], and argument 7 is [rsp+32]. The earlier question in the source comment is superseded by those offsets. If RBP is used as a general register, preserve it because it is still callee-saved.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "10.4.3 Using rsp Instead of rbp (Frame Pointer Omission) — listing 1",
+            "code": "my_func:\n    sub rsp, 24          ; allocate 24 bytes for locals\n    ; access locals at [rsp], [rsp+8], [rsp+16]\n    ; arguments from stack: after prologue, return address at [rsp+24+8]? \n    ; Actually, at entry: [rsp] = return address.\n    ; After sub rsp,24, return address is at [rsp+24], 7th arg at [rsp+32], etc.\n    ; ...\n    add rsp, 24\n    ret",
+            "explanation": "This requires careful bookkeeping if the function pushes/pops or calls other functions."
+          }
+        ]
+      },
+      {
+        "id": "sec-10-5",
+        "title": "10.5 Calling C Functions from Assembly and Vice Versa",
+        "content": "We can integrate assembly with C by following the same ABI. A C function compiled with gcc expects arguments in registers and returns in rax. An assembly function can be called from C if it is declared global and uses the correct calling convention.\n\nExample: Assembly function called from C.\n\nfunc.asm:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "10.5 Calling C Functions from Assembly and Vice Versa — listing 1",
+            "code": "section .text\n    global add_numbers\n\n; int add_numbers(int a, int b)\nadd_numbers:\n    mov eax, edi      ; 32-bit arguments in edi, esi\n    add eax, esi\n    ret",
+            "explanation": "main.c:"
+          },
+          {
+            "language": "c",
+            "title": "10.5 Calling C Functions from Assembly and Vice Versa — listing 2",
+            "code": "#include <stdio.h>\nextern int add_numbers(int a, int b);\nint main() {\n    int result = add_numbers(5, 7);\n    printf(\"Result: %d\\n\", result);\n    return 0;\n}",
+            "explanation": "Build:"
+          },
+          {
+            "language": "bash",
+            "title": "10.5 Calling C Functions from Assembly and Vice Versa — listing 3",
+            "code": "nasm -f elf64 func.asm -o func.o\ngcc -c main.c -o main.o\ngcc main.o func.o -o program\n./program",
+            "explanation": "Calling a C function from assembly: declare extern printf (or other libc functions) and link with gcc. But note that calling variadic functions like printf requires special handling of vector registers (al must be set to the number of vector registers used). We'll cover that in later chapters."
+          }
+        ]
+      },
+      {
+        "id": "sec-10-6",
+        "title": "10.6 Recursion and the Stack Frame",
+        "content": "Recursion is a natural application of procedures; each recursive call creates a new stack frame, preserving the previous call’s state. We'll explore recursion in depth in Chapter 11, but a simple factorial example illustrates the concept.\n\nFactorial (recursive):\n\nClarification: With an aligned caller, factorial enters at RSP modulo 16 = 8; push rdi makes it zero before recursion. pop rdi restores the entry stack position. Use nonnegative n; 0! and 1! are 1. The 64-bit result overflows above 20!, and large inputs can exhaust the stack.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "factorial: n in rdi, returns n! in rax",
+            "code": "; factorial: n in rdi, returns n! in rax\nfactorial:\n    cmp rdi, 1\n    jg  .recurse\n    mov rax, 1          ; base case\n    ret\n.recurse:\n    push rdi            ; save n\n    dec rdi\n    call factorial      ; rax = (n-1)!\n    pop rdi             ; restore n\n    imul rax, rdi       ; rax = n * (n-1)!\n    ret",
+            "explanation": "Note: This uses push rdi and pop rdi, which modifies rsp. Because rsp must be 16-byte aligned before any call, and we push one register (8 bytes), the alignment is preserved if it was aligned before the call. In a recursive function, after the prologue, we need to ensure alignment. This example works if the caller ensures alignment, but it's a bit tricky. We'll refine in Chapter 11."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 10.5 (broken draft)",
+            "code": "section .text\nglobal _start\n\nfib:\n    cmp rdi, 0\n    je  .zero\n    cmp rdi, 1\n    je  .one\n    ; fib(n) = fib(n-1) + fib(n-2)\n    push rdi\n    dec rdi\n    call fib            ; rax = fib(n-1)\n    push rax            ; save fib(n-1)\n    pop rdi             ; restore n? Oops, need original n for n-2\n    ; We'll do properly:\n    ; Actually, we need to preserve n and the result of fib(n-1).\n    ; Let's redo carefully.\n    ; We'll use a cleaner approach with frame pointer and locals.\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16\n    ; Save n in local\n    mov [rbp-8], rdi\n    ; Compute fib(n-1)\n    dec rdi\n    call fib\n    mov [rbp-16], rax   ; save fib(n-1)\n    ; Compute fib(n-2) using original n\n    mov rdi, [rbp-8]\n    sub rdi, 2\n    call fib\n    ; rax = fib(n-2)\n    add rax, [rbp-16]   ; add fib(n-1)\n    mov rsp, rbp\n    pop rbp\n    ret\n.zero:\n    xor rax, rax\n    ret\n.one:\n    mov rax, 1\n    ret\n\n_start:\n    mov rdi, 10\n    call fib            ; rax = 55\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "Do not run this draft: the preliminary recursion overwrites n, leaves a push unbalanced, and can recurse with negative arguments. Use the complete corrected exercise solution."
+          }
+        ]
+      },
+      {
+        "id": "sec-10-7",
+        "title": "10.7 Practical Example: A Complete Program with Procedures",
+        "content": "Let's write a program that defines a procedure to compute the sum of an array of integers, and another to print a number as a string. We'll combine them.\n\nWe'll use the uint_to_str function from Chapter 9 to print the sum.\n\nClarification: The original conversion routine overwrites callee-saved RBX and writes below its allocated stack area. The corrected complete program uses the repaired Chapter 9 converter, keeps temporary digits inside its allocation, and prints 150 followed by a newline. Its converter takes RAX by a documented internal convention, not the normal first System V argument register.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source: sum_array_print.asm (converter defects)",
+            "code": "; sum_array_print.asm\nsection .data\n    array dq 10, 20, 30, 40, 50\n    len equ 5\n    newline db 0xA\nsection .bss\n    buffer resb 32\n\nsection .text\n    global _start\n\n; sum_array: sum qword array\n; Inputs: rdi = pointer to array, rsi = number of elements\n; Output: rax = sum\nsum_array:\n    xor rax, rax\n    mov rcx, rsi\n.loop:\n    test rcx, rcx\n    jz .done\n    add rax, [rdi]\n    add rdi, 8\n    dec rcx\n    jmp .loop\n.done:\n    ret\n\n; uint_to_str: convert unsigned integer in rax to string at rdi, returns length in rax\nuint_to_str:\n    ; ... (implementation as in Chapter 9)\n    ; We'll include a simplified version here\n    sub rsp, 40\n    mov rbx, rsp\n    mov rcx, 10\n    xor rdx, rdx\n    mov r9, rdi\n    test rax, rax\n    jnz .convert\n    mov byte [rdi], '0'\n    mov byte [rdi+1], 0\n    add rsp, 40\n    mov rax, 1\n    ret\n.convert:\n    mov rsi, rbx\n.digit_loop:\n    xor rdx, rdx\n    div rcx\n    add dl, '0'\n    dec rbx\n    mov [rbx], dl\n    test rax, rax\n    jnz .digit_loop\n    mov rcx, rsi\n    sub rcx, rbx\n    mov r8, rcx\n    mov rsi, rbx\n    mov rdi, r9\n.copy_loop:\n    mov al, [rsi]\n    mov [rdi], al\n    inc rsi\n    inc rdi\n    dec rcx\n    jnz .copy_loop\n    mov byte [rdi], 0\n    mov rax, r8\n    add rsp, 40\n    ret\n\n_start:\n    lea rdi, [array]\n    mov rsi, len\n    call sum_array      ; rax = 150\n\n    lea rdi, [buffer]\n    call uint_to_str    ; convert sum to string, length in rax\n\n    ; print string\n    mov rdx, rax\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [buffer]\n    syscall\n\n    ; print newline\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [newline]\n    mov rdx, 1\n    syscall\n\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+            "explanation": "This program demonstrates calling multiple procedures and passing arguments/return values."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected runnable sum_array_print.asm",
+            "code": "; sum_array_print.asm\nsection .data\n    array dq 10, 20, 30, 40, 50\n    len equ 5\n    newline db 0xA\nsection .bss\n    buffer resb 32\n\nsection .text\n    global _start\n\n; sum_array: sum qword array\n; Inputs: rdi = pointer to array, rsi = number of elements\n; Output: rax = sum\nsum_array:\n    xor rax, rax\n    mov rcx, rsi\n.loop:\n    test rcx, rcx\n    jz .done\n    add rax, [rdi]\n    add rdi, 8\n    dec rcx\n    jmp .loop\n.done:\n    ret\n\n; Input: RAX = unsigned 64-bit value; RDI = writable buffer of at least 21 bytes.\n; Output: RAX = length, buffer is null-terminated.\n; Clobbers: RCX, RDX, RSI, RDI, R8, R9 and arithmetic flags. DF is cleared.\n; Preserves RBX, RBP, R12-R15 and restores RSP.\nuint_to_str:\n    sub rsp, 32\n    lea r8, [rsp+32]      ; end of the allocated temporary buffer\n    mov r9, r8\n    mov rcx, 10\n.digit_loop:\n    xor rdx, rdx\n    div rcx\n    add dl, '0'\n    dec r9\n    mov [r9], dl\n    test rax, rax\n    jnz .digit_loop       ; zero still produces one digit\n    mov rax, r8\n    sub rax, r9           ; save returned length independently of RCX\n    mov rcx, rax\n    mov rsi, r9\n    cld\n    rep movsb\n    mov byte [rdi], 0\n    add rsp, 32\n    ret\n\n_start:\n    lea rdi, [array]\n    mov rsi, len\n    call sum_array      ; rax = 150\n\n    lea rdi, [buffer]\n    call uint_to_str    ; convert sum to string, length in rax\n\n    ; print string\n    mov rdx, rax\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [buffer]\n    syscall\n\n    ; print newline\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [newline]\n    mov rdx, 1\n    syscall\n\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+            "explanation": "Expected output: 150 followed by a newline. The converter also supports zero and the maximum unsigned 64-bit value; provide at least 21 writable destination bytes."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-10-1',
-        title: 'Exercise 10.1: Max of Three Integers',
-        description: 'Write a procedure max_of_three that takes rdi, rsi, rdx and returns maximum in rax.',
-        solution: `max_of_three:\n    mov rax, rdi\n    cmp rsi, rax\n    cmovg rax, rsi\n    cmp rdx, rax\n    cmovg rax, rdx\n    ret`,
-        solutionLanguage: 'nasm'
+        "id": "ex-10-1",
+        "title": "Exercise 10.1: Simple Procedure",
+        "description": "Write a procedure square that takes an integer in rdi and returns its square in rax. Call it and exit with the result.",
+        "solution": "section .text\nglobal _start\n\nsquare:\n    mov rax, rdi\n    imul rax, rdi\n    ret\n\n_start:\n    mov rdi, 9\n    call square       ; rax = 81\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected exit code: 81. imul keeps the low 64 bits; choose inputs whose square fits when overflow is not intended."
+      },
+      {
+        "id": "ex-10-2",
+        "title": "Exercise 10.2: Max of Three",
+        "description": "Write a procedure max_of_three that takes three integers in rdi, rsi, rdx and returns the maximum in rax. Use conditional moves or jumps. Test with different values.",
+        "solution": "section .text\nglobal _start\n\nmax_of_three:\n    mov rax, rdi\n    cmp rsi, rax\n    cmovg rax, rsi\n    cmp rdx, rax\n    cmovg rax, rdx\n    ret\n\n_start:\n    mov rdi, 10\n    mov rsi, 25\n    mov rdx, 15\n    call max_of_three ; rax = 25\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected exit code: 25. cmovg uses signed comparison; test negative values and ties as well."
+      },
+      {
+        "id": "ex-10-3",
+        "title": "Exercise 10.3: Procedure with Local Variables",
+        "description": "Write a procedure that computes the sum of two integers using local variables on the stack (store the arguments in locals, then add). Use frame pointer. Return sum in rax. Call and exit.",
+        "solution": "section .text\nglobal _start\n\nsum_locals:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16          ; two locals\n    mov [rbp-8], rdi     ; local1 = first arg\n    mov [rbp-16], rsi    ; local2 = second arg\n    mov rax, [rbp-8]\n    add rax, [rbp-16]\n    mov rsp, rbp\n    pop rbp\n    ret\n\n_start:\n    mov rdi, 12\n    mov rsi, 34\n    call sum_locals    ; rax = 46\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected exit code: 46. Two 8-byte locals fit in the 16-byte allocation; the epilogue restores RBP and RSP."
+      },
+      {
+        "id": "ex-10-4",
+        "title": "Exercise 10.4: Passing Stack Arguments",
+        "description": "Write a procedure sum_eight that takes eight integer arguments: first six in registers, and the last two on the stack. Return the sum. In _start, push the 8th and 7th arguments appropriately, call, clean up stack, exit with sum.",
+        "solution": "section .text\nglobal _start\n\nsum_eight:\n    ; first six in rdi..r9, 7th at [rsp+8], 8th at [rsp+16]\n    add rdi, rsi\n    add rdi, rdx\n    add rdi, rcx\n    add rdi, r8\n    add rdi, r9\n    mov rax, [rsp+8]\n    add rdi, rax\n    mov rax, [rsp+16]\n    add rdi, rax\n    mov rax, rdi\n    ret\n\n_start:\n    mov rdi, 1\n    mov rsi, 2\n    mov rdx, 3\n    mov rcx, 4\n    mov r8, 5\n    mov r9, 6\n    push 8              ; 8th argument\n    push 7              ; 7th argument\n    call sum_eight      ; sum = 36\n    add rsp, 16         ; clean up two pushes\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Note: We pushed 8 then 7, so 7 is at lower address, matching [rsp+8] after call (because return address is at [rsp]). Alignment might be off, but for this example it doesn't matter.\n\nExpected exit code: 36. At Linux _start, RSP is 16-byte aligned. Two pushes preserve call-site alignment, so the original note suggesting misalignment does not apply here. The caller removes exactly 16 bytes."
+      },
+      {
+        "id": "ex-10-5",
+        "title": "Exercise 10.5: Recursive Fibonacci",
+        "description": "Implement a recursive Fibonacci function. fib(n) for n in rdi, returns fib(n) in rax. Use recursion. (Base cases: n=0 -> 0, n=1 -> 1). Call with n=10 and exit with result (should be 55, low byte).",
+        "solution": "section .text\nglobal _start\n\nfib:\n    cmp rdi, 0\n    je  .zero\n    cmp rdi, 1\n    je  .one\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16\n    ; Save n in local\n    mov [rbp-8], rdi\n    ; Compute fib(n-1)\n    dec rdi\n    call fib\n    mov [rbp-16], rax   ; save fib(n-1)\n    ; Compute fib(n-2) using original n\n    mov rdi, [rbp-8]\n    sub rdi, 2\n    call fib\n    ; rax = fib(n-2)\n    add rax, [rbp-16]   ; add fib(n-1)\n    mov rsp, rbp\n    pop rbp\n    ret\n.zero:\n    xor rax, rax\n    ret\n.one:\n    mov rax, 1\n    ret\n\n_start:\n    mov rdi, 10\n    call fib            ; rax = 55\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "This solution uses a proper frame pointer to store the original n and the intermediate result. Correction: removed the abandoned preliminary call/push/pop sequence. The frame now saves the actual n and fib(n-1), restores RBP/RSP, and aligns both recursive calls. For nonnegative n only; n=10 returns 55. This naive algorithm takes exponential time; use small inputs. Unsigned 64-bit Fibonacci overflows above n=93."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'What happens to the stack when call and ret execute?',
-        answer: 'call pushes the 8-byte return address (next instruction RIP) onto the stack and jumps to the target. ret pops the 8-byte return address from the stack into RIP and resumes caller execution.'
+        "question": "What happens to the stack when call is executed? What about ret?",
+        "answer": "call decrements RSP by 8, stores the next instruction address, and transfers control. ret reads that address and advances RSP by 8. Balance every allocation and saved value before returning."
+      },
+      {
+        "question": "According to the System V AMD64 ABI, which registers are used for the first six integer arguments? Where are additional arguments passed?",
+        "answer": "Integer/pointer arguments 1–6 use RDI, RSI, RDX, RCX, R8, R9. Further qword arguments use the stack: at entry, argument 7 is [rsp+8] and argument 8 is [rsp+16]. Other types follow ABI classification rules."
+      },
+      {
+        "question": "What is the purpose of a frame pointer? How do you set it up?",
+        "answer": "RBP provides a stable reference while RSP changes. Use push rbp; mov rbp, rsp; sub rsp, 16 for two qword locals. Restore with leave; ret. RBP itself is callee-saved."
+      },
+      {
+        "question": "Why must the stack be 16-byte aligned before a call? How do you ensure alignment in a function?",
+        "answer": "The ABI lets callees rely on aligned stack storage. For these scalar examples, RSP must be 0 modulo 16 immediately before call and is 8 modulo 16 at callee entry. push rbp aligns it; allocating a multiple of 16 preserves alignment. Count all additional pushes and allocations."
+      },
+      {
+        "question": "Explain the difference between caller-saved and callee-saved registers. List them.",
+        "answer": "Caller-saved registers may be overwritten: RAX, RCX, RDX, RSI, RDI, R8–R11. Save live values before calling. Callee-saved RBX, RBP, R12–R15 must be restored by any callee that modifies them; RSP must also be restored."
+      },
+      {
+        "question": "How do you pass a 7th argument to a function? Show the stack layout after the call.",
+        "answer": "From aligned RSP: sub rsp, 8; push 7; call foo; add rsp, 16. At foo entry: [rsp] return address, [rsp+8] argument 7, [rsp+16] padding. Allocate padding before placing arguments so it does not change the argument offsets."
+      },
+      {
+        "question": "What does leave do? How is it different from mov rsp, rbp; pop rbp?",
+        "answer": "With a standard 64-bit frame, leave performs mov rsp, rbp followed by pop rbp. It does not return; follow it with ret. Restore any other saved registers before discarding their slots."
+      },
+      {
+        "question": "How does recursion work in assembly? Why is the stack frame important?",
+        "answer": "Each call saves a return address, and each invocation needs its own saved arguments and intermediate results. Locals preserve values across recursive calls that overwrite caller-saved registers. A reachable base case and balanced, aligned frames are essential."
+      },
+      {
+        "question": "Can a procedure modify rax freely? What about rbx? Explain.",
+        "answer": "RAX is caller-saved and normally holds the integer return value, so a procedure may overwrite it. RBX is callee-saved: preserve and restore its incoming value if used."
+      },
+      {
+        "question": "Write a short snippet to call a function foo with three arguments: 10, 20, 30, and then exit. Assume foo is defined elsewhere.",
+        "answer": "For a Linux ELF _start with its initial aligned stack:\nextern foo\nsection .text\nglobal _start\n_start:\n    mov edi, 10\n    mov esi, 20\n    mov edx, 30\n    call foo\n    mov rdi, rax\n    mov eax, 60\n    syscall\nLink with an object defining foo. This exits with the low byte of its result."
       }
     ],
-    summary: ['System V ABI standardizes register arguments.', 'Preserve callee-saved registers and maintain 16-byte stack alignment.']
+    "summary": [
+      "Procedures are called with call and return with ret.",
+      "The call instruction pushes the return address; ret pops it.",
+      "The System V AMD64 ABI specifies argument passing (registers rdi, rsi, rdx, rcx, r8, r9 for first six) and return value in rax.",
+      "Additional arguments are passed on the stack; caller cleans up.",
+      "The stack must be 16-byte aligned before call.",
+      "A stack frame provides stable access to arguments and locals via rbp.",
+      "Prologue: push rbp; mov rbp, rsp; sub rsp, N. Epilogue: mov rsp, rbp; pop rbp; ret (or leave; ret).",
+      "Callee-saved registers must be preserved.",
+      "Procedures enable modularity, recursion, and integration with high-level languages.",
+      "In the next chapter, we’ll explore recursion and local variables in more depth, including optimization and stack management."
+    ]
   },
   {
     id: 11,
