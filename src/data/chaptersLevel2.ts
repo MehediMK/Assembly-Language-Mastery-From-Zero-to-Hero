@@ -900,83 +900,467 @@ export const CHAPTERS_LEVEL_2: Chapter[] = [
     ]
   },
   {
-    id: 8,
-    slug: 'chapter-8-control-flow-branches-loops',
-    level: 2,
-    levelTitle: 'Core Assembly Programming',
-    title: 'Chapter 8: Control Flow: Comparisons, Branches, and Loops',
-    subtitle: 'Translating While, For, If-Else, and Nested Loops into Assembly',
-    learningObjectives: [
-      'Master cmp, test, unconditional and conditional jumps.',
-      'Differentiate signed (jg, jl) vs unsigned (ja, jb) branching.',
-      'Construct if-else, while, do-while, and for loops.',
-      'Implement multi-dimensional nested loops for matrices.'
+    "id": 8,
+    "slug": "chapter-8-control-flow-branches-loops",
+    "level": 2,
+    "levelTitle": "Core Assembly Programming",
+    "title": "Chapter 8: Control Flow: Comparisons, Branches, and Loops",
+    "subtitle": "Translating While, For, If-Else, and Nested Loops into Assembly",
+    "learningObjectives": [
+      "Understand how comparison instructions (cmp, test) affect CPU flags.",
+      "Master unconditional jumps (jmp) and conditional jumps (jcc) for branching.",
+      "Distinguish between signed and unsigned conditional jumps and know when to use each.",
+      "Implement common control flow structures: if‑else, while, do‑while, and for loops in assembly.",
+      "Use loops to iterate over arrays, perform repeated calculations, and implement algorithms.",
+      "Write complete assembly programs that utilize branching and looping to solve problems."
     ],
-    prerequisites: ['Chapters 1–7'],
-    keyConcepts: [
-      'cmp subtracts operands to update status flags.',
-      'Signed comparisons check SF and OF; unsigned comparisons check CF and ZF.',
-      'Jump tables replace large switch-case chains.'
+    "prerequisites": [
+      "Solid understanding of arithmetic and logical instructions (Chapter 7).",
+      "Familiarity with data movement and addressing modes (Chapter 6).",
+      "Knowledge of flags and how they are set by instructions (Chapters 5 and 7).",
+      "Ability to assemble and link NASM programs (Chapter 4)."
     ],
-    diagramType: 'control_flow',
-    sections: [
+    "keyConcepts": [
+      "cmp performs subtraction without storing the result, only setting flags.",
+      "Conditional jumps (je, jne, jg, jl, etc.) branch based on flag states.",
+      "Signed and unsigned comparisons require different jump mnemonics.",
+      "Loops are constructed using a combination of initialization, condition check, body, and update.",
+      "The loop instruction is a historical shortcut but is often slower and less flexible than cmp/jcc.",
+      "Branch prediction and pipeline effects make conditional moves (cmovcc) sometimes preferable (covered in Chapter 6 and revisited later)."
+    ],
+    "diagramType": "control_flow",
+    "sections": [
       {
-        id: 'sec-8-1',
-        title: '8.1 Multi-Dimensional Nested Loops (Matrix Multiplication)',
-        content: `Accessing a 3x3 matrix row-major in assembly:`,
-        codeSnippets: [
+        "id": "sec-8-1",
+        "title": "8.1 Comparison and Flags",
+        "content": "To make decisions, the CPU provides a cmp instruction that compares two values by subtracting them and discarding the result, but updating the flags accordingly. The flags then drive conditional jumps."
+      },
+      {
+        "id": "sec-8-1-1",
+        "title": "8.1.1 cmp Instruction",
+        "content": "Syntax:\n\nClarification: cmp does not allow both operands to be memory. If no register determines the size of a memory operand, give an explicit size such as cmp qword [rsp], 0.",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'Matrix 3x3 Summation',
-            code: `section .data
-    matrix dq 1,2,3,4,5,6,7,8,9
-    rows equ 3
-    cols equ 3
-section .text
-    global _start
-_start:
-    xor rax, rax          ; sum = 0
-    xor rcx, rcx          ; i = 0
-outer_loop:
-    cmp rcx, rows
-    jge outer_done
-    xor rdx, rdx          ; j = 0
-inner_loop:
-    cmp rdx, cols
-    jge inner_done
-    mov r8, rcx
-    imul r8, cols
-    add r8, rdx           ; index = i*cols + j
-    add rax, [matrix + r8*8]
-    inc rdx
-    jmp inner_loop
-inner_done:
-    inc rcx
-    jmp outer_loop
-outer_done:
-    mov rdi, rax          ; 45
-    mov rax, 60
-    syscall`
+            "language": "nasm",
+            "title": "8.1.1 cmp Instruction — listing 1",
+            "code": "cmp operand1, operand2   ; computes operand1 - operand2, sets flags, discards result",
+            "explanation": "operand1 can be a register or memory; operand2 can be a register, memory, or immediate. Both operands must be of the same size.\n\nExamples:"
+          },
+          {
+            "language": "nasm",
+            "title": "8.1.1 cmp Instruction — listing 2",
+            "code": "cmp rax, 10              ; rax - 10\ncmp rbx, rcx             ; rbx - rcx\ncmp qword [rsp], 0       ; memory - 0"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-1-2",
+        "title": "8.1.2 Flags Used for Comparison",
+        "content": "After cmp, the most relevant flags are:\n\n- ZF (Zero Flag): Set if the two operands are equal (result = 0).\n- SF (Sign Flag): Set if the result is negative (MSB = 1). For signed comparisons, SF reflects the sign of the result.\n- CF (Carry Flag): For unsigned subtraction, CF is set if a borrow occurs (i.e., operand1 < operand2 unsigned).\n- OF (Overflow Flag): Set if signed overflow occurs (result too large for signed interpretation). For signed comparisons, OF combined with SF indicates the true sign of the mathematical result when overflow happens.\n\nThe CPU doesn't know whether the operands are signed or unsigned; the programmer must choose the correct conditional jump based on the flags."
+      },
+      {
+        "id": "sec-8-1-3",
+        "title": "8.1.3 test Instruction",
+        "content": "test performs a bitwise AND and sets flags, but discards the result. It is often used to check if a register is zero or if specific bits are set.\n\nClarification: test reg, reg avoids an immediate operand, but it is not universally faster than cmp reg, 0. Performance depends on the CPU and surrounding code.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.1.3 test Instruction — listing 1",
+            "code": "test rax, rax       ; ZF=1 if rax == 0\ntest al, 1          ; ZF=1 if bit 0 is 0 (even)\ntest rbx, 0xFF      ; ZF=1 if low 8 bits are all zero",
+            "explanation": "test is preferred over cmp reg, 0 for zero-testing because it is smaller and faster (no immediate needed)."
+          }
+        ]
+      },
+      {
+        "id": "sec-8-2",
+        "title": "8.2 Unconditional Jumps",
+        "content": "The jmp instruction transfers control to a target address. It can be:\n\n- Direct: target is a label (assembler computes relative offset or absolute address).",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.2 Unconditional Jumps — listing 1",
+            "code": "jmp label",
+            "explanation": "- Indirect: target address is in a register or memory."
+          },
+          {
+            "language": "nasm",
+            "title": "8.2 Unconditional Jumps — listing 2",
+            "code": "jmp rax             ; jump to address in rax\njmp qword [rsp]     ; jump to address stored on stack",
+            "explanation": "In 64-bit mode, direct jumps are RIP-relative by default (position-independent). jmp does not affect flags.\n\nExample:"
+          },
+          {
+            "language": "nasm",
+            "title": "8.2 Unconditional Jumps — listing 3",
+            "code": "    jmp start\n    ; ... skipped code ...\nstart:\n    mov rax, 1"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-2-1",
+        "title": "8.2.1 Short and Near Jumps",
+        "content": "- Short jump: 8-bit displacement (±128 bytes from next instruction). Used for local branches.\n- Near jump: 32-bit displacement (±2 GB). Default for labels in 64-bit mode.\n\nThe assembler automatically selects short or near based on distance, unless you force with jmp short label or jmp near label.\n\nClarification: The exact short displacement range is −128 through +127 bytes from the next instruction. The signed 32-bit near displacement range is −2^31 through 2^31−1. Encoding choice depends on the distance and assembler settings."
+      },
+      {
+        "id": "sec-8-3",
+        "title": "8.3 Conditional Jumps",
+        "content": "Conditional jumps transfer control only if a specific condition is true, based on the current flags. They are the building blocks of if‑else and loops."
+      },
+      {
+        "id": "sec-8-3-1",
+        "title": "8.3.1 Signed vs Unsigned Conditional Jumps",
+        "content": "Other useful jumps:\n- js (sign set, SF=1), jns (sign not set, SF=0)\n- jc (carry set, CF=1), jnc (carry not set, CF=0)\n- jo (overflow set, OF=1), jno (overflow not set, OF=0)\n- jcxz, jecxz, jrcxz (jump if cx/ecx/rcx is zero) – rarely used.",
+        "tableData": {
+          "headers": [
+            "Signed Condition",
+            "Unsigned Condition",
+            "Description",
+            "Flags Checked"
+          ],
+          "rows": [
+            [
+              "je / jz",
+              "je / jz",
+              "Equal / zero",
+              "ZF = 1"
+            ],
+            [
+              "jne / jnz",
+              "jne / jnz",
+              "Not equal / not zero",
+              "ZF = 0"
+            ],
+            [
+              "jg / jnle",
+              "ja / jnbe",
+              "Greater (signed) / above (unsigned)",
+              "ZF=0 and SF=OF (signed); CF=0 and ZF=0 (unsigned)"
+            ],
+            [
+              "jge / jnl",
+              "jae / jnb",
+              "Greater or equal / above or equal",
+              "SF=OF (signed); CF=0 (unsigned)"
+            ],
+            [
+              "jl / jnge",
+              "jb / jnae",
+              "Less (signed) / below (unsigned)",
+              "SF≠OF (signed); CF=1 (unsigned)"
+            ],
+            [
+              "jle / jng",
+              "jbe / jna",
+              "Less or equal / below or equal",
+              "ZF=1 or SF≠OF (signed); CF=1 or ZF=1 (unsigned)"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-8-3-2",
+        "title": "8.3.2 Examples of Conditional Jumps",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.3.2 Examples of Conditional Jumps — listing 1",
+            "code": "    cmp rax, rbx\n    je  equal_label          ; if rax == rbx\n    jl  less_label           ; if rax < rbx (signed)\n    jb  below_label          ; if rax < rbx (unsigned)\n    jg  greater_label        ; if rax > rbx (signed)\n    jle less_or_equal_label  ; if rax <= rbx (signed)"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-3-3",
+        "title": "8.3.3 Signed vs Unsigned Illustration",
+        "content": "Consider rax = 0xFFFFFFFFFFFFFFFF (-1 signed, 2^64-1 unsigned) and rbx = 1. After cmp rax, rbx:\n- Signed interpretation: -1 < 1 → jl will be taken.\n- Unsigned interpretation: 18446744073709551615 > 1 → ja will be taken.\n\nUsing the wrong jump leads to logic bugs."
+      },
+      {
+        "id": "sec-8-4",
+        "title": "8.4 Implementing If-Else and Conditional Execution",
+        "content": ""
+      },
+      {
+        "id": "sec-8-4-1",
+        "title": "8.4.1 Basic If-Else Pattern",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.4.1 Basic If-Else Pattern — listing 1",
+            "code": "    cmp rax, 10\n    jg  greater_than_10\n    ; else: rax <= 10\n    ; ... code for else ...\n    jmp end_if\ngreater_than_10:\n    ; ... code for if ...\nend_if:\n    ; continue",
+            "explanation": "If the condition is false, we fall through to the else branch; if true, we jump to the if branch."
+          }
+        ]
+      },
+      {
+        "id": "sec-8-4-2",
+        "title": "8.4.2 If Without Else",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.4.2 If Without Else — listing 1",
+            "code": "    test rax, rax\n    jz  zero_case\n    ; rax != 0, do something\nzero_case:\n    ; continue"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-4-3",
+        "title": "8.4.3 Nested If-Else",
+        "content": "Nested conditions can be built by cascading jumps.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.4.3 Nested If-Else — listing 1",
+            "code": "    cmp eax, 0\n    jg  positive\n    jl  negative\n    ; zero case\n    jmp end_all\npositive:\n    ; eax > 0\n    jmp end_all\nnegative:\n    ; eax < 0\nend_all:"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-4-4",
+        "title": "8.4.4 Using cmovcc to Avoid Branches",
+        "content": "As seen in Chapter 6, cmovcc can replace simple if-else assignments:\n\nClarification: This particular cmp/cmovg pair selects the signed minimum in RAX, because it replaces RAX only when RAX is greater than RBX.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.4.4 Using cmovcc to Avoid Branches — listing 1",
+            "code": "    cmp rax, rbx\n    cmovg rax, rbx    ; if rax > rbx (signed), rax = rbx",
+            "explanation": "This avoids branch mispredictions but may be less readable."
+          }
+        ]
+      },
+      {
+        "id": "sec-8-5",
+        "title": "8.5 Loops",
+        "content": "Loops repeat a block of code while a condition is true. The standard pattern is:\n\n1. Initialize counter or condition variable.\n2. Check condition; if false, exit loop.\n3. Execute loop body.\n4. Update counter or condition.\n5. Jump back to step 2."
+      },
+      {
+        "id": "sec-8-5-1",
+        "title": "8.5.1 While Loop",
+        "content": "A while loop checks the condition before the body.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.5.1 While Loop — listing 1",
+            "code": "    ; while (rax < 10) { ... }\nwhile_start:\n    cmp rax, 10\n    jge while_end          ; if rax >= 10, exit\n    ; body\n    inc rax\n    jmp while_start\nwhile_end:"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-5-2",
+        "title": "8.5.2 Do-While Loop",
+        "content": "A do-while loop executes the body at least once, then checks the condition.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.5.2 Do-While Loop — listing 1",
+            "code": "    ; do { ... } while (rax < 10);\ndo_start:\n    ; body\n    inc rax\n    cmp rax, 10\n    jl  do_start           ; continue if rax < 10"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-5-3",
+        "title": "8.5.3 For Loop",
+        "content": "A for loop is syntactic sugar for a while loop: initialization, condition, increment.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.5.3 For Loop — listing 1",
+            "code": "    ; for (rcx = 0; rcx < 10; rcx++) { ... }\n    xor rcx, rcx\nfor_cond:\n    cmp rcx, 10\n    jge for_end\n    ; body\n    inc rcx\n    jmp for_cond\nfor_end:"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-5-4",
+        "title": "8.5.4 Loop Using loop Instruction",
+        "content": "The loop instruction decrements rcx (or ecx/cx) and jumps to a label if rcx != 0. It is a compact way to implement a counting loop, but it is slower on modern CPUs because it uses the rcx register and does not allow complex conditions.\n\nClarification: Do not enter a loop-based count-down with an initial count of zero unless wraparound is intended: loop decrements first. The counter selected by the address size is normally RCX in 64-bit mode. Linux syscall overwrites RCX and R11, so a printing loop must preserve its counter elsewhere.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.5.4 Loop Using loop Instruction — listing 1",
+            "code": "    mov rcx, 10\nloop_start:\n    ; body\n    loop loop_start       ; decrement rcx, jump if not zero",
+            "explanation": "Caution: loop only checks rcx; if you modify rcx inside the loop, the count changes. It also does not affect flags, so it’s hard to combine with other conditions. Most modern code uses dec rcx + jnz instead, which is often faster."
+          }
+        ]
+      },
+      {
+        "id": "sec-8-6",
+        "title": "8.6 Nested Loops and Complex Control Flow",
+        "content": "Nested loops are common for algorithms like matrix operations or multiplication tables."
+      },
+      {
+        "id": "sec-8-6-1",
+        "title": "8.6.1 Example: Multiplication Table (1–5)",
+        "content": "We'll compute and store the products of 1×1 to 5×5 in an array, then exit with the sum of all products. (In later chapters we'll print them.)",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.6.1 Example: Multiplication Table (1–5) — listing 1",
+            "code": "section .bss\n    table resq 25        ; 5x5 qwords\nsection .text\nglobal _start\n\n_start:\n    xor rcx, rcx          ; i = 0\nouter_loop:\n    cmp rcx, 5\n    jge outer_done\n    xor rdx, rdx          ; j = 0\ninner_loop:\n    cmp rdx, 5\n    jge inner_done\n    ; compute (i+1)*(j+1)\n    mov rax, rcx\n    inc rax               ; i+1\n    mov rbx, rdx\n    inc rbx               ; j+1\n    imul rax, rbx         ; product\n    ; store at table[i*5 + j]\n    mov r8, rcx\n    imul r8, 5\n    add r8, rdx\n    mov [table + r8*8], rax   ; qword array\n    inc rdx\n    jmp inner_loop\ninner_done:\n    inc rcx\n    jmp outer_loop\nouter_done:\n    ; sum all products\n    xor rax, rax\n    xor rcx, rcx\nsum_loop:\n    cmp rcx, 25\n    jge done\n    add rax, [table + rcx*8]\n    inc rcx\n    jmp sum_loop\ndone:\n    ; exit with sum low byte = 225? Actually sum = 225, low byte = 225.\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-7",
+        "title": "8.7 Practical Examples",
+        "content": ""
+      },
+      {
+        "id": "sec-8-7-1",
+        "title": "8.7.1 Sum of Array Elements",
+        "content": "Sum all elements of a 10-element array using a loop.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.7.1 Sum of Array Elements — listing 1",
+            "code": "section .data\n    arr dq 1,2,3,4,5,6,7,8,9,10\n    len equ 10\nsection .text\nglobal _start\n_start:\n    xor rax, rax          ; sum = 0\n    xor rcx, rcx          ; index = 0\nsum_loop:\n    cmp rcx, len\n    je  done\n    add rax, [arr + rcx*8]\n    inc rcx\n    jmp sum_loop\ndone:\n    mov rdi, rax          ; exit code = 55\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-7-2",
+        "title": "8.7.2 Find Maximum in Array",
+        "content": "Find the maximum unsigned value in an array.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.7.2 Find Maximum in Array — listing 1",
+            "code": "section .data\n    arr dq 15, 8, 23, 42, 4, 16, 30, 1, 99, 7\n    len equ 10\nsection .text\nglobal _start\n_start:\n    mov rbx, [arr]        ; max = first element\n    mov rcx, 1            ; index = 1\nmax_loop:\n    cmp rcx, len\n    je  done\n    mov rax, [arr + rcx*8]\n    cmp rax, rbx\n    jbe skip              ; unsigned comparison\n    mov rbx, rax          ; update max\nskip:\n    inc rcx\n    jmp max_loop\ndone:\n    mov rdi, rbx          ; exit code = 99\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-8-7-3",
+        "title": "8.7.3 Print Digits 0–9",
+        "content": "We'll print each digit using syscall, converting number to ASCII by adding '0'. We'll output one digit per line.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source: Print Digits 0–9 (RCX counter bug)",
+            "code": "section .data\n    newline db 0xA\nsection .bss\n    digit resb 1\nsection .text\nglobal _start\n_start:\n    mov rcx, 0            ; digit = 0\nprint_loop:\n    cmp rcx, 10\n    je  done\n    ; convert to ASCII and store\n    mov rax, rcx\n    add rax, '0'\n    mov [digit], al\n    ; write digit\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, digit\n    mov rdx, 1\n    syscall\n    ; write newline\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, newline\n    mov rdx, 1\n    syscall\n    inc rcx\n    jmp print_loop\ndone:\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+            "explanation": "Source listing retained for comparison. Do not use this version as a working loop: syscall overwrites RCX, so the counter is lost. Use the corrected listing below."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected runnable example: Print Digits 0–9",
+            "code": "section .data\n    newline db 0xA\nsection .bss\n    digit resb 1\nsection .text\nglobal _start\n_start:\n    mov r12, 0            ; digit = 0\nprint_loop:\n    cmp r12, 10\n    je  done\n    ; convert to ASCII and store\n    mov rax, r12\n    add rax, '0'\n    mov [digit], al\n    ; write digit\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, digit\n    mov rdx, 1\n    syscall\n    ; write newline\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, newline\n    mov rdx, 1\n    syscall\n    inc r12\n    jmp print_loop\ndone:\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+            "explanation": "R12 holds the digit counter across the write syscalls. Expected output: one digit per line, from 0 through 9, followed by exit status 0."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 8.1 (counter and two-digit bugs)",
+            "code": "section .data\n    newline db 0xA\nsection .bss\n    digit resb 1\nsection .text\nglobal _start\n_start:\n    mov rcx, 10\ncountdown:\n    ; print digit\n    mov rax, rcx\n    add rax, '0'\n    mov [digit], al\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, digit\n    mov rdx, 1\n    syscall\n    ; newline\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, newline\n    mov rdx, 1\n    syscall\n    dec rcx\n    jnz countdown       ; continue while rcx != 0\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+            "explanation": "This source solution also loses RCX across syscall, and adding ASCII zero to 10 produces a colon. The corrected countdown is provided under Exercise 8.1."
+          }
+        ]
+      },
+      {
+        "id": "sec-8-7-4",
+        "title": "8.7.4 Factorial with Loop",
+        "content": "Compute 10! (3,628,800) and exit with low 32 bits as exit code (mod 256). We'll use a loop from 1 to 10.\n\nClarification: The shell reports the low eight bits of the exit status, not a full 32-bit result. Here 10! = 3,628,800 = 0x375F00, so the observed exit code is 0.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "8.7.4 Factorial with Loop — listing 1",
+            "code": "section .text\nglobal _start\n_start:\n    mov rax, 1            ; result\n    mov rcx, 1            ; counter\nfact_loop:\n    cmp rcx, 10\n    jg  done\n    imul rax, rcx         ; result *= counter\n    inc rcx\n    jmp fact_loop\ndone:\n    mov rdi, rax          ; exit code low byte = 0 (since 3,628,800 mod 256 = 0? Actually 3,628,800 = 0x375F00, low byte = 0)\n    mov rax, 60\n    syscall"
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-8-1',
-        title: 'Exercise 8.1: Array Search',
-        description: 'Find target value in an array and exit with index or -1 (255).',
-        solution: `xor rcx, rcx\n.loop:\ncmp rcx, len\nje .not_found\ncmp [arr + rcx*8], target\nje .found\ninc rcx\njmp .loop`,
-        solutionLanguage: 'nasm'
+        "id": "ex-8-1",
+        "title": "Exercise 8.1: Countdown",
+        "description": "Write a program that loops from 10 down to 1, printing each number (as single digit) on a separate line. Use dec and jnz or cmp/jge.",
+        "solution": "section .data\n    ten db '10', 10\nsection .bss\n    line resb 2\nsection .text\nglobal _start\n_start:\n    mov r12, 10\ncountdown:\n    cmp r12, 10\n    jne single_digit\n    lea rsi, [rel ten]\n    mov rdx, 3\n    jmp print_number\nsingle_digit:\n    mov rax, r12\n    add al, '0'\n    mov [rel line], al\n    mov byte [rel line+1], 10\n    lea rsi, [rel line]\n    mov rdx, 2\nprint_number:\n    mov rax, 1\n    mov rdi, 1\n    syscall                 ; RCX/R11 are clobbered; R12 keeps the counter\n    dec r12\n    jnz countdown\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Corrected runnable solution: the counter stays in R12 across syscalls. The number 10 is printed as two characters; numbers 9 through 1 use the existing one-digit conversion. Expected output is 10 down to 1, one number per line, with exit status 0. The original source listing is retained in section 8.7.3 for comparison."
+      },
+      {
+        "id": "ex-8-2",
+        "title": "Exercise 8.2: Even Numbers Sum",
+        "description": "Sum all even numbers from 2 to 20 (inclusive) using a loop. Exit with the sum (low byte = 110). Use a loop that increments by 2.",
+        "solution": "section .text\nglobal _start\n_start:\n    xor rax, rax        ; sum\n    mov rcx, 2          ; start at 2\neven_loop:\n    cmp rcx, 20\n    jg  done\n    add rax, rcx\n    add rcx, 2\n    jmp even_loop\ndone:\n    mov rdi, rax        ; 110\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-8-3",
+        "title": "Exercise 8.3: Array Search",
+        "description": "Given an array of 10 qwords, find the index of the first element equal to a target value (say 42). Exit with the index (or -1 if not found, which as exit code is 255). Use a loop and conditional jumps.",
+        "solution": "section .data\n    arr dq 10,20,30,42,50,60,70,80,90,100\n    len equ 10\n    target equ 42\nsection .text\nglobal _start\n_start:\n    xor rcx, rcx        ; index\nsearch_loop:\n    cmp rcx, len\n    je  not_found\n    mov rax, [arr + rcx*8]\n    cmp rax, target\n    je  found\n    inc rcx\n    jmp search_loop\nfound:\n    mov rdi, rcx        ; index = 3\n    jmp exit\nnot_found:\n    mov rdi, -1         ; exit code 255\nexit:\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-8-4",
+        "title": "Exercise 8.4: FizzBuzz (Simplified)",
+        "description": "Loop from 1 to 15. If number divisible by 3, exit with code 3; if divisible by 5, exit with code 5; if divisible by both, exit with code 15; else continue. Since only one number triggers each, the first matching condition from 1 upward will determine exit code. (Optional: print numbers, but for now exit with code when condition met.)",
+        "solution": "section .text\nglobal _start\n_start:\n    mov rcx, 1\nfizzbuzz_loop:\n    cmp rcx, 15\n    jg  done\n    ; check divisible by 3 and 5 first (both)\n    mov rax, rcx\n    xor rdx, rdx\n    mov rbx, 15\n    div rbx\n    test rdx, rdx\n    jz  both\n    ; check divisible by 3\n    mov rax, rcx\n    xor rdx, rdx\n    mov rbx, 3\n    div rbx\n    test rdx, rdx\n    jz  div3\n    ; check divisible by 5\n    mov rax, rcx\n    xor rdx, rdx\n    mov rbx, 5\n    div rbx\n    test rdx, rdx\n    jz  div5\n    inc rcx\n    jmp fizzbuzz_loop\nboth:\n    mov rdi, 15\n    jmp exit\ndiv3:\n    mov rdi, 3\n    jmp exit\ndiv5:\n    mov rdi, 5\n    jmp exit\ndone:\n    mov rdi, 0      ; no condition met before 15? Actually at 1,2... none, but 3 is div3, so will exit early.\nexit:\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "The first number that matches is 3 (divisible by 3), so exit code will be 3. The program exits on the first match rather than printing a full FizzBuzz sequence. Starting at 1 reaches 3 first; starting at 5 selects code 5, and starting at 15 selects code 15."
+      },
+      {
+        "id": "ex-8-5",
+        "title": "Exercise 8.5: Nested Loops – Sum of Matrix",
+        "description": "Define a 3x3 matrix of qwords in .data (e.g., values 1–9). Compute the sum of all elements using nested loops. Exit with the sum (45, low byte = 45).",
+        "solution": "section .data\n    ; 3x3 matrix\n    matrix dq 1,2,3,4,5,6,7,8,9\n    rows equ 3\n    cols equ 3\nsection .text\nglobal _start\n_start:\n    xor rax, rax        ; sum = 0\n    xor rcx, rcx        ; i = 0\nouter_loop:\n    cmp rcx, rows\n    jge outer_done\n    xor rdx, rdx        ; j = 0\ninner_loop:\n    cmp rdx, cols\n    jge inner_done\n    ; compute index = i*cols + j\n    mov r8, rcx\n    imul r8, cols\n    add r8, rdx\n    add rax, [matrix + r8*8]\n    inc rdx\n    jmp inner_loop\ninner_done:\n    inc rcx\n    jmp outer_loop\nouter_done:\n    mov rdi, rax        ; sum = 45\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Explain the difference between jg and ja.',
-        answer: 'jg is for signed comparisons (checks ZF=0 and SF=OF). ja is for unsigned comparisons (checks CF=0 and ZF=0). Using jg on unsigned data causes critical logic errors.'
+        "question": "How does cmp differ from sub? When would you use cmp?",
+        "answer": "cmp updates flags as if it subtracted the source from the destination, but discards the result. sub also stores the result. Use cmp to decide which branch to take while preserving the operands."
+      },
+      {
+        "question": "What flags are set by cmp when the two operands are equal? When one is less than the other (unsigned)?",
+        "answer": "Equal operands produce ZF=1, CF=0, SF=0 and OF=0. If the first operand is less than the second as an unsigned value, subtraction needs a borrow and sets CF=1; jb tests that condition."
+      },
+      {
+        "question": "Explain the difference between jg and ja. Provide an example where using the wrong one causes a bug.",
+        "answer": "jg is for signed comparisons (checks ZF=0 and SF=OF). ja is for unsigned comparisons (checks CF=0 and ZF=0). Using jg on unsigned data causes critical logic errors. For RAX = −1 and RBX = 1, jg is not taken, while ja is taken because the same RAX bits represent the largest unsigned 64-bit value."
+      },
+      {
+        "question": "How do you implement a while loop in assembly? Provide a generic template.",
+        "answer": "Initialize the loop state before a condition label. At the label, compare the state and jump to the end if the condition is false; otherwise execute the body, update the state, and jump back. Example: mov rax, 0; condition: cmp rax, 10; jge finished; inc rax; jmp condition; finished:"
+      },
+      {
+        "question": "What is the purpose of the loop instruction? Why might you avoid it in modern code?",
+        "answer": "loop decrements its counter and branches if the result is nonzero, preserving flags. A dec/jnz or cmp/jcc loop is often easier to adapt and can be faster, depending on the processor. Protect the counter from modification inside the loop."
+      },
+      {
+        "question": "Write assembly code to test if rax is between 10 and 20 (inclusive), using only jumps (no cmov).",
+        "answer": "For a signed value: cmp rax, 10; jl outside; cmp rax, 20; jg outside; jmp inside. Define inside and outside as branch labels. Use jb and ja instead for an unsigned value."
+      },
+      {
+        "question": "How would you implement a switch statement in assembly? Briefly describe the approach (using a jump table).",
+        "answer": "Normalize the selector to a zero-based index, check that it is within the table bounds, and branch to the default case otherwise. Load the selected case address or relative offset from a jump table and jump indirectly to the case handler."
+      },
+      {
+        "question": "What is the difference between jz and je? Are they interchangeable?",
+        "answer": "jz and je are aliases for the same condition, ZF=1. They are interchangeable; je reads naturally after a comparison and jz after a zero test."
+      },
+      {
+        "question": "In a for loop, where should the loop counter be initialized, checked, and updated?",
+        "answer": "Initialize once before entering the loop. Check the bound at the condition label before the body. Update the counter after the body, then jump back to the condition label."
+      },
+      {
+        "question": "How can you avoid branch misprediction penalties in performance-critical code? Mention cmovcc and branchless techniques.",
+        "answer": "For simple value selection, cmovcc or suitable arithmetic/bitwise selection can avoid an unpredictable branch. Keep predictable branches when they work well; branchless code can add dependencies or extra work. Measure the relevant workload before choosing."
       }
     ],
-    summary: ['Branching relies on CPU flags.', 'Loop structures require clear initialization, condition check, and increment steps.']
+    "summary": [
+      "cmp and test set flags that control conditional jumps.",
+      "Signed and unsigned comparisons require different jcc mnemonics (jg/jl vs ja/jb).",
+      "Unconditional jmp transfers control to a label or address.",
+      "If‑else is implemented by testing a condition and branching to the appropriate code block.",
+      "Loops are constructed with an initialization, condition check, body, and update.",
+      "Common loop patterns: while, do‑while, for.",
+      "The loop instruction is a compact counting loop but is often replaced by dec/jnz for performance.",
+      "Nested loops allow processing multi-dimensional data.",
+      "In the next chapter, we’ll explore arrays, strings, and memory operations in depth, applying loops and addressing modes to manipulate data structures."
+    ]
   },
   {
     id: 9,
