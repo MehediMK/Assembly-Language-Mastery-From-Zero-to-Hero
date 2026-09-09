@@ -2,87 +2,468 @@ import { Chapter } from '../types';
 
 export const CHAPTERS_LEVEL_2: Chapter[] = [
   {
-    id: 6,
-    slug: 'chapter-6-data-movement-addressing',
-    level: 2,
-    levelTitle: 'Core Assembly Programming',
-    title: 'Chapter 6: Data Movement and Addressing Modes',
-    subtitle: 'Sign Extension, Scale Index Displacement, and Conditional Moves',
-    learningObjectives: [
-      'Master the mov instruction and its variations (movzx, movsx, movsxd).',
-      'Understand and use all x86-64 addressing modes: immediate, register, direct, indirect, base+displacement, indexed, and RIP-relative.',
-      'Learn how to compute effective addresses using lea.',
-      'Explore stack operations (push, pop) and their effects on rsp.',
-      'Use conditional move instructions (cmovcc) to avoid branches.',
-      'Understand data alignment and its impact on performance.'
+    "id": 6,
+    "slug": "chapter-6-data-movement-addressing",
+    "level": 2,
+    "levelTitle": "Core Assembly Programming",
+    "title": "Chapter 6: Data Movement and Addressing Modes",
+    "subtitle": "Sign Extension, Scale Index Displacement, and Conditional Moves",
+    "learningObjectives": [
+      "Master the mov instruction and its variations (movzx, movsx, movsxd).",
+      "Understand and use all x86-64 addressing modes: immediate, register, direct, indirect, base+displacement, indexed, and RIP-relative.",
+      "Learn how to compute effective addresses using lea.",
+      "Explore stack operations (push, pop) and their effects on rsp.",
+      "Use conditional move instructions (cmovcc) to avoid branches.",
+      "Understand data alignment and its impact on performance.",
+      "Apply these concepts to write efficient and correct assembly code."
     ],
-    prerequisites: ['Chapters 1–5'],
-    keyConcepts: [
-      'Addressing modes calculate effective memory addresses for operands.',
-      'movzx zero-extends unsigned values; movsx sign-extends negative values.',
-      'cmovcc copies data based on flags without branch pipeline penalty.',
-      'Alignment of 16 bytes on stack prevents execution stalls.'
+    "prerequisites": [
+      "Familiarity with basic assembly instructions and program structure (Chapters 1–5).",
+      "Understanding of registers, memory, and the stack (Chapter 3).",
+      "Knowledge of binary, hexadecimal, and data sizes (Chapter 2)."
     ],
-    diagramType: 'addressing_modes',
-    sections: [
+    "keyConcepts": [
+      "Addressing modes determine how the CPU calculates the memory address for an operand.",
+      "The mov instruction copies data between registers and memory, with sign- or zero-extension options for different sizes.",
+      "lea computes an effective address without accessing memory; it can also perform simple arithmetic.",
+      "push and pop manipulate the stack and update rsp.",
+      "cmovcc conditionally moves data based on flags, often replacing short branches.",
+      "Proper alignment of multi-byte data can improve performance."
+    ],
+    "diagramType": "addressing_modes",
+    "sections": [
       {
-        id: 'sec-6-1',
-        title: '6.1 The mov Instruction & Addressing Modes',
-        content: `x86-64 supports rich addressing modes combining base registers, index registers, scale factors (1, 2, 4, 8), and displacements:
-mov rax, [rbx + rcx*4 + 16]
-
-Conditional Move (cmovcc):
-cmovcc destination, source moves data only when condition is met. Because it does not branch, the CPU pipeline avoids costly branch mispredictions:
-cmp rax, rbx
-cmovg rax, rbx   ; if rax > rbx (signed), rax = rbx`
+        "id": "sec-6-1",
+        "title": "6.1 Review of Data Movement Instructions",
+        "content": "Before diving into addressing modes, let's briefly review the fundamental data movement instructions and their operand restrictions."
       },
       {
-        id: 'sec-6-2',
-        title: '6.2 Addressing Array Sum and Extension Example',
-        content: `Demonstrating indexed addressing [array + rcx*4]:`,
-        codeSnippets: [
+        "id": "sec-6-1-1",
+        "title": "6.1.1 mov – The Basic Move",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'Indexed Array Traversal',
-            code: `section .data
-    array dd 1,2,3,4,5,6,7,8,9,10
-    len equ 10
-
-section .text
-    global _start
-_start:
-    xor eax, eax          ; sum = 0
-    xor rcx, rcx          ; index = 0
-loop_start:
-    cmp rcx, len
-    je done
-    add eax, [array + rcx*4]  ; indexed addressing
-    inc rcx
-    jmp loop_start
-done:
-    mov rdi, rax          ; exit code = sum (55)
-    mov rax, 60
-    syscall`
+            "language": "nasm",
+            "title": "6.1.1 mov – The Basic Move — listing 1",
+            "code": "mov destination, source",
+            "explanation": "Copies a value from source to destination. Both operands must be of the same size, or the source can be an immediate value that fits in the destination. Valid combinations:\n\n- mov reg, reg\n- mov reg, imm\n- mov reg, mem\n- mov mem, reg\n- mov mem, imm (requires size specifier)\n\nInvalid: mov mem, mem, mov imm, reg (destination cannot be immediate), moving into rip.\n\nExamples:"
+          },
+          {
+            "language": "nasm",
+            "title": "6.1.1 mov – The Basic Move — listing 2",
+            "code": "mov rax, rbx              ; reg to reg\nmov rax, 0x1234           ; imm to reg\nmov rax, [rbx]            ; mem to reg\nmov [rbx], rax            ; reg to mem\nmov qword [rbx], 0x1234   ; imm to mem"
           }
         ]
-      }
-    ],
-    exercises: [
+      },
       {
-        id: 'ex-6-1',
-        title: 'Exercise 6.1: Conditional Max Without Jumps',
-        description: 'Compute max(rax, rbx) using cmp and cmovg without branches.',
-        solution: `cmp rax, rbx\ncmovl rax, rbx    ; if rax < rbx, rax = rbx`,
-        solutionLanguage: 'nasm'
-      }
-    ],
-    practiceQuestions: [
+        "id": "sec-6-1-2",
+        "title": "6.1.2 lea – Load Effective Address",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.1.2 lea – Load Effective Address — listing 1",
+            "code": "lea destination_register, memory_operand",
+            "explanation": "lea computes the address of the memory operand and stores that address in the destination register. It does not read from memory; it is purely an address calculation. This is invaluable for pointer arithmetic and for loading addresses of variables.\n\nExamples:"
+          },
+          {
+            "language": "nasm",
+            "title": "6.1.2 lea – Load Effective Address — listing 2",
+            "code": "lea rax, [rbx + 8]        ; rax = rbx + 8\nlea rsi, [rel msg]        ; rsi = address of msg (RIP-relative)\nlea rdx, [array + rcx*4]  ; rdx = &array[rcx]",
+            "explanation": "lea can also perform arithmetic not related to memory, e.g., lea rax, [rbx + rcx*2 + 5] which computes rbx + rcx*2 + 5 without modifying flags (unlike add and shl)."
+          }
+        ]
+      },
       {
-        question: 'What is the difference between mov rax, [rbx] and lea rax, [rbx]?',
-        answer: 'mov rax, [rbx] dereferences the memory address stored in rbx and loads the 8-byte value at that location into rax. lea rax, [rbx] loads the address itself into rax without touching memory.'
+        "id": "sec-6-1-3",
+        "title": "6.1.3 xchg – Exchange",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.1.3 xchg – Exchange — listing 1",
+            "code": "xchg operand1, operand2",
+            "explanation": "Swaps the contents of two operands. Can be register-register or register-memory. xchg with memory is atomic with respect to other bus operations, so it’s often used in synchronization primitives.\n\nExamples:"
+          },
+          {
+            "language": "nasm",
+            "title": "6.1.3 xchg – Exchange — listing 2",
+            "code": "xchg rax, rbx\nxchg [rsp], rax"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-1-4",
+        "title": "6.1.4 Stack Operations: push and pop",
+        "content": "- push src: decrements rsp by 8 (or operand size) and stores src at [rsp].\n- pop dest: loads from [rsp] into dest and increments rsp by 8 (or operand size).\n\nIn 64-bit mode, the default operand size is 64 bits for push/pop when no size is specified. You can push/pop 16-bit or 32-bit values, but that changes rsp by 2 or 4 bytes, potentially breaking alignment.\n\nExamples:\n\nClarification: Ordinary push/pop in 64-bit mode support 64-bit and 16-bit operands, not 32-bit operands. An encoded 32-bit immediate for push is sign-extended and still occupies eight stack bytes.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.1.4 Stack Operations: push and pop — listing 1",
+            "code": "push rax\npush qword [rbx]\npop rbx\npop qword [rcx]",
+            "explanation": "Note: push and pop are often used to save and restore registers across function calls or to pass arguments on the stack (for functions with more than six arguments)."
+          }
+        ]
+      },
+      {
+        "id": "sec-6-2",
+        "title": "6.2 Addressing Modes in Detail",
+        "content": "An addressing mode specifies how to compute the effective address (EA) of a memory operand. The x86-64 architecture supports a rich set, combining base registers, index registers, scale factors, and displacements."
+      },
+      {
+        "id": "sec-6-2-1",
+        "title": "6.2.1 Immediate Addressing",
+        "content": "The operand is a constant embedded in the instruction. Not a memory address, but used to load constants.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.2.1 Immediate Addressing — listing 1",
+            "code": "mov eax, 42        ; immediate 42\nadd rax, 0xFF      ; immediate 0xFF"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-2-2",
+        "title": "6.2.2 Register Addressing",
+        "content": "The operand is a register; no memory access.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.2.2 Register Addressing — listing 1",
+            "code": "mov rax, rbx\nadd rcx, rdx"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-2-3",
+        "title": "6.2.3 Direct (Displacement-Only) Addressing",
+        "content": "The effective address is a constant (absolute address). In 64-bit mode, absolute 64-bit addresses are rarely used; instead, RIP-relative addressing is preferred. NASM allows mov rax, [0x123456789] but it assembles to an absolute address, which may cause relocation issues in position-independent code.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.2.3 Direct (Displacement-Only) Addressing — listing 1",
+            "code": "mov rax, [0x600000]      ; load from absolute address 0x600000",
+            "explanation": "Better: use RIP-relative by default for labels."
+          }
+        ]
+      },
+      {
+        "id": "sec-6-2-4",
+        "title": "6.2.4 Register Indirect Addressing",
+        "content": "The effective address is the value in a register.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.2.4 Register Indirect Addressing — listing 1",
+            "code": "mov rax, [rbx]      ; address = rbx\nmov [rcx], rax      ; store at address rcx"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-2-5",
+        "title": "6.2.5 Base + Displacement Addressing",
+        "content": "The effective address is a base register plus a constant signed displacement.\n\nClarification: For the normal 64-bit addressing forms shown here, displacements are encoded as signed 8-bit or signed 32-bit values; 16-bit displacement forms belong to other addressing modes.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.2.5 Base + Displacement Addressing — listing 1",
+            "code": "mov rax, [rbx + 8]     ; address = rbx + 8\nmov rax, [rbp - 16]    ; typical for stack locals\nmov [rsp + 24], rdi    ; store at rsp+24",
+            "explanation": "Displacement can be 8, 16, or 32 bits, sign-extended."
+          }
+        ]
+      },
+      {
+        "id": "sec-6-2-6",
+        "title": "6.2.6 Indexed Addressing (Base + Index*Scale)",
+        "content": "The effective address is base register + index register * scale factor (1, 2, 4, or 8).\n\nClarification: The scale factor sets the array stride, not the load width. mov rax, [rbx + rcx*4] loads eight bytes at a four-byte stride. Use mov eax, [rbx + rcx*4] to load one dword.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.2.6 Indexed Addressing (Base + Index*Scale) — listing 1",
+            "code": "mov rax, [rbx + rcx*4]     ; address = rbx + rcx*4 (e.g., dword array)\nmov rax, [rsi + rdx*8]     ; address = rsi + rdx*8 (qword array)"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-2-7",
+        "title": "6.2.7 Base + Index*Scale + Displacement",
+        "content": "The most general form: base + index * scale + displacement.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.2.7 Base + Index*Scale + Displacement — listing 1",
+            "code": "mov rax, [rbx + rcx*4 + 16]    ; address = rbx + rcx*4 + 16\nmov rdx, [rsp + rsi*2 + 8]     ; address = rsp + rsi*2 + 8"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-2-8",
+        "title": "6.2.8 RIP-Relative Addressing",
+        "content": "In 64-bit mode, the default for labels in NASM is RIP-relative. The effective address is RIP + displacement, where the displacement is the difference between the label’s address and the next instruction’s address.\n\nClarification: NASM does not implicitly select RIP-relative addressing for every label reference. Use [rel myvar] explicitly or put DEFAULT REL in the source. Without that setting, a bare [myvar] normally uses absolute addressing. Reference: NASM manual, section 8.2.1 (REL, ABS).",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.2.8 RIP-Relative Addressing — listing 1",
+            "code": "mov rax, [rel myvar]    ; equivalent to: mov rax, [myvar]\nlea rsi, [rel msg]      ; load address of msg",
+            "explanation": "This is essential for position-independent code (PIC) and shared libraries.\n\nImportant: RIP-relative addressing is only available for memory operands; you cannot use RIP as a general-purpose register."
+          }
+        ]
+      },
+      {
+        "id": "sec-6-3",
+        "title": "6.3 Size Specification and Alignment",
+        "content": "When moving data to/from memory, the assembler needs to know the size of the operation. Often, the size is inferred from the register operand, but when using an immediate or ambiguous case, a size specifier is required.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.3 Size Specification and Alignment — listing 1",
+            "code": "mov byte [rbx], 1\nmov word [rbx], 1\nmov dword [rbx], 1\nmov qword [rbx], 1"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-3-1",
+        "title": "6.3.1 Alignment",
+        "content": "Multi-byte data (word, dword, qword) should be aligned to natural boundaries (address divisible by size) for best performance. The x86 architecture allows unaligned access, but it may be slower (or cause faults in some instructions like SSE aligned moves). The stack is kept 16-byte aligned per ABI.\n\nWhen defining data in .data, NASM aligns automatically to the largest member’s natural alignment. You can use align directive to enforce alignment.\n\nClarification: NASM data declarations do not automatically insert padding before each item based on its size. Use align explicitly before data requiring alignment; section alignment alone does not align every label.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.3.1 Alignment — listing 1",
+            "code": "section .data\n    align 8\n    myqword dq 0\n    align 4\n    mydword dd 0"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-4",
+        "title": "6.4 Specialized Move Instructions",
+        "content": "x86-64 provides several variants of mov to handle size conversion and conditional moves."
+      },
+      {
+        "id": "sec-6-4-1",
+        "title": "6.4.1 movzx – Move with Zero-Extend",
+        "content": "Copies a smaller source (8 or 16 bits) into a larger destination (16, 32, or 64 bits), filling the upper bits with zeros.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.4.1 movzx – Move with Zero-Extend — listing 1",
+            "code": "movzx eax, al        ; eax = zero-extended al\nmovzx rax, word [rbx] ; rax = zero-extended 16-bit value from memory\nmovzx rbx, byte [rsi] ; rbx = zero-extended 8-bit value"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-4-2",
+        "title": "6.4.2 movsx – Move with Sign-Extend",
+        "content": "Copies a smaller signed source into a larger destination, filling upper bits with the sign bit.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.4.2 movsx – Move with Sign-Extend — listing 1",
+            "code": "movsx eax, al        ; eax = sign-extended al\nmovsx rax, word [rbx] ; rax = sign-extended 16-bit\nmovsx rbx, byte [rsi] ; rbx = sign-extended 8-bit"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-4-3",
+        "title": "6.4.3 movsxd – Move with Sign-Extend Dword to Qword",
+        "content": "Sign-extends a 32-bit source into a 64-bit destination. In NASM, movsxd is used, though sometimes movsx with a 32-bit source and 64-bit destination is also accepted.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.4.3 movsxd – Move with Sign-Extend Dword to Qword — listing 1",
+            "code": "movsxd rax, dword [rbx]  ; rax = sign-extended 32-bit value\nmovsxd rdi, eax          ; rdi = sign-extended eax"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-4-4",
+        "title": "6.4.4 cmovcc – Conditional Move",
+        "content": "Conditional move instructions copy data from source to destination only if the condition is true, based on the current flags. They avoid branching, which can improve performance by reducing pipeline stalls.\n\nSyntax:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.4.4 cmovcc – Conditional Move — listing 1",
+            "code": "cmovcc destination, source",
+            "explanation": "where cc is a condition code (e.g., e, ne, g, l, a, b, etc.). The destination must be a register; the source can be a register or memory.\n\nExamples:"
+          },
+          {
+            "language": "nasm",
+            "title": "6.4.4 cmovcc – Conditional Move — listing 2",
+            "code": "cmp rax, rbx\ncmovg rax, rbx      ; if rax > rbx (signed), then rax = rbx\ncmovne rcx, rdx     ; if not equal, rcx = rdx",
+            "explanation": "Common conditional moves:\n- cmove (ZF=1)\n- cmovne (ZF=0)\n- cmovg (signed >)\n- cmovge (signed >=)\n- cmovl (signed <)\n- cmovle (signed <=)\n- cmova (unsigned >)\n- cmovae (unsigned >=)\n- cmovb (unsigned <)\n- cmovbe (unsigned <=)\n\ncmovcc is useful for computing expressions like max(a,b) without branching."
+          }
+        ]
+      },
+      {
+        "id": "sec-6-4-5",
+        "title": "6.4.5 bswap – Byte Swap",
+        "content": "Reverses the byte order of a register (e.g., converts between little-endian and big-endian).",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.4.5 bswap – Byte Swap — listing 1",
+            "code": "bswap eax    ; reverse bytes in eax\nbswap rax    ; reverse bytes in rax"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-4-6",
+        "title": "6.4.6 movbe – Move and Byte Swap",
+        "content": "Loads a value from memory and byte-swaps it (or vice versa). Requires CPU support (e.g., Intel Atom, some modern CPUs). Not universally available, so use with caution."
+      },
+      {
+        "id": "sec-6-5",
+        "title": "6.5 Using lea for Arithmetic",
+        "content": "lea is not just for address computation; it can perform non-destructive arithmetic using the addressing hardware, often in a single instruction that would otherwise require multiple add/shl.\n\nExamples:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.5 Using lea for Arithmetic — listing 1",
+            "code": "lea rax, [rbx + rcx*2]      ; rax = rbx + rcx*2\nlea rdx, [rax + rax*4]      ; rdx = rax * 5\nlea rsi, [rsi + 8]          ; rsi += 8 (without modifying flags)",
+            "explanation": "lea does not affect flags, which can be an advantage in some algorithms."
+          }
+        ]
+      },
+      {
+        "id": "sec-6-6",
+        "title": "6.6 Stack Data Movement Patterns",
+        "content": "Beyond simple push/pop, we often need to access stack locations using rsp or rbp with displacements."
+      },
+      {
+        "id": "sec-6-6-1",
+        "title": "6.6.1 Saving and Restoring Registers",
+        "content": "In a function, callee-saved registers must be preserved. The typical pattern:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.6.1 Saving and Restoring Registers — listing 1",
+            "code": "push rbx\npush r12\n; ... use rbx, r12\npop r12\npop rbx\nret"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-6-2",
+        "title": "6.6.2 Accessing Function Arguments on Stack",
+        "content": "When a function has more than six arguments, the extra ones are passed on the stack. The caller pushes them before the call. Inside the callee, they can be accessed at positive offsets from rbp (if frame pointer used) or from rsp (if no frame pointer).\n\nWith frame pointer:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.6.2 Accessing Function Arguments on Stack — listing 1",
+            "code": "push rbp\nmov rbp, rsp\n; [rbp+16] = 7th argument (after return address and saved rbp)",
+            "explanation": "Without frame pointer (after prologue sub rsp, N), arguments are at [rsp + N + 8] etc., because the return address is at [rsp] before allocating locals."
+          }
+        ]
+      },
+      {
+        "id": "sec-6-6-3",
+        "title": "6.6.3 Allocating Local Variables on the Stack",
+        "content": "Use sub rsp, size to allocate space; use [rsp+offset] or [rbp-offset] to access.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "6.6.3 Allocating Local Variables on the Stack — listing 1",
+            "code": "sub rsp, 32          ; allocate 32 bytes\nmov [rsp], rax       ; local1\nmov [rsp+8], rbx     ; local2\n; ...\nadd rsp, 32          ; deallocate"
+          }
+        ]
+      },
+      {
+        "id": "sec-6-7",
+        "title": "6.7 Common Pitfalls and Best Practices",
+        "content": "- Memory-to-memory moves: Not allowed. Use a register as intermediate.\n- Forgetting size specifiers when destination is memory and source is immediate. Use mov byte [addr], 5.\n- Using wrong extension (movzx vs movsx) for signed/unsigned values.\n- Misaligning stack: Always keep rsp 16-byte aligned before call; use sub rsp, 16*n + 8 in prologue if needed.\n- Using lea with RIP-relative incorrectly: lea rax, [var] in NASM defaults to RIP-relative, which is usually desired.\n- Overusing xchg with memory due to implicit lock prefix; use mov sequences for non-atomic swaps.\n- Relying on undefined flags after mov or lea; these instructions do not modify flags.\n- Using absolute addresses in PIC: Prefer RIP-relative addressing for data.\n\nClarification: mov and lea preserve flags; they do not make flags undefined. A subsequent conditional instruction sees the existing flags. For RIP-relative label references, use rel or DEFAULT REL explicitly. Stack adjustments must account for the return address and any saved registers."
       }
     ],
-    summary: ['Addressing modes provide flexible pointer math.', 'cmovcc eliminates branch mispredictions.']
+    "exercises": [
+      {
+        "id": "ex-6-1",
+        "title": "Exercise 6.1: Array Sum with Indexed Addressing",
+        "description": "Write a program that sums an array of 10 dwords stored in memory. Use indexed addressing with scale factor ([base + index*4]). Exit with the sum.",
+        "solution": "section .data\n    array dd 1,2,3,4,5,6,7,8,9,10\n    len equ 10\nsection .text\nglobal _start\n_start:\n    xor eax, eax          ; sum\n    xor rcx, rcx          ; index\nloop_start:\n    cmp rcx, len\n    je done\n    add eax, [array + rcx*4]  ; indexed addressing\n    inc rcx\n    jmp loop_start\ndone:\n    mov rdi, rax          ; exit code = sum (55)\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-6-2",
+        "title": "Exercise 6.2: Sign vs Zero Extension",
+        "description": "Given a byte in memory = 0x80 (which is -128 signed, 128 unsigned). Load it into eax using movzx and movsx separately. What are the results? Write a program that demonstrates both and exits with the sign-extended value (which will be negative, but exit code is low 8 bits).",
+        "solution": "section .data\n    val db 0x80\nsection .text\nglobal _start\n_start:\n    movzx eax, byte [val] ; eax = 0x00000080 (128)\n    movsx eax, byte [val] ; eax = 0xFFFFFF80 (-128)\n    ; exit with sign-extended value low byte = 0x80 = 128\n    mov rdi, rax          ; rdi = 0xFFFFFF80, low 8 bits = 0x80 = 128\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-6-3",
+        "title": "Exercise 6.3: Conditional Move",
+        "description": "Write a program that computes max(rax, rbx) without using jumps. Use cmp and cmovg. Exit with the maximum.",
+        "solution": "section .text\nglobal _start\n_start:\n    mov rax, 15\n    mov rbx, 25\n    cmp rax, rbx\n    cmovl rax, rbx    ; if rax < rbx (signed), rax = rbx\n    ; rax = 25\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "The source solution uses cmovl with RAX as the destination. To use cmovg as requested, use cmp rax, rbx; cmovg rbx, rax; mov rax, rbx. Both choose the signed maximum."
+      },
+      {
+        "id": "ex-6-4",
+        "title": "Exercise 6.4: Stack Arguments",
+        "description": "Write a function add_six that takes six integer arguments in registers (rdi, rsi, rdx, rcx, r8, r9) and returns their sum. Call it from _start and exit with the sum.",
+        "solution": "section .text\nglobal _start\n\nadd_six:\n    add rdi, rsi\n    add rdi, rdx\n    add rdi, rcx\n    add rdi, r8\n    add rdi, r9\n    mov rax, rdi      ; return sum\n    ret\n\n_start:\n    mov rdi, 1\n    mov rsi, 2\n    mov rdx, 3\n    mov rcx, 4\n    mov r8, 5\n    mov r9, 6\n    call add_six\n    ; rax = 21\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Despite the exercise title, these six integer arguments are passed in registers. Section 6.6.2 explains where a seventh integer argument would be passed on the stack."
+      },
+      {
+        "id": "ex-6-5",
+        "title": "Exercise 6.5: `lea` Arithmetic",
+        "description": "Use lea to compute 5 * rbx + 7 and store in rax, without using mul or imul. Then exit with the low byte of rax.",
+        "solution": "section .text\nglobal _start\n_start:\n    mov rbx, 10        ; example value\n    lea rax, [rbx + rbx*4] ; rax = rbx + 4*rbx = 5*rbx\n    add rax, 7         ; rax = 5*rbx + 7\n    ; exit with low byte: 5*10+7=57\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "The source solution uses lea followed by add. A single-instruction alternative is lea rax, [rbx + rbx*4 + 7], which computes the same result while preserving flags."
+      }
+    ],
+    "practiceQuestions": [
+      {
+        "question": "What is the difference between mov rax, [rbx] and lea rax, [rbx]?",
+        "answer": "mov rax, [rbx] dereferences the memory address stored in rbx and loads the 8-byte value at that location into rax. lea rax, [rbx] loads the address itself into rax without touching memory."
+      },
+      {
+        "question": "How do you move a byte from memory to a 64-bit register with zero-extension? With sign-extension?",
+        "answer": "Use movzx rax, byte [address] for zero-extension and movsx rax, byte [address] for sign-extension. Replace address with the label or address register for the byte."
+      },
+      {
+        "question": "Explain the indexed addressing mode [rbx + rcx*4 + 8]. How is it used for array access?",
+        "answer": "The effective address is RBX + RCX × 4 + 8. RBX supplies the base, RCX selects an element, four is the element stride, and eight is a fixed byte offset. Use EAX as destination when loading one dword."
+      },
+      {
+        "question": "What is RIP-relative addressing? Why is it important in 64-bit mode?",
+        "answer": "RIP-relative addressing uses the address of the next instruction plus a signed displacement. It supports position-independent references within range. Use [rel label] explicitly or DEFAULT REL for suitable registerless memory operands."
+      },
+      {
+        "question": "When would you use cmovcc instead of a conditional jump? What are the trade-offs?",
+        "answer": "Use cmovcc to select a value without a control-flow branch, especially when branch outcomes are hard to predict. It still depends on flags and input values, so it is not automatically faster than a predictable branch."
+      },
+      {
+        "question": "How does push affect rsp? What about pop? What is the default operand size in 64-bit mode?",
+        "answer": "For ordinary 64-bit push/pop operands, push subtracts 8 from RSP and stores the value; pop loads the value and adds 8. The normal operand size is 64 bits. A 16-bit operand is possible, but ordinary 32-bit push/pop operands are not supported in 64-bit mode."
+      },
+      {
+        "question": "Why is memory-to-memory mov not allowed? How would you copy a value from one memory location to another?",
+        "answer": "The ordinary mov instruction has no general memory-to-memory operand encoding. Copy through a register: mov rax, [source]; mov [destination], rax. This copies eight bytes and overwrites RAX."
+      },
+      {
+        "question": "What is the purpose of bswap? Give an example use case.",
+        "answer": "bswap reverses the byte order within a 32-bit or 64-bit register. For example, bswap eax turns 0x12345678 into 0x78563412, useful when converting byte order."
+      },
+      {
+        "question": "Describe the difference between movsx and movzx. Which one would you use for a signed char?",
+        "answer": "movsx fills the added bits with the source sign bit; movzx fills them with zeros. Use movsx when widening a signed char so negative values remain negative."
+      },
+      {
+        "question": "How can lea be used to multiply a register by a constant without using imul? Provide an example for multiplying by 9.",
+        "answer": "Combine a base and a scaled index in an effective-address expression. lea rax, [rbx + rbx*8] computes 9 × RBX without multiplication instructions or memory access and preserves flags."
+      }
+    ],
+    "summary": [
+      "Addressing modes include immediate, register, direct, indirect, base+displacement, indexed, and RIP-relative.",
+      "mov variants handle sign/zero extension: movzx, movsx, movsxd.",
+      "lea computes addresses and performs arithmetic without affecting flags.",
+      "cmovcc conditionally moves data, avoiding branches.",
+      "Stack operations are fundamental for function calls and local storage.",
+      "Proper alignment and size specification are crucial for correctness and performance.",
+      "In the next chapter, we’ll dive into arithmetic and logical instructions in detail, building on the foundation of data movement."
+    ]
   },
   {
     id: 7,
