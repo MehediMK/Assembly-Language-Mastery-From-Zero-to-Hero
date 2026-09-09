@@ -3,7 +3,7 @@ export interface ChapterSection {
   title: string;
   content: string;
   codeSnippets?: {
-    language: 'nasm' | 'c' | 'bash' | 'gdb' | 'python' | 'make' | 'arm' | 'riscv' | 'mips';
+    language: 'text' | 'nasm' | 'c' | 'bash' | 'gdb' | 'python' | 'make' | 'arm' | 'riscv' | 'mips';
     title?: string;
     code: string;
     explanation?: string;

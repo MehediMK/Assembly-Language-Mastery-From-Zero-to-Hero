@@ -279,9 +279,11 @@ export const PrintBookView: React.FC<PrintBookViewProps> = ({ chapters, onExitPr
                       <div key={ex.id} className="rounded border border-slate-200 p-3 text-xs bg-slate-50/50">
                         <div className="font-bold text-slate-900">{ex.title}</div>
                         <p className="mt-1 text-slate-600">{ex.description}</p>
+                        {ex.hints && <p className="mt-2 text-slate-600"><strong>Hint:</strong> {ex.hints}</p>}
                         <div className="mt-2 rounded bg-slate-900 p-2 font-mono text-[10px] text-emerald-300 overflow-x-auto">
                           <pre>{ex.solution}</pre>
                         </div>
+                        {ex.solutionExplanation && <p className="mt-2 text-slate-600">{ex.solutionExplanation}</p>}
                       </div>
                     ))}
                   </div>

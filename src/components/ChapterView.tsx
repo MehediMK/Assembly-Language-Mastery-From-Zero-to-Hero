@@ -135,7 +135,7 @@ export const ChapterView: React.FC<ChapterViewProps> = ({
             <div>
               <span className="font-semibold text-slate-900 dark:text-slate-100">Key Takeaways:</span>
               <ul className="mt-1 space-y-1.5 text-slate-600 dark:text-slate-400">
-                {chapter.keyConcepts.slice(0, 4).map((concept, i) => (
+                {chapter.keyConcepts.map((concept, i) => (
                   <li key={i} className="flex items-start gap-1.5">
                     <span className="mt-1 text-slate-400">•</span>
                     <span>{concept}</span>
