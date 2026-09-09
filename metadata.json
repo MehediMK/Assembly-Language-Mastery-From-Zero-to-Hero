@@ -1,0 +1,6 @@
+{
+  "name": "Assembly Language Mastery: From Zero to Hero",
+  "description": "Comprehensive interactive ebook and publication-grade PDF platform for mastering x86-64, ARM64, RISC-V, and MIPS Assembly language with professional diagrams and architectural schematics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
