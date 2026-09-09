@@ -2251,96 +2251,338 @@ export const CHAPTERS_LEVEL_2: Chapter[] = [
     ]
   },
   {
-    id: 11,
-    slug: 'chapter-11-recursion-local-variables',
-    level: 2,
-    levelTitle: 'Core Assembly Programming',
-    title: 'Chapter 11: Recursion and Local Variables',
-    subtitle: 'Activation Records, Stack Unwinding, Tail Recursion, and Binary Search',
-    learningObjectives: [
-      'Implement recursive procedures using activation records.',
-      'Preserve caller state and local variables across recursive invocations.',
-      'Optimize tail recursion into iterative loops.',
-      'Manage stack depth and mitigate stack overflow risks.',
-      'Implement recursive Binary Search in x86-64 assembly.'
+    "id": 11,
+    "slug": "chapter-11-recursion-local-variables",
+    "level": 2,
+    "levelTitle": "Core Assembly Programming",
+    "title": "Chapter 11: Recursion and Local Variables",
+    "subtitle": "Activation Records, Stack Unwinding, Tail Recursion, and Binary Search",
+    "learningObjectives": [
+      "Understand how recursion is implemented in assembly using the stack.",
+      "Master the use of stack frames to manage local variables and preserve state across recursive calls.",
+      "Write recursive procedures for classic problems (factorial, Fibonacci, etc.).",
+      "Distinguish between recursion and iteration, and understand performance implications.",
+      "Learn about tail recursion and how it can be optimized.",
+      "Handle recursion depth and stack overflow risks.",
+      "Apply recursion to solve problems that are naturally recursive (e.g., tree traversal, divide-and-conquer)."
     ],
-    prerequisites: ['Chapters 1–10'],
-    keyConcepts: [
-      'Each recursive invocation creates its own independent stack frame.',
-      'Base cases terminate recursion before stack overflow occurs.',
-      'Tail recursion occurs when the recursive call is the final statement, convertible to jmp.'
+    "prerequisites": [
+      "Solid understanding of procedures, calling conventions, and stack frames (Chapter 10).",
+      "Familiarity with the stack, registers, and addressing modes (Chapters 3 and 6).",
+      "Knowledge of control flow and loops (Chapter 8).",
+      "Basic arithmetic and logical instructions (Chapter 7)."
     ],
-    diagramType: 'recursion_locals',
-    sections: [
+    "keyConcepts": [
+      "Recursion: A procedure calls itself, either directly or indirectly.",
+      "Each recursive call creates a new stack frame containing its own return address, saved registers, arguments, and local variables.",
+      "Local variables are allocated on the stack and accessed via the frame pointer (rbp) or stack pointer (rsp).",
+      "Base case terminates recursion; without it, stack overflow occurs.",
+      "Tail recursion is a special case where the recursive call is the last operation; it can be optimized into iteration by some compilers, but manual assembly can implement it iteratively.",
+      "Stack depth is limited by available stack memory; deep recursion may cause segmentation fault."
+    ],
+    "diagramType": "recursion_locals",
+    "sections": [
       {
-        id: 'sec-11-1',
-        title: '11.1 Recursive Binary Search Implementation',
-        content: `Recursive binary search on a sorted 64-bit array:`,
-        codeSnippets: [
+        "id": "sec-11-1",
+        "title": "11.1 Review of Stack Frames and Local Variables",
+        "content": "In Chapter 10, we introduced the stack frame as a mechanism to store return addresses, arguments, saved registers, and local variables. A typical function prologue with a frame pointer looks like:\n\nClarification: The prologue is a template: replace N with the required allocation. After push rbp, a multiple of 16 preserves alignment before nested calls. Restore any other modified callee-saved registers before discarding their stack slots. Frames do not automatically save arguments or scratch registers: the procedure must save every value needed after a call.",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'binary_search.asm',
-            code: `; binary_search: rdi=arr, rsi=low, rdx=high, rcx=target
-binary_search:
-    push rbp
-    mov rbp, rsp
-    sub rsp, 48
-    cmp rsi, rdx
-    jg .not_found
-
-    ; mid = (low + high) / 2
-    mov rax, rsi
-    add rax, rdx
-    shr rax, 1
-    mov [rbp-8], rax   ; save mid
-
-    mov r8, rax
-    shl r8, 3          ; mid * 8
-    mov r9, [rdi + r8] ; arr[mid]
-    cmp r9, rcx
-    je .found
-    jl .go_right
-
-    ; search left: high = mid - 1
-    mov rdx, [rbp-8]
-    dec rdx
-    call binary_search
-    jmp .done
-
-.go_right:
-    mov rsi, [rbp-8]
-    inc rsi
-    call binary_search
-    jmp .done
-
-.found:
-    mov rax, [rbp-8]
-    jmp .done
-
-.not_found:
-    mov rax, -1
-.done:
-    leave
-    ret`
+            "language": "nasm",
+            "title": "11.1 Review of Stack Frames and Local Variables — listing 1",
+            "code": "push rbp          ; save caller's base pointer\nmov rbp, rsp      ; set new frame pointer\nsub rsp, N        ; allocate N bytes for local variables",
+            "explanation": "The epilogue:"
+          },
+          {
+            "language": "nasm",
+            "title": "11.1 Review of Stack Frames and Local Variables — listing 2",
+            "code": "mov rsp, rbp      ; deallocate locals\npop rbp           ; restore caller's base pointer\nret",
+            "explanation": "Local variables are accessed at negative offsets from rbp (e.g., [rbp-8], [rbp-16]). Arguments passed on the stack (beyond the first six) are at positive offsets (e.g., [rbp+16]).\n\nWhy use a frame pointer?\n- Provides a stable reference to locals and arguments even if the stack pointer changes (e.g., due to pushes/pops for temporary storage).\n- Simplifies debugging and code generation.\n- Slight performance cost (extra register usage and instructions), but clarity is valuable."
+          },
+          {
+            "language": "nasm",
+            "title": "Build and run the exercise solutions",
+            "code": "; Save one complete solution as exercise.asm.\n; nasm -f elf64 exercise.asm -o exercise.o\n; ld exercise.o -o exercise\n; ./exercise\n; echo $?",
+            "explanation": "The complete solutions target Linux x86-64 with NASM. Standalone procedure fragments elsewhere in the chapter require a caller and section declarations."
+          }
+        ]
+      },
+      {
+        "id": "sec-11-2",
+        "title": "11.2 Recursion Fundamentals",
+        "content": "Recursion is a programming technique where a procedure calls itself to solve a problem by breaking it down into smaller subproblems. Each recursive call gets its own stack frame, preserving the caller’s state (return address, registers, locals). When the base case is reached, the recursion unwinds and results are combined."
+      },
+      {
+        "id": "sec-11-2-1",
+        "title": "11.2.1 How Recursion Uses the Stack",
+        "content": "Consider a simple recursive function that counts down and then returns:\n\nClarification: Use nonnegative n. Negative input moves away from zero and exhausts the stack. With an aligned caller, entry RSP is 8 modulo 16 and push rdi aligns the recursive call. The pop balances the saved value during unwinding.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "11.2.1 How Recursion Uses the Stack — listing 1",
+            "code": "void countdown(int n) {\n    if (n == 0) return;\n    countdown(n - 1);\n}",
+            "explanation": "In assembly:"
+          },
+          {
+            "language": "nasm",
+            "title": "11.2.1 How Recursion Uses the Stack — listing 2",
+            "code": "countdown:\n    cmp rdi, 0\n    je  .done\n    push rdi            ; save current n\n    dec rdi\n    call countdown      ; recursive call with n-1\n    pop rdi             ; restore n (not strictly needed but for illustration)\n.done:\n    ret",
+            "explanation": "Each call pushes a new return address and any saved registers. The stack grows downward, and each frame contains the state of one invocation. When the base case is hit, the unwinding pops frames and restores state."
+          }
+        ]
+      },
+      {
+        "id": "sec-11-2-2",
+        "title": "11.2.2 Base Case and Stack Overflow",
+        "content": "A recursive function must have a base case that stops recursion. Without it, infinite recursion consumes the entire stack, causing a stack overflow (segmentation fault). The stack has a limited size (typically 8 MB on Linux for the main thread), so recursion depth is bounded.\n\nTo avoid overflow:\n- Ensure the base case is reachable and correct.\n- For large recursion depths, consider iterative solutions or explicit stack management.\n\nClarification: A base case must be reachable for the accepted input domain. Stack size depends on process limits and thread configuration; 8 MiB is an illustrative common setting, not a guarantee."
+      },
+      {
+        "id": "sec-11-3",
+        "title": "11.3 Classic Recursive Examples",
+        "content": ""
+      },
+      {
+        "id": "sec-11-3-1",
+        "title": "11.3.1 Factorial",
+        "content": "The factorial of a non-negative integer n is n! = n * (n-1)! with 0! = 1 and 1! = 1.\n\nRecursive implementation:\n\nClarification: Accept nonnegative n; the signed base-case comparison also returns 1 for negative inputs, which does not define their factorial. Results fit in 64 bits through 20!; later products wrap. After push rbp, sub rsp,16 keeps nested calls aligned. A frameless version can use one push rdi to align a recursive call, as in Chapter 10.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "factorial: n in rdi, returns n! in rax",
+            "code": "; factorial: n in rdi, returns n! in rax\nfactorial:\n    push rbp\n    mov rbp, rsp\n\n    cmp rdi, 1\n    jg  .recurse\n    ; base case: n <= 1\n    mov rax, 1\n    jmp .done\n\n.recurse:\n    ; save n (actually we need n for multiplication after call)\n    ; We'll use a local variable to store n\n    sub rsp, 16        ; allocate one qword local (with alignment)\n    mov [rbp-8], rdi   ; save n\n\n    dec rdi\n    call factorial     ; rax = (n-1)!\n\n    mov rdi, [rbp-8]   ; restore n\n    imul rax, rdi      ; rax = n * (n-1)!\n\n    ; no need to explicitly deallocate if using leave\n.done:\n    leave              ; mov rsp, rbp; pop rbp\n    ret",
+            "explanation": "Explanation:\n- Prologue saves rbp and sets it; sub rsp,16 for one local (but aligns to 16? Actually after push rbp, rsp is 16-aligned, subtract 16 keeps aligned). The local [rbp-8] stores n because we need it after the recursive call.\n- Base case: rdi <= 1 returns 1.\n- Recursive case: store n, call factorial(n-1), then multiply result by n.\n- Epilogue leave restores rsp and rbp.\n\nNote: We could also use push rdi to save n, but that would make stack alignment tricky if we need to call recursively. The frame pointer approach is cleaner.\n\nCalling from _start:"
+          },
+          {
+            "language": "nasm",
+            "title": "11.3.1 Factorial — listing 2",
+            "code": "_start:\n    mov rdi, 5\n    call factorial     ; rax = 120\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-11-3-2",
+        "title": "11.3.2 Fibonacci",
+        "content": "Fibonacci numbers: F(0)=0, F(1)=1, F(n)=F(n-1)+F(n-2). A naive recursive implementation is elegant but highly inefficient (exponential time).\n\nClarification: The input must be nonnegative. Two qword locals need 16 bytes; the source reserves 32 bytes, which is valid but larger than necessary. Runtime is exponential but maximum simultaneous recursion depth is O(n), not exponential. Results fit unsigned 64 bits through F(93), though naive recursion is impractical well before then.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "fib: n in rdi, returns F(n) in rax",
+            "code": "; fib: n in rdi, returns F(n) in rax\nfib:\n    push rbp\n    mov rbp, rsp\n\n    cmp rdi, 1\n    jg  .recurse\n    ; base case: n <= 1, return n\n    mov rax, rdi\n    jmp .done\n\n.recurse:\n    sub rsp, 32        ; allocate two qword locals (aligned)\n    mov [rbp-8], rdi   ; save n\n\n    ; compute F(n-1)\n    dec rdi\n    call fib\n    mov [rbp-16], rax  ; save F(n-1)\n\n    ; compute F(n-2) using original n\n    mov rdi, [rbp-8]\n    sub rdi, 2\n    call fib           ; rax = F(n-2)\n\n    add rax, [rbp-16]  ; F(n-2) + F(n-1)\n\n.done:\n    leave\n    ret",
+            "explanation": "Performance note: This naive recursion recomputes many values; iterative solution is much faster. For n=40, it takes a long time. We'll discuss tail recursion and optimization later."
+          }
+        ]
+      },
+      {
+        "id": "sec-11-3-3",
+        "title": "11.3.3 Sum of First N Natural Numbers",
+        "content": "sum(n) = n + sum(n-1), base case n=0 returns 0.\n\nClarification: Use nonnegative n and a bounded recursion depth. Negative inputs never reach zero by decrementing. Arithmetic keeps the low 64 bits; stack exhaustion can occur long before numeric overflow.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "11.3.3 Sum of First N Natural Numbers — listing 1",
+            "code": "sum_n:\n    push rbp\n    mov rbp, rsp\n    cmp rdi, 0\n    je  .zero\n    sub rsp, 16\n    mov [rbp-8], rdi   ; save n\n    dec rdi\n    call sum_n         ; rax = sum(n-1)\n    mov rdi, [rbp-8]\n    add rax, rdi       ; n + sum(n-1)\n    leave\n    ret\n.zero:\n    xor rax, rax\n    leave\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-11-4",
+        "title": "11.4 Local Variables in Recursive Procedures",
+        "content": "Each recursive call has its own set of local variables because they are stored in that call's stack frame. This isolation is crucial for correctness. The frame pointer (rbp) is essential to access the correct instance of a local variable during recursion.\n\nClarification: RBP is convenient, not essential. Recursion can use RSP-relative locals or saved registers if offsets, preservation, and call alignment are managed correctly.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source: digit sum (RBX preservation defect)",
+            "code": "sum_digits:\n    push rbp\n    mov rbp, rsp\n    cmp rdi, 0\n    je  .zero\n    sub rsp, 16\n    mov [rbp-8], rdi   ; save n\n    mov rax, rdi\n    xor rdx, rdx\n    mov rbx, 10\n    div rbx            ; rax = quotient, rdx = remainder (digit)\n    mov [rbp-16], rdx  ; save digit\n    mov rdi, rax\n    call sum_digits    ; rax = sum of remaining digits\n    add rax, [rbp-16]  ; add current digit\n    leave\n    ret\n.zero:\n    xor rax, rax\n    leave\n    ret",
+            "explanation": "The original uses RBX without saving it. The corrected solution uses caller-saved RCX as the divisor and stores the remainder in a local before recursion."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: string reversal draft 1",
+            "code": "; reverse_str: rdi points to string\nreverse_str:\n    push rbp\n    mov rbp, rsp\n    ; find end pointer\n    mov rsi, rdi\n.find_end:\n    cmp byte [rsi], 0\n    je  .found_end\n    inc rsi\n    jmp .find_end\n.found_end:\n    dec rsi          ; rsi points to last character before null\n\n    ; if rdi >= rsi, done\n    cmp rdi, rsi\n    jge .done\n\n    ; swap [rdi] and [rsi]\n    mov al, [rdi]\n    mov bl, [rsi]\n    mov [rdi], bl\n    mov [rsi], al\n\n    ; recurse on substring: rdi+1, length-2\n    inc rdi\n    dec rsi\n    ; temporarily adjust string: we can pass new pointers without modifying original? \n    ; Actually, we can call reverse_str with rdi pointing to next character, and then restore? \n    ; Simpler: use a local to save original rdi and rsi, then manipulate.\n    ; We'll use stack locals for clarity.\n    sub rsp, 32\n    mov [rbp-8], rdi   ; new start\n    mov [rbp-16], rsi  ; new end\n    ; set null terminator at new end+1 to limit substring? Not needed if we use pointers.\n    ; Instead, we can recursively call with rdi and rsi as start/end, not null-terminated string.\n    ; That would require a different signature. For simplicity, we can convert to a helper that takes start and end pointers.\n    ; We'll leave this as an exercise for the reader to adapt.\n    ; Below is pseudocode; full implementation would require a helper.\n    call reverse_str_sub\n    leave\n    ret\n.done:\n    leave\n    ret",
+            "explanation": "Reference only: the first draft calls an undefined helper; the alternative clobbers RBX through BL and misaligns its helper call. Exercise 11.4 supplies a complete corrected recursive version."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: string reversal draft 2",
+            "code": "reverse_str:\n    ; find end\n    mov rsi, rdi\n.loop_end:\n    cmp byte [rsi], 0\n    je .end\n    inc rsi\n    jmp .loop_end\n.end:\n    dec rsi\n    call reverse_range  ; rdi start, rsi end\n    ret\n\nreverse_range:\n    cmp rdi, rsi\n    jge .done\n    mov al, [rdi]\n    mov bl, [rsi]\n    mov [rdi], bl\n    mov [rsi], al\n    inc rdi\n    dec rsi\n    jmp reverse_range   ; tail recursion\n.done:\n    ret",
+            "explanation": "Reference only: the first draft calls an undefined helper; the alternative clobbers RBX through BL and misaligns its helper call. Exercise 11.4 supplies a complete corrected recursive version."
+          }
+        ]
+      },
+      {
+        "id": "sec-11-4-1",
+        "title": "11.4.1 Example: Tower of Hanoi (Conceptual)",
+        "content": "Tower of Hanoi is a classic recursion problem. We'll outline a procedure that prints moves (printing not fully implemented here, but structure shows recursion with local variables).\n\nClarification: This is conceptual code, not a move-printing program. Its base case requires n >= 1; n=0 is not handled. Before implementing the middle move, reload the saved source and target because the first recursive call may overwrite RSI and RDX. A completed version should treat n=0 as no work and implement the move action in both branches.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "hanoi: n in rdi, source in rsi, target in rdx, auxiliary in rcx",
+            "code": "; hanoi: n in rdi, source in rsi, target in rdx, auxiliary in rcx\n; We'll just demonstrate structure; actual printing would be added later.\nhanoi:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 32        ; locals for saving arguments\n\n    cmp rdi, 1\n    je  .base\n\n    ; save arguments in locals because recursive calls modify registers\n    mov [rbp-8], rdi    ; n\n    mov [rbp-16], rsi   ; source\n    mov [rbp-24], rdx   ; target\n    mov [rbp-32], rcx   ; auxiliary\n\n    ; move n-1 disks from source to auxiliary using target as auxiliary\n    mov rdi, [rbp-8]\n    dec rdi\n    mov rsi, [rbp-16]\n    mov rdx, [rbp-32]   ; target becomes auxiliary\n    mov rcx, [rbp-24]   ; auxiliary becomes target\n    call hanoi\n\n    ; move disk from source to target (print or do action)\n    ; ...\n\n    ; move n-1 disks from auxiliary to target using source as auxiliary\n    mov rdi, [rbp-8]\n    dec rdi\n    mov rsi, [rbp-32]\n    mov rdx, [rbp-24]\n    mov rcx, [rbp-16]\n    call hanoi\n\n    leave\n    ret\n.base:\n    ; move single disk from source to target\n    ; ...\n    leave\n    ret",
+            "explanation": "The above saves all arguments in local variables because they are needed after recursive calls. This illustrates the importance of stack frames for recursion."
+          }
+        ]
+      },
+      {
+        "id": "sec-11-5",
+        "title": "11.5 Tail Recursion and Optimization",
+        "content": "Tail recursion is a special form where the recursive call is the last operation performed before returning; no computation is done after the call. Tail-recursive functions can be optimized into iterative loops by a compiler, avoiding stack growth. In assembly, we can implement tail recursion iteratively by using a jump instead of a call and adjusting arguments.\n\nClarification: A jump reuses the caller return address only after the current frame and callee-saved registers are restored, or when no frame was allocated. Jump to a loop label after one-time setup to avoid repeatedly allocating locals. Tail recursion written with call still grows the stack unless transformed.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Corrected tail-recursive string reversal",
+            "code": "; RDI points to a writable, null-terminated byte string (not a null pointer).\nreverse_str:\n    mov rsi, rdi\n.find_end:\n    cmp byte [rsi], 0\n    je .end\n    inc rsi\n    jmp .find_end\n.end:\n    cmp rsi, rdi\n    je .done                 ; empty string: do not decrement past the start\n    dec rsi\n    jmp reverse_range        ; reuse caller return address\n.done:\n    ret\n\n; RDI = first byte, RSI = last byte; pointers within one buffer.\nreverse_range:\n    cmp rdi, rsi\n    jae .done\n    mov al, [rdi]\n    mov dl, [rsi]\n    mov [rdi], dl\n    mov [rsi], al\n    inc rdi\n    dec rsi\n    jmp reverse_range        ; constant stack depth\n.done:\n    ret",
+            "explanation": "Alternative to Exercise 11.4: the same swaps use a jump, preserve callee-saved registers, handle empty strings, and use constant stack space."
+          }
+        ]
+      },
+      {
+        "id": "sec-11-5-1",
+        "title": "11.5.1 Example: Factorial Tail-Recursive",
+        "content": "Standard factorial is not tail-recursive because multiplication happens after the recursive call. We can rewrite using an accumulator:\n\nClarification: Both assembly versions require nonnegative n. Initialize RSI to 1 for fact_tail. Tail-call conversion removes stack growth, not arithmetic overflow; 20! is the largest factorial fitting in 64 bits. The C example uses int and can overflow much earlier.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "11.5.1 Example: Factorial Tail-Recursive — listing 1",
+            "code": "int fact_helper(int n, int acc) {\n    if (n == 0) return acc;\n    return fact_helper(n-1, n*acc);\n}\nint factorial(int n) { return fact_helper(n, 1); }",
+            "explanation": "In assembly, we can implement this without recursion (using a loop) by updating n and acc and jumping back:"
+          },
+          {
+            "language": "nasm",
+            "title": "11.5.1 Example: Factorial Tail-Recursive — listing 2",
+            "code": "factorial_iterative:\n    ; n in rdi, returns n! in rax\n    mov rax, 1          ; acc = 1\n.loop:\n    test rdi, rdi\n    jz  .done\n    imul rax, rdi       ; acc *= n\n    dec rdi             ; n--\n    jmp .loop\n.done:\n    ret",
+            "explanation": "This is essentially what a tail-call optimization would produce. In assembly, we can also implement tail recursion directly using jmp if we structure the code accordingly. For example:"
+          },
+          {
+            "language": "nasm",
+            "title": "tail-recursive factorial: n in rdi, acc in rsi (initial call acc=1)",
+            "code": "; tail-recursive factorial: n in rdi, acc in rsi (initial call acc=1)\nfact_tail:\n    test rdi, rdi\n    jz  .done\n    imul rsi, rdi       ; acc *= n\n    dec rdi             ; n--\n    jmp fact_tail       ; tail call: just jump, no call/ret\n.done:\n    mov rax, rsi\n    ret",
+            "explanation": "This avoids pushing return addresses, so stack depth remains constant."
+          }
+        ]
+      },
+      {
+        "id": "sec-11-5-2",
+        "title": "11.5.2 When to Use Recursion vs Iteration",
+        "content": "- Recursion is natural for problems that are self-similar (e.g., tree traversal, divide-and-conquer, backtracking).\n- Iteration is generally faster and uses less memory; prefer it when the problem can be easily expressed iteratively.\n- In assembly, recursion is straightforward but requires careful stack management. For deep recursion, ensure stack limits are adequate."
+      },
+      {
+        "id": "sec-11-6",
+        "title": "11.6 Recursion Depth and Stack Overflow",
+        "content": "The stack size for the main thread in Linux is typically 8 MB. Each recursive call consumes at least 8 bytes for the return address, plus any local variables and saved registers. For a function with 16 bytes of locals and a saved rbp, each frame is ~32 bytes. With 8 MB, you can have roughly 262,000 frames, but in practice, other stack usage reduces this. Deep recursion can easily exhaust the stack.\n\nTo increase stack size for a program, you can use ulimit -s (bash) or set the stack size in the linker (e.g., -Wl,--stack,SIZE for some linkers). For embedded systems, stack is even more limited.\n\nBest practices:\n- Use recursion only when depth is bounded and small.\n- Prefer iterative solutions for potentially deep recursion.\n- If using recursion, minimize the size of each frame (avoid large local arrays on the stack).\n\nClarification: Treat the 262,000-frame figure as a rough budget example, not a safe recursion limit. In Bash, ulimit -s displays the stack limit in KiB; ulimit -Ss and ulimit -Hs inspect soft and hard limits. Raising a soft limit is bounded by the hard limit and does not fix unbounded recursion. GNU ld --stack is for PE targets, not the normal Linux ELF stack-limit mechanism. References: https://www.gnu.org/software/bash/manual/html_node/Bash-Builtins.html and https://sourceware.org/binutils/docs/ld/Options.html."
+      },
+      {
+        "id": "sec-11-7",
+        "title": "11.7 Practical Example: Recursive Binary Search",
+        "content": "Binary search is naturally recursive, dividing the search interval in half each time. We'll implement it for an array of sorted qwords.\n\nClarification: The routine compares signed qword values in ascending order. Supply valid nonnegative indices into the array; an empty range can use low=0, high=-1. It updates one bound from saved mid, not both bounds from saved locals. No caller state is needed after the recursive call, so a loop can replace recursion. The improved version computes low + (high-low)/2 to avoid overflowing low+high. Duplicates may return any matching index.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "binary_search: search for target in sorted array",
+            "code": "; binary_search: search for target in sorted array\n; Inputs: rdi = pointer to array, rsi = low index, rdx = high index, rcx = target\n; Returns: index in rax, or -1 if not found\nbinary_search:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 48        ; locals for saving regs and mid\n\n    cmp rsi, rdx\n    jg  .not_found     ; low > high\n\n    ; compute mid = (low + high) / 2\n    mov rax, rsi\n    add rax, rdx\n    shr rax, 1         ; mid\n    mov [rbp-8], rax   ; save mid\n\n    ; compare array[mid] with target\n    mov r8, rax\n    shl r8, 3          ; mid * 8 (offset)\n    mov r9, [rdi + r8] ; array[mid]\n\n    cmp r9, rcx\n    je  .found         ; equal\n    jl  .go_right      ; array[mid] < target\n\n    ; search left half: high = mid - 1\n    mov rdx, [rbp-8]\n    dec rdx\n    call binary_search\n    jmp .done\n\n.go_right:\n    ; search right half: low = mid + 1\n    mov rsi, [rbp-8]\n    inc rsi\n    call binary_search\n    jmp .done\n\n.found:\n    mov rax, [rbp-8]   ; return mid\n    jmp .done\n\n.not_found:\n    mov rax, -1\n\n.done:\n    leave\n    ret",
+            "explanation": "Note: This example saves mid in a local because recursive calls modify registers. It also recomputes low/high from locals before calls. Proper alignment is maintained with sub rsp,48 (multiple of 16 after push rbp). The array is assumed sorted ascending."
+          },
+          {
+            "language": "nasm",
+            "title": "Runnable binary search with safer midpoint",
+            "code": "section .text\nglobal _start\n\n; binary_search: search for target in sorted array\n; Inputs: rdi = pointer to array, rsi = low index, rdx = high index, rcx = target\n; Returns: index in rax, or -1 if not found\nbinary_search:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 48        ; locals for saving regs and mid\n\n    cmp rsi, rdx\n    jg  .not_found     ; low > high\n\n    ; compute mid = low + (high - low) / 2\n    mov rax, rdx\n    sub rax, rsi\n    shr rax, 1\n    add rax, rsi         ; mid\n    mov [rbp-8], rax   ; save mid\n\n    ; compare array[mid] with target\n    mov r8, rax\n    shl r8, 3          ; mid * 8 (offset)\n    mov r9, [rdi + r8] ; array[mid]\n\n    cmp r9, rcx\n    je  .found         ; equal\n    jl  .go_right      ; array[mid] < target\n\n    ; search left half: high = mid - 1\n    mov rdx, [rbp-8]\n    dec rdx\n    call binary_search\n    jmp .done\n\n.go_right:\n    ; search right half: low = mid + 1\n    mov rsi, [rbp-8]\n    inc rsi\n    call binary_search\n    jmp .done\n\n.found:\n    mov rax, [rbp-8]   ; return mid\n    jmp .done\n\n.not_found:\n    mov rax, -1\n\n.done:\n    leave\n    ret\n\n_start:\n    lea rdi, [rel array]\n    xor esi, esi\n    mov edx, 4\n    mov ecx, 30\n    call binary_search\n    mov rdi, rax\n    mov eax, 60\n    syscall\n\nsection .data\narray dq 10, 20, 30, 40, 50\n",
+            "explanation": "Searches for 30 and exits with index 2. A missing target returns -1 in RAX (exit status 255)."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-11-1',
-        title: 'Exercise 11.1: Tail Recursive Factorial',
-        description: 'Implement factorial using an accumulator register and jmp without growing stack frames.',
-        solution: `fact_tail:\n    test rdi, rdi\n    jz .done\n    imul rsi, rdi\n    dec rdi\n    jmp fact_tail\n.done:\n    mov rax, rsi\n    ret`,
-        solutionLanguage: 'nasm'
+        "id": "ex-11-1",
+        "title": "Exercise 11.1: Recursive Power",
+        "description": "Write a recursive function power(base, exp) that computes base^exp for non-negative integers. Base case: exp=0 returns 1; exp=1 returns base. Return result in rax. Test with 2^10 = 1024.",
+        "solution": "section .text\nglobal _start\n\npower:\n    push rbp\n    mov rbp, rsp\n    cmp rsi, 0\n    je  .zero\n    cmp rsi, 1\n    je  .one\n    ; save base and exp\n    sub rsp, 32\n    mov [rbp-8], rdi   ; base\n    mov [rbp-16], rsi  ; exp\n    dec rsi\n    call power         ; rax = base^(exp-1)\n    mov rdi, [rbp-8]\n    imul rax, rdi      ; multiply by base\n    leave\n    ret\n.zero:\n    mov rax, 1\n    leave\n    ret\n.one:\n    mov rax, rdi\n    leave\n    ret\n\n_start:\n    mov edi, 2\n    mov esi, 10\n    call power\n    cmp rax, 1024\n    sete al\n    movzx eax, al\n    xor eax, 1\n    mov rdi, rax\n    mov eax, 60\n    syscall\n",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nComplete runnable test: 2^10 is checked against the full RAX value 1024; exit 0 means it matched, exit 1 means failure. Exiting directly with 1024 would also yield 0 because exit status keeps only eight bits. Exponent 0 returns 1, including the routine convention 0^0=1. Use bounded nonnegative exponents and avoid overflow."
+      },
+      {
+        "id": "ex-11-2",
+        "title": "Exercise 11.2: Recursive GCD",
+        "description": "Implement the Euclidean algorithm recursively: gcd(a,b) = gcd(b, a mod b) with gcd(a,0)=a. Return GCD in rax.",
+        "solution": "section .text\nglobal _start\n\ngcd_rec:\n    push rbp\n    mov rbp, rsp\n    cmp rsi, 0\n    je  .done\n    sub rsp, 16\n    mov [rbp-8], rdi   ; save a\n    ; compute a mod b\n    mov rax, rdi\n    xor rdx, rdx\n    div rsi            ; remainder in rdx\n    mov rdi, rsi       ; new a = b\n    mov rsi, rdx       ; new b = remainder\n    call gcd_rec\n    ; rax already has result\n    leave\n    ret\n.done:\n    mov rax, rdi       ; gcd = a\n    leave\n    ret\n\n_start:\n    mov edi, 48\n    mov esi, 18\n    call gcd_rec\n    mov rdi, rax\n    mov eax, 60\n    syscall\n",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nComplete runnable example: gcd(48,18)=6, exit status 6. DIV implements unsigned Euclidean remainder, and b=0 is checked before division. gcd(a,0)=a; this routine returns 0 for gcd(0,0) by convention. The saved a is unnecessary but retained from the source."
+      },
+      {
+        "id": "ex-11-3",
+        "title": "Exercise 11.3: Sum of Digits",
+        "description": "Write a recursive function that computes the sum of decimal digits of a positive integer. For example, sum_digits(123) = 6. Use division by 10 and recursion.",
+        "solution": "section .text\nglobal _start\n\nsum_digits:\n    push rbp\n    mov rbp, rsp\n    cmp rdi, 0\n    je  .zero\n    sub rsp, 16\n    mov [rbp-8], rdi   ; save n\n    mov rax, rdi\n    xor rdx, rdx\n    mov ecx, 10\n    div rcx            ; rax = quotient, rdx = remainder (digit)\n    mov [rbp-16], rdx  ; save digit\n    mov rdi, rax\n    call sum_digits    ; rax = sum of remaining digits\n    add rax, [rbp-16]  ; add current digit\n    leave\n    ret\n.zero:\n    xor rax, rax\n    leave\n    ret\n\n_start:\n    mov edi, 123\n    call sum_digits\n    mov rdi, rax\n    mov eax, 60\n    syscall\n",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nComplete corrected example: sum_digits(123)=6, exit status 6. RCX replaces callee-saved RBX as the divisor. The digit is saved before recursion overwrites RDX. Zero returns zero; input is unsigned and even UINT64_MAX needs at most 20 digit steps."
+      },
+      {
+        "id": "ex-11-4",
+        "title": "Exercise 11.4: Reverse a String Recursively",
+        "description": "Write a recursive procedure that reverses a null-terminated string in place. The function takes pointer to string in rdi. It should swap first and last characters, then recursively reverse the substring between them. Use a helper to find the end.",
+        "solution": "section .text\nglobal _start\n\n; RDI points to a writable, null-terminated byte string (not a null pointer).\nreverse_str:\n    mov rsi, rdi\n.find_end:\n    cmp byte [rsi], 0\n    je .end\n    inc rsi\n    jmp .find_end\n.end:\n    cmp rsi, rdi\n    je .done                 ; empty string: do not decrement past the start\n    dec rsi\n    jmp reverse_range        ; reuse caller return address\n.done:\n    ret\n\n; RDI = first byte, RSI = last byte; pointers within one buffer.\nreverse_range:\n    cmp rdi, rsi\n    jae .done\n    mov al, [rdi]\n    mov dl, [rsi]\n    mov [rdi], dl\n    mov [rsi], al\n    inc rdi\n    dec rsi\n    sub rsp, 8               ; align before the recursive call\n    call reverse_range\n    add rsp, 8\n.done:\n    ret\n\n_start:\n    lea rdi, [rel message]\n    call reverse_str\n    mov eax, 1\n    mov edi, 1\n    lea rsi, [rel message]\n    mov edx, 5\n    syscall\n    xor eax, eax\n    mov rdi, rax\n    mov eax, 60\n    syscall\n\nsection .data\nmessage db \"hello\", 0\n",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "We'll need a helper to find end, then swap and recurse. For simplicity, assume no null string.\n\n\n\nActually, a clean recursive reverse can be done by passing start and end pointers explicitly. We'll provide an alternative solution using a helper:\n\n\n\nThis tail-recursive version avoids deep recursion and is essentially a loop.\n\nComplete corrected example prints olleh and exits 0. The helper uses unsigned pointer comparisons, caller-saved byte registers, and aligned recursive calls. Empty, one-byte, odd-length and even-length strings are supported; the null terminator stays in place. This is byte reversal, not Unicode character reversal. A valid writable terminated buffer is required. Recursion takes O(length) stack space; the tail variant in 11.5 uses constant stack space."
+      },
+      {
+        "id": "ex-11-5",
+        "title": "Exercise 11.5: Tail Recursive Sum",
+        "description": "Implement a tail-recursive version of sum from 1 to n using an accumulator. The function should not use call recursively; instead, use a jump. Show that stack depth stays constant.",
+        "solution": "section .text\nglobal _start\n\n; sum_tail: sum from 1 to n, using accumulator rsi (initial 0)\nsum_tail:\n    test rdi, rdi\n    jz  .done\n    add rsi, rdi\n    dec rdi\n    jmp sum_tail      ; tail call\n.done:\n    mov rax, rsi\n    ret\n\n_start:\n    mov edi, 10\n    xor esi, esi\n    call sum_tail\n    mov rdi, rax\n    mov eax, 60\n    syscall\n",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Call with rsi=0 initially.\n\nComplete runnable example: sum_tail(10,0)=55, exit status 55. Each jump keeps RSP unchanged and creates no additional return address. Use nonnegative n and initialize the accumulator. Large n still takes linear time and the arithmetic can overflow."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'What is tail call optimization (TCO)?',
-        answer: 'TCO recognizes when a function call is the last instruction executed before returning. Instead of allocating a new stack frame with call, it reuses the existing stack frame and transfers control via jmp, avoiding stack growth.'
+        "question": "Explain how the stack is used in a recursive function call. What is stored in each stack frame?",
+        "answer": "call saves an 8-byte return address. The procedure explicitly saves any registers, arguments, and intermediate results it will need after recursion, and allocates its own locals. Returning restores that invocation and resumes its caller; values are not saved automatically."
+      },
+      {
+        "question": "What is a base case in recursion? Why is it essential?",
+        "answer": "A base case returns without another recursive call. Every accepted input must progress toward it. A base case that exists but cannot be reached still allows stack exhaustion."
+      },
+      {
+        "question": "How does a frame pointer help in recursive functions? Would you always use one?",
+        "answer": "RBP gives fixed offsets for each invocation even if RSP changes. It is optional: careful RSP-relative addressing or saved registers also work. Preserve RBP when using it because it is callee-saved."
+      },
+      {
+        "question": "What is tail recursion? How can it be optimized in assembly?",
+        "answer": "Tail recursion leaves no pending computation after the recursive result. Update arguments and jump to a loop body, restoring any frame and saved registers first if necessary. No new return address is pushed, so stack use stays constant."
+      },
+      {
+        "question": "Compare recursion and iteration in terms of stack usage and performance.",
+        "answer": "Ordinary recursion typically uses O(depth) stack and call/return overhead. A simple loop often uses constant stack. Branching traversal may still require an explicit stack in an iterative version; algorithmic work is not automatically reduced by removing calls."
+      },
+      {
+        "question": "Write a recursive assembly function to compute the product of two positive integers using repeated addition.",
+        "answer": "; product: RDI=a, RSI=b, nonnegative integers; RAX=a*b (low 64 bits)\nproduct:\n    test rsi, rsi\n    jz .zero\n    push rdi\n    dec rsi\n    call product\n    pop rdi\n    add rax, rdi\n    ret\n.zero:\n    xor eax, eax\n    ret\nTest with a=6, b=7: RAX=42. One push aligns the recursive call and preserves a. Limit b to avoid deep recursion; arithmetic overflow is not detected."
+      },
+      {
+        "question": "What happens if a recursive function lacks a base case? How can you detect this?",
+        "answer": "If calls do not terminate, stack usage can grow until the program faults. Inspect repeated frames in a debugger, track how arguments change toward the base case, and test boundary inputs with a timeout. An optimized tail jump can loop forever without overflowing the stack."
+      },
+      {
+        "question": "How many bytes does each recursive call need for a simple function with no locals and no saved registers? Justify your answer.",
+        "answer": "The call instruction itself adds 8 bytes for its return address. For repeated ABI-compliant nested calls with no other saves or locals, the callee generally needs an additional 8 bytes of alignment padding before calling again, making 16 bytes per active level in that implementation."
+      },
+      {
+        "question": "In the Fibonacci recursive implementation, why is the time complexity exponential? How could you improve it?",
+        "answer": "Naive Fibonacci repeatedly solves the same subproblems along two branches, producing exponential work. Memoization computes each value once; bottom-up iteration takes O(n) time and O(1) auxiliary space. Maximum live recursive depth remains O(n)."
+      },
+      {
+        "question": "Can a recursive function be converted to an iterative one always? What are the challenges?",
+        "answer": "Recursive control flow can be simulated with an explicit stack that stores arguments, locals, and where execution resumes. Tail recursion often becomes a simple loop. Branching recursion requires retaining pending work and intermediate results; conversion does not guarantee constant space or faster execution."
       }
     ],
-    summary: ['Recursion allocates a fresh stack frame per call.', 'Tail recursion can be converted into zero-overhead iterative loops.']
+    "summary": [
+      "Recursion is implemented via the stack: each call creates a new frame with its own return address, saved registers, and locals.",
+      "A frame pointer (rbp) provides stable access to locals and arguments during recursion.",
+      "Always define a base case to terminate recursion; otherwise stack overflow occurs.",
+      "Local variables in recursive functions are isolated per invocation.",
+      "Tail recursion can be optimized into iteration by using a jump and updating parameters, avoiding stack growth.",
+      "Recursion depth is limited by stack size; use iterative solutions for deep recursion.",
+      "Recursion is well-suited for problems like factorial, Fibonacci, tree traversal, and divide-and-conquer algorithms.",
+      "In the next chapter, we'll explore advanced addressing modes and pointers, building on these fundamentals to manipulate data structures more flexibly."
+    ]
   }
 ];
