@@ -10,7 +10,8 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "check:chapter1": "node --import tsx scripts/check-chapter1.mjs",
-    "check:chapter2": "node --import tsx scripts/check-chapter2.mjs"
+    "check:chapter2": "node --import tsx scripts/check-chapter2.mjs",
+    "check:chapter3": "node --import tsx scripts/check-chapter3.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

@@ -1056,126 +1056,426 @@ export const CHAPTERS_LEVEL_1: Chapter[] = [
     ]
   },
   {
-    id: 3,
-    slug: 'chapter-3-registers-memory-stack',
-    level: 1,
-    levelTitle: 'Foundations',
-    title: 'Chapter 3: CPU Registers, Memory, and the Stack',
-    subtitle: 'x86-64 General Purpose Registers, Addressing Modes, and Stack Semantics',
-    learningObjectives: [
-      'Understand the x86-64 general-purpose registers and their conventional uses.',
-      'Learn how memory is addressed and the different addressing modes.',
-      'Grasp the concept of the stack, its growth direction, and its role in function calls and local storage.',
-      'Understand how to push and pop data on the stack.',
-      'Learn how to allocate and deallocate stack space for local variables.',
-      'Become familiar with the RSP and RBP registers and stack frames.',
-      'Write simple programs that use registers and the stack.'
+    "id": 3,
+    "slug": "chapter-3-registers-memory-stack",
+    "level": 1,
+    "levelTitle": "Foundations",
+    "title": "Chapter 3: CPU Registers, Memory, and the Stack",
+    "subtitle": "x86-64 General Purpose Registers, Addressing Modes, and Stack Semantics",
+    "learningObjectives": [
+      "Understand the x86-64 general-purpose registers and their conventional uses.",
+      "Learn how memory is addressed and the different addressing modes.",
+      "Grasp the concept of the stack, its growth direction, and its role in function calls and local storage.",
+      "Understand how to push and pop data on the stack.",
+      "Learn how to allocate and deallocate stack space for local variables.",
+      "Become familiar with the RSP and RBP registers and stack frames.",
+      "Write simple programs that use registers and the stack."
     ],
-    prerequisites: [
-      'Basic understanding of assembly syntax and data representation (Chapters 1 and 2).',
-      'Familiarity with NASM and the Linux build process.',
-      'A Linux environment with NASM, GCC, and GDB installed.'
+    "prerequisites": [
+      "Basic understanding of assembly syntax and data representation (Chapters 1 and 2).",
+      "Familiarity with NASM and the Linux build process.",
+      "A Linux environment with NASM, GCC, and GDB installed."
     ],
-    keyConcepts: [
-      'Registers are the CPU\'s fastest storage, limited in number, and named by convention.',
-      'Memory is a linear array of bytes, addressed by 64-bit pointers.',
-      'The stack is a region of memory used for temporary storage, function calls, and local variables.',
-      'RSP points to the top of the stack; the stack grows downward (toward lower addresses).',
-      'push and pop instructions manipulate the stack and update RSP.',
-      'A stack frame is an area on the stack used by a function for its arguments, return address, saved registers, and local variables.'
+    "keyConcepts": [
+      "Registers are the CPU’s fastest storage, limited in number, and named by convention.",
+      "Memory is a linear array of bytes, addressed by 64-bit pointers.",
+      "The stack is a region of memory used for temporary storage, function calls, and local variables.",
+      "RSP points to the top of the stack; the stack grows downward (toward lower addresses).",
+      "push and pop instructions manipulate the stack and update RSP.",
+      "A stack frame is an area on the stack used by a function for its arguments, return address, saved registers, and local variables."
     ],
-    diagramType: 'registers_memory',
-    sections: [
+    "diagramType": "registers_memory",
+    "sections": [
       {
-        id: 'sec-3-1',
-        title: '3.1 General-Purpose Registers in x86-64',
-        content: `The x86-64 architecture provides 16 general-purpose registers. Each can be used for arithmetic, data movement, and addressing. Although they are "general-purpose," calling conventions and hardware instructions assign specific roles.
-
-Registers:
-• rax: Accumulator; function return value
-• rbx: Callee-saved; general base pointer
-• rcx: Counter; 4th function argument (System V AMD64 ABI)
-• rdx: Data register; 3rd function argument; high half of multiplication/division
-• rsi: Source index; 2nd function argument
-• rdi: Destination index; 1st function argument
-• rbp: Base pointer / frame pointer
-• rsp: Stack pointer (points to top of active stack)
-• r8-r11: 5th/6th args and temporary scratch registers
-• r12-r15: Callee-saved general-purpose registers`,
-        codeSnippets: [
+        "id": "sec-3-1",
+        "title": "3.1 General-Purpose Registers in x86-64",
+        "content": "The x86-64 architecture provides 16 general-purpose registers. Each can be used for arithmetic, data movement, and addressing. Although they are “general-purpose,” certain instructions and calling conventions assign them specific roles. Understanding these conventions is essential for writing interoperable and readable assembly."
+      },
+      {
+        "id": "sec-3-1-1",
+        "title": "3.1.1 Register Names and Sizes",
+        "content": "The 64-bit registers are named rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp, and r8–r15. For backward compatibility, the lower 32 bits, 16 bits, and 8 bits can be accessed with different names:\n\n\n\nImportant: The registers r8–r15 have byte versions r8b–r15b, but they do not have high-byte variants (like ah). The high-byte accessors ah, bh, ch, dh are only available for rax, rbx, rcx, rdx.",
+        "tableData": {
+          "headers": [
+            "64-bit",
+            "32-bit",
+            "16-bit",
+            "8-bit (low)",
+            "8-bit (high)",
+            "Conventional Use"
+          ],
+          "rows": [
+            [
+              "rax",
+              "eax",
+              "ax",
+              "al",
+              "ah",
+              "Accumulator; return value"
+            ],
+            [
+              "rbx",
+              "ebx",
+              "bx",
+              "bl",
+              "bh",
+              "Callee-saved; base pointer (general)"
+            ],
+            [
+              "rcx",
+              "ecx",
+              "cx",
+              "cl",
+              "ch",
+              "Counter; 4th function argument (SysV)"
+            ],
+            [
+              "rdx",
+              "edx",
+              "dx",
+              "dl",
+              "dh",
+              "Data; 3rd function argument"
+            ],
+            [
+              "rsi",
+              "esi",
+              "si",
+              "sil",
+              "(none)",
+              "Source index; 2nd function argument"
+            ],
+            [
+              "rdi",
+              "edi",
+              "di",
+              "dil",
+              "(none)",
+              "Destination index; 1st function argument"
+            ],
+            [
+              "rbp",
+              "ebp",
+              "bp",
+              "bpl",
+              "(none)",
+              "Base pointer (stack frame)"
+            ],
+            [
+              "rsp",
+              "esp",
+              "sp",
+              "spl",
+              "(none)",
+              "Stack pointer (top of stack)"
+            ],
+            [
+              "r8",
+              "r8d",
+              "r8w",
+              "r8b",
+              "(none)",
+              "5th function argument (SysV)"
+            ],
+            [
+              "r9",
+              "r9d",
+              "r9w",
+              "r9b",
+              "(none)",
+              "6th function argument (SysV)"
+            ],
+            [
+              "r10",
+              "r10d",
+              "r10w",
+              "r10b",
+              "(none)",
+              "Temporary; not preserved across calls"
+            ],
+            [
+              "r11",
+              "r11d",
+              "r11w",
+              "r11b",
+              "(none)",
+              "Temporary; not preserved across calls"
+            ],
+            [
+              "r12",
+              "r12d",
+              "r12w",
+              "r12b",
+              "(none)",
+              "Callee-saved"
+            ],
+            [
+              "r13",
+              "r13d",
+              "r13w",
+              "r13b",
+              "(none)",
+              "Callee-saved"
+            ],
+            [
+              "r14",
+              "r14d",
+              "r14w",
+              "r14b",
+              "(none)",
+              "Callee-saved"
+            ],
+            [
+              "r15",
+              "r15d",
+              "r15w",
+              "r15b",
+              "(none)",
+              "Callee-saved"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-3-1-2",
+        "title": "3.1.2 Zero-Extension and Partial Register Writes",
+        "content": "When you write to a 32-bit register (e.g., eax), the CPU automatically zeroes the upper 32 bits of the corresponding 64-bit register. For example:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'Partial Register Zero-Extension',
-            code: `mov rax, -1         ; rax = 0xFFFFFFFFFFFFFFFF
-mov eax, 5          ; rax = 0x0000000000000005 (upper 32 bits cleared automatically!)
-mov ax, 10          ; rax = 0x000000000000000A (writing 16-bit does NOT clear upper bits!)`
+            "language": "nasm",
+            "title": "3.1.2 Zero-Extension and Partial Register Writes",
+            "code": "mov rax, -1         ; rax = 0xFFFFFFFFFFFFFFFF\nmov eax, 5          ; rax = 0x0000000000000005 (upper 32 bits cleared)\nmov ax, 10          ; rax = 0x000000000000000A (writing 16-bit does NOT clear upper bits!)",
+            "explanation": "Writing to a 16-bit register (ax) or 8-bit register (al, ah) does not affect the rest of the register. This can cause partial register stalls on some CPUs, but it is still allowed."
           }
         ]
       },
       {
-        id: 'sec-3-2',
-        title: '3.2 Memory Addressing Modes',
-        content: `An addressing mode specifies how to compute the effective address of a memory operand. The general form is:
-[base + index*scale + displacement]
-where scale is 1, 2, 4, or 8.
-
-Examples:
-• Immediate: mov eax, 42
-• Register: mov eax, ebx
-• Direct: mov eax, [0x402000]
-• Register indirect: mov eax, [rbx]
-• Base + displacement: mov eax, [rbx + 8]
-• Base + index*scale: mov eax, [rbx + rcx*4]
-• Base + index*scale + displacement: mov eax, [rbx + rcx*4 + 16]
-• RIP-relative: mov eax, [rel myvar] (standard for position-independent code)`
+        "id": "sec-3-1-3",
+        "title": "3.1.3 Callee-Saved vs Caller-Saved Registers",
+        "content": "The System V AMD64 ABI (used on Linux) classifies registers into two groups:\n\n- Caller-saved (volatile): The caller must save these registers before calling a function if their values are needed after the call. The callee may freely modify them. These include rax, rcx, rdx, rsi, rdi, r8–r11.\n- Callee-saved (non-volatile): The callee must preserve the original values of these registers. If the callee wants to use them, it must save them (typically on the stack) and restore before returning. These include rbx, rbp, r12–r15. rsp is also callee-saved by convention (but should be restored to its original value before return).\n\nWe will revisit calling conventions in detail in Chapter 10."
       },
       {
-        id: 'sec-3-3',
-        title: '3.3 The Stack & Stack Frame',
-        content: `The stack grows downward: from higher addresses to lower addresses. RSP always points to the top of the stack (the last item pushed).
-
-Push and Pop:
-• push operand: RSP = RSP - 8; store operand at [RSP]
-• pop operand: operand = [RSP]; RSP = RSP + 8
-
-Stack Frames:
-When a function is called, call pushes the return address (RIP). A standard prologue with frame pointer sets up RBP:
-push rbp
-mov rbp, rsp
-sub rsp, N        ; allocate N bytes for locals
-
-Epilogue:
-mov rsp, rbp
-pop rbp
-ret`
-      }
-    ],
-    exercises: [
-      {
-        id: 'ex-3-1',
-        title: 'Exercise 3.1: Register Swap Without Temporary',
-        description: 'Write a NASM snippet that swaps rax and rbx using only xor (no push/pop).',
-        solution: `xor rax, rbx\nxor rbx, rax\nxor rax, rbx`,
-        solutionLanguage: 'nasm',
-        solutionExplanation: 'The three XORs swap rax and rbx without allocating temporary memory or stack.'
-      }
-    ],
-    practiceQuestions: [
-      {
-        question: 'What are the callee-saved registers in x86-64 System V ABI?',
-        answer: 'RBX, RBP, R12, R13, R14, and R15 are callee-saved; if a function modifies them, it must restore their original values before returning.'
+        "id": "sec-3-2",
+        "title": "3.2 Special-Purpose Registers",
+        "content": "Beyond the general-purpose registers, the CPU has several important registers:\n\n- RIP – Instruction Pointer: Holds the address of the next instruction to execute. It is modified by jumps, calls, and returns. It cannot be directly written by mov; use jmp, call, ret, etc.\n- RFLAGS – Flags Register: Contains status flags (Zero, Carry, Sign, Overflow, etc.) that reflect the result of operations and control conditional branching.\n- Segment Registers (CS, DS, SS, ES, FS, GS): In 64-bit mode, most segmentation is disabled; FS and GS are used for thread-local storage. Generally ignored for user-mode programming.\n- XMM0–XMM15: 128-bit registers used for floating-point and SIMD operations. Later we’ll cover these in Chapter 14."
       },
       {
-        question: 'Why is the stack aligned to 16 bytes before a call?',
-        answer: 'The System V AMD64 ABI mandates 16-byte stack alignment before a call instruction to optimize memory bus transfers and enable aligned SSE/AVX vector operations without faults.'
+        "id": "sec-3-3",
+        "title": "3.3 Memory Addressing",
+        "content": "Memory in x86-64 is byte-addressable. Each byte has a unique address, but instructions can access larger units: word (2 bytes), doubleword (4 bytes), quadword (8 bytes). Addresses are 64-bit, but only 48 bits are used for virtual addresses in practice (canonical addresses)."
+      },
+      {
+        "id": "sec-3-3-1",
+        "title": "3.3.1 Addressing Modes",
+        "content": "An addressing mode specifies how to compute the effective address of a memory operand. The most common modes are:\n\n- Immediate: The operand is a constant embedded in the instruction (e.g., mov eax, 5). Not a memory address.\n- Register: The operand is a register (e.g., mov eax, ebx).\n- Direct (absolute): The address is a constant (e.g., mov eax, [0x12345678]). In NASM, writing a constant inside brackets treats it as a memory address.\n- Register Indirect: The address is in a register (e.g., mov eax, [rbx]).\n- Base + Displacement: The address is a register plus a constant offset (e.g., mov eax, [rbx + 8]).\n- Indexed: Uses a base register, an index register, a scale (1, 2, 4, 8), and an optional displacement. The general form is [base + index*scale + displacement]. Example: mov eax, [rbx + rcx*4 + 16].\n- RIP-relative: Address is relative to the instruction pointer. NASM defaults to this for direct memory access to labels in 64-bit mode. For instance, mov eax, [myvar] is actually mov eax, [rel myvar]. This is used for position-independent code.\n\nExamples:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "3.3.1 Addressing Modes",
+            "code": "mov eax, [0x402000]        ; absolute address (rarely used)\nmov eax, [rbx]             ; register indirect\nmov eax, [rbx + 8]         ; base + displacement\nmov eax, [rbx + rcx*4]     ; base + index*scale\nmov eax, [rbx + rcx*4 + 16]; base + index*scale + disp\nmov eax, [rel myvar]       ; RIP-relative (NASM default for labels)"
+          }
+        ]
+      },
+      {
+        "id": "sec-3-3-2",
+        "title": "3.3.2 Memory Operand Size",
+        "content": "The size of the memory operand is determined by the destination register or an explicit size specifier. If the size is ambiguous (e.g., mov [rbx], 5), NASM requires a size keyword:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "3.3.2 Memory Operand Size",
+            "code": "mov byte [rbx], 5\nmov word [rbx], 5\nmov dword [rbx], 5\nmov qword [rbx], 5"
+          }
+        ]
+      },
+      {
+        "id": "sec-3-3-3",
+        "title": "3.3.3 Direct Memory Access and the rel Keyword",
+        "content": "In NASM 64-bit, when you write mov eax, [myvar], the assembler treats myvar as a symbol and uses RIP-relative addressing automatically. This is good for position-independent code. You can also use the rel keyword explicitly. If you need an absolute address (rare), use the abs keyword or a mov with a constant."
+      },
+      {
+        "id": "sec-3-4",
+        "title": "3.4 The Stack",
+        "content": "The stack is a region of memory used for:\n- Function call return addresses.\n- Passing arguments (some are passed on the stack).\n- Saving register values.\n- Allocating local variables.\n- Temporary storage.\n\nIn x86-64, the stack grows downward: from higher addresses to lower addresses. The RSP register always points to the top of the stack (the last item pushed). The stack is usually aligned to 16 bytes at function boundaries (per ABI)."
+      },
+      {
+        "id": "sec-3-4-1",
+        "title": "3.4.1 Push and Pop",
+        "content": "- push operand: Decrements RSP by the operand size (usually 8 bytes for a 64-bit register or immediate) and then stores the operand at the new [RSP].\n- pop operand: Loads the value at [RSP] into the operand and then increments RSP by the operand size.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "3.4.1 Push and Pop",
+            "code": "push rax          ; RSP = RSP - 8; store rax at [RSP]\npush 42           ; push immediate 42\npop rbx           ; load rbx from [RSP]; RSP = RSP + 8"
+          }
+        ]
+      },
+      {
+        "id": "sec-3-4-2",
+        "title": "3.4.2 Stack Operations in a Function",
+        "content": "When a function is called (call instruction), the CPU pushes the return address onto the stack (i.e., RSP -= 8, store RIP of next instruction). Upon ret, it pops the return address into RIP and increments RSP.\n\nA typical function prologue (using frame pointer) looks like:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "3.4.2 Stack Operations in a Function — listing 1",
+            "code": "push rbp          ; save caller's base pointer\nmov rbp, rsp      ; set new base pointer to current stack pointer\nsub rsp, N        ; allocate N bytes for local variables",
+            "explanation": "Epilogue:"
+          },
+          {
+            "language": "nasm",
+            "title": "3.4.2 Stack Operations in a Function — listing 2",
+            "code": "mov rsp, rbp      ; deallocate locals\npop rbp           ; restore caller's base pointer\nret",
+            "explanation": "This creates a stack frame."
+          }
+        ]
+      },
+      {
+        "id": "sec-3-4-3",
+        "title": "3.4.3 Stack Alignment",
+        "content": "The System V ABI requires that the stack pointer be 16-byte aligned before a call instruction. This means that at function entry, RSP is 8 mod 16 (because the return address was pushed). To maintain alignment, functions often subtract a multiple of 16 plus 8 for local variables."
+      },
+      {
+        "id": "sec-3-5",
+        "title": "3.5 Using the Stack for Local Variables",
+        "content": "There are two common approaches for local variables:\n1. Use RSP directly with offsets (more common in optimized code).\n2. Use a frame pointer RBP (easier to read and debug)."
+      },
+      {
+        "id": "sec-3-5-1",
+        "title": "3.5.1 Frame Pointer Approach",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "3.5.1 Frame Pointer Approach",
+            "code": "section .text\nglobal main\nmain:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16            ; allocate 16 bytes for two 8-byte locals\n\n    ; local1 at [rbp-8], local2 at [rbp-16]\n    mov qword [rbp-8], 123\n    mov qword [rbp-16], 456\n\n    ; ... use locals ...\n\n    mov rsp, rbp           ; restore stack pointer\n    pop rbp                ; restore base pointer\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-3-5-2",
+        "title": "3.5.2 RSP-Only Approach",
+        "content": "Some functions do not use a frame pointer and instead use RSP relative offsets. This saves a register but makes code harder to follow due to changing RSP (especially with pushes/pops). Usually combined with no pushes/pops inside the function except at start/end.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "3.5.2 RSP-Only Approach",
+            "code": "main:\n    sub rsp, 16            ; allocate locals\n    mov qword [rsp+8], 123 ; local1 (offset from current RSP)\n    mov qword [rsp], 456   ; local2\n    ; ...\n    add rsp, 16            ; deallocate\n    ret",
+            "explanation": "Note: Offsets are positive because RSP points to the lowest allocated address."
+          }
+        ]
+      },
+      {
+        "id": "sec-3-6",
+        "title": "3.6 Stack Frames in Detail",
+        "content": "A stack frame comprises:\n- Return address (pushed by call).\n- Saved previous RBP (if frame pointer used).\n- Local variables.\n- Possibly saved callee-saved registers.\n- Function arguments (beyond the first six in SysV, or all in some conventions).\n\nThe typical layout with frame pointer:",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "3.6 Stack Frames in Detail",
+            "code": "        +------------------------+  Higher addresses\n        |       ...              |\n        | 7th argument (if any)  |\n        | 6th argument           |\n        | ...                    |\n        | Return Address         |\n        | Saved RBP              |  <-- RBP points here\n        | Local variable 1       |\n        | Local variable 2       |\n        | ...                    |\n        | Saved registers        |\n        +------------------------+  Lower addresses (RSP after allocation)",
+            "explanation": "The first six integer arguments are passed in registers (rdi, rsi, rdx, rcx, r8, r9), but they may be spilled to the stack by the callee if needed."
+          }
+        ]
+      },
+      {
+        "id": "sec-3-7",
+        "title": "3.7 Example Program: Sum of Two Numbers Using Stack",
+        "content": "Let’s write a simple program that demonstrates using registers and the stack. We’ll compute the sum of two integers stored on the stack, then print the result.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "3.7 Example Program: Sum of Two Numbers Using Stack",
+            "code": "; stack_example.asm\n; Assemble: nasm -f elf64 stack_example.asm -o stack_example.o\n; Link:     ld stack_example.o -o stack_example\n; Run:      ./stack_example\n\nsection .data\n    msg db 'Sum: ', 0\n    newline db 0xA\n\nsection .bss\n    ; No uninitialized data needed\n\nsection .text\n    global _start\n\n_start:\n    ; Allocate 16 bytes on stack for two 64-bit integers\n    sub rsp, 16\n\n    ; Store two values on stack\n    mov qword [rsp], 10      ; first value at [rsp]\n    mov qword [rsp+8], 20    ; second value at [rsp+8]\n\n    ; Load values into registers\n    mov rax, [rsp]\n    mov rbx, [rsp+8]\n\n    ; Add them\n    add rax, rbx             ; rax = 30\n\n    ; Convert sum to string for printing (simplified: print digits)\n    ; We'll use syscall write to print the number by converting to ASCII\n    ; For simplicity, we'll just print a fixed string and then the number in hex? \n    ; Better: use a simple decimal conversion for numbers < 100.\n    ; We'll implement a minimal conversion for demonstration.\n\n    ; Save sum\n    push rax                 ; push sum onto stack (temporarily)\n\n    ; Print \"Sum: \"\n    mov rax, 1               ; sys_write\n    mov rdi, 1               ; stdout\n    mov rsi, msg\n    mov rdx, 5               ; length of \"Sum: \"\n    syscall\n\n    ; Pop sum and convert to decimal string\n    pop rax                  ; rax = sum (30)\n    ; Convert rax to decimal string on stack\n    ; We'll allocate some space for the string\n    sub rsp, 20              ; allocate buffer\n\n    ; Convert integer in rax to string at rsp\n    mov rdi, rsp             ; destination buffer\n    call int_to_str          ; our own function (not implemented here; would be in later chapters)\n\n    ; For now, we skip conversion and just exit\n    ; In a real program, you'd print the number.\n\n    ; Exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+            "explanation": "The above code is incomplete because int_to_str is not defined. Later chapters will cover number conversion and printing."
+          }
+        ]
       }
     ],
-    summary: [
-      'x86-64 has 16 general-purpose registers with established ABI conventions.',
-      'The stack grows downward; RSP points to the top.',
-      'push and pop manage data on the stack and adjust RSP.',
-      'Stack frames use RBP to access locals and arguments with stable offsets.',
-      'Memory addressing supports base, index, scale, and displacement.'
+    "exercises": [
+      {
+        "id": "ex-3-1",
+        "title": "Exercise 3.1: Register Swap",
+        "description": "Write a NASM program that swaps the values of rax and rbx using only mov and xor (no push/pop). Verify with GDB.",
+        "solution": "xor rax, rbx   ; rax = rax ^ rbx\nxor rbx, rax   ; rbx = rbx ^ (original rax) -> original rax\nxor rax, rbx   ; rax = (original rax ^ original rbx) ^ original rax -> original rbx",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "This swaps without a temporary."
+      },
+      {
+        "id": "ex-3-2",
+        "title": "Exercise 3.2: Stack Push/Pop",
+        "description": "Write a program that pushes 10, 20, 30 onto the stack (using 64-bit pushes) and then pops them into rax, rbx, rcx respectively. What are the final values? Explain the order.",
+        "solution": "push 10      ; stack: [10]\npush 20      ; stack: [20, 10]\npush 30      ; stack: [30, 20, 10]\npop rax      ; rax = 30\npop rbx      ; rbx = 20\npop rcx      ; rcx = 10",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "The order is LIFO (last in, first out)."
+      },
+      {
+        "id": "ex-3-3",
+        "title": "Exercise 3.3: Local Variables with Frame Pointer",
+        "description": "Write a function main (linked with ld using _start or with gcc using main) that:\n- Uses frame pointer rbp.\n- Allocates 32 bytes for locals.\n- Stores values 100 and 200 in the first two 8-byte locals.\n- Adds them and stores the result in the third local.\n- Returns the result as exit code (use mov rdi, [rbp-24] and mov rax, 60).\nRun and check echo $? (should be 44 if sum is 300 modulo 256? Actually exit code is 8-bit, so 300 mod 256 = 44). Test.",
+        "solution": "section .text\nglobal _start\n_start:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 32          ; 4 qwords\n    mov qword [rbp-8], 100\n    mov qword [rbp-16], 200\n    mov rax, [rbp-8]\n    add rax, [rbp-16]    ; 300\n    mov [rbp-24], rax\n    mov rdi, [rbp-24]    ; 300, but exit code uses low 8 bits: 300 & 0xFF = 44\n    mov rax, 60          ; sys_exit\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Run: ./prog; echo $? gives 44."
+      },
+      {
+        "id": "ex-3-4",
+        "title": "Exercise 3.4: Memory Addressing",
+        "description": "Write a program that defines an array of 5 dwords in .data. Use indexed addressing ([base + index*4]) to load each element into eax and sum them, then store the sum in a variable. Use GDB to verify.",
+        "solution": "section .data\n    arr dd 1, 2, 3, 4, 5\n    len equ ($ - arr) / 4\nsection .bss\n    sum resd 1\nsection .text\nglobal _start\n_start:\n    xor eax, eax\n    xor rcx, rcx\nloop_start:\n    cmp rcx, len\n    je done\n    mov ebx, [arr + rcx*4]\n    add eax, ebx\n    inc rcx\n    jmp loop_start\ndone:\n    mov [sum], eax\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Sum = 15, stored in sum."
+      }
+    ],
+    "practiceQuestions": [
+      {
+        "question": "What are the callee-saved registers in x86-64 System V ABI?",
+        "answer": "RBX, RBP, R12, R13, R14, and R15 are callee-saved; if a function modifies them, it must restore their original values before returning."
+      },
+      {
+        "question": "How does push affect RSP? What about pop?",
+        "answer": "For a 64-bit push, RSP decreases by 8 and the value is stored at the new top of the stack. A 64-bit pop loads that value and increases RSP by 8."
+      },
+      {
+        "question": "Why is the stack said to grow “downward”?",
+        "answer": "Pushing or allocating stack space moves RSP toward lower memory addresses; popping or releasing space moves it toward higher addresses."
+      },
+      {
+        "question": "What is a stack frame? Why is RBP often used?",
+        "answer": "A stack frame holds a function’s local variables, saved registers and return information. RBP provides a stable reference for offsets while RSP changes during stack operations."
+      },
+      {
+        "question": "What does sub rsp, 16 do? Why might a function do this?",
+        "answer": "It subtracts 16 from the stack pointer, reserving 16 bytes below the previous top of the stack. A function can use that space for local variables or temporary storage."
+      },
+      {
+        "question": "Explain the difference between [rbx+8] and [rbx+rcx*4+8].",
+        "answer": "[rbx+8] uses a base register and a fixed displacement. [rbx+rcx*4+8] also adds a scaled index, useful for selecting a four-byte array element."
+      },
+      {
+        "question": "What happens when you write to eax? Does it affect rax?",
+        "answer": "Writing EAX replaces the low 32 bits of RAX and clears its upper 32 bits. Writing AX or AL does not clear the remaining bits."
+      },
+      {
+        "question": "How can you swap two registers without a temporary register?",
+        "answer": "For distinct registers, use xor rax, rbx; xor rbx, rax; xor rax, rbx. The three operations exchange the values without a third register."
+      },
+      {
+        "question": "What is the purpose of the RIP register?",
+        "answer": "RIP is the instruction pointer. It identifies the next instruction address and is changed by control-flow instructions such as jumps, calls and returns."
+      },
+      {
+        "question": "Why is the stack aligned to 16 bytes before a call?",
+        "answer": "The System V AMD64 ABI mandates 16-byte stack alignment before a call instruction to optimize memory bus transfers and enable aligned SSE/AVX vector operations without faults."
+      }
+    ],
+    "summary": [
+      "x86-64 has 16 general-purpose registers; they have conventional roles but are flexible.",
+      "The stack grows downward; RSP points to the top.",
+      "push and pop manage data on the stack and adjust RSP.",
+      "Stack frames use RBP to access locals and arguments with stable offsets.",
+      "Memory addressing supports base, index, scale, and displacement.",
+      "Registers are classified as caller-saved or callee-saved by the ABI.",
+      "The stack must be kept 16-byte aligned before calls.",
+      "In the next chapter, we will explore the build process in detail: how the assembler and linker work to create an executable from source code."
     ]
   },
   {
