@@ -1479,133 +1479,405 @@ export const CHAPTERS_LEVEL_1: Chapter[] = [
     ]
   },
   {
-    id: 4,
-    slug: 'chapter-4-assemblers-linkers-build',
-    level: 1,
-    levelTitle: 'Foundations',
-    title: 'Chapter 4: Assemblers, Linkers, and the Build Process',
-    subtitle: 'From Source to Binary: Object Files, Symbol Tables, and Relocations',
-    learningObjectives: [
-      'Understand the role of the assembler in translating assembly source to machine code.',
-      'Learn how the linker combines object files and resolves symbols.',
-      'Comprehend the stages of the build process: assembly, linking, and loading.',
-      'Explore the ELF object file format and its sections.',
-      'Understand symbol tables, relocation, and how external references are resolved.',
-      'Differentiate between static and dynamic linking.',
-      'Use nasm, ld, and gcc to build executable programs from assembly.',
-      'Write a simple Makefile to automate the build process.'
+    "id": 4,
+    "slug": "chapter-4-assemblers-linkers-build",
+    "level": 1,
+    "levelTitle": "Foundations",
+    "title": "Chapter 4: Assemblers, Linkers, and the Build Process",
+    "subtitle": "From Source to Binary: Object Files, Symbol Tables, and Relocations",
+    "learningObjectives": [
+      "Understand the role of the assembler in translating assembly source to machine code.",
+      "Learn how the linker combines object files and resolves symbols.",
+      "Comprehend the stages of the build process: assembly, linking, and loading.",
+      "Explore the ELF object file format and its sections.",
+      "Understand symbol tables, relocation, and how external references are resolved.",
+      "Differentiate between static and dynamic linking.",
+      "Use nasm, ld, and gcc to build executable programs from assembly.",
+      "Write a simple Makefile to automate the build process."
     ],
-    prerequisites: [
-      'Basic knowledge of assembly syntax (Chapter 1).',
-      'Familiarity with Linux command line and file system.',
-      'Ability to write and run simple assembly programs.'
+    "prerequisites": [
+      "Basic knowledge of assembly syntax (Chapter 1).",
+      "Familiarity with Linux command line and file system.",
+      "Ability to write and run simple assembly programs."
     ],
-    keyConcepts: [
-      'Assembler converts .asm source into an object file (.o) containing machine code and metadata.',
-      'Linker combines object files and libraries, resolves symbols, and produces an executable or shared library.',
-      'Object file is an intermediate binary format (ELF on Linux) with sections, symbol tables, and relocation entries.',
-      'Symbol table lists functions, variables, and other named entities with addresses or offsets.',
-      'Relocation is the process of adjusting addresses in code/data when the final layout is known.',
-      'Static linking copies library code into the executable; dynamic linking references shared libraries at runtime.'
+    "keyConcepts": [
+      "Assembler converts .asm source into an object file (.o) containing machine code and metadata.",
+      "Linker combines object files and libraries, resolves symbols, and produces an executable or shared library.",
+      "Object file is an intermediate binary format (ELF on Linux) with sections, symbol tables, and relocation entries.",
+      "Symbol table lists functions, variables, and other named entities with addresses or offsets.",
+      "Relocation is the process of adjusting addresses in code/data when the final layout is known.",
+      "Static linking copies library code into the executable; dynamic linking references shared libraries at runtime."
     ],
-    diagramType: 'toolchain_pipeline',
-    sections: [
+    "diagramType": "toolchain_pipeline",
+    "sections": [
       {
-        id: 'sec-4-1',
-        title: '4.1 The Build Process Overview',
-        content: `Creating an executable from source code involves:
-1. Assembly: Translate mnemonics and directives into machine code stored in an object file (.o).
-2. Symbol Resolution: Linker matches extern references in one file to global definitions in another.
-3. Relocation: Linker patches relative/absolute offsets once final virtual memory addresses are assigned.
-4. Loading: Operating system kernel loads the ELF into virtual memory and begins execution at _start.`
+        "id": "sec-4-1",
+        "title": "4.1 The Build Process Overview",
+        "content": "Creating an executable from source code typically involves several steps:\n\n1. Preprocessing (for C/C++): expand macros, includes, etc. Not needed for pure assembly.\n2. Compilation/Assembly: translate source code into machine code stored in an object file.\n3. Linking: combine object files and libraries, resolve symbols, and produce an executable file.\n4. Loading: the operating system loads the executable into memory and starts execution.\n\nFor assembly language, the flow is:",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "4.1 The Build Process Overview — listing 1",
+            "code": "Assembly source (.asm) --> Assembler (nasm) --> Object file (.o) --> Linker (ld or gcc) --> Executable --> Loader (kernel) --> Running process",
+            "explanation": "We will examine each stage."
+          }
+        ]
       },
       {
-        id: 'sec-4-2',
-        title: '4.2 Modular Multi-File Assembly Example',
-        content: `Here is a complete two-file project where main.asm calls a function in func.asm:`,
-        codeSnippets: [
+        "id": "sec-4-2",
+        "title": "4.2 The Assembler: NASM",
+        "content": "The assembler reads assembly source code and produces an object file. It performs:\n- Syntax checking.\n- Translation of mnemonics and operands into machine code (opcodes and operands).\n- Calculation of constant expressions (e.g., len equ $ - msg).\n- Generation of symbol table and relocation information for the linker."
+      },
+      {
+        "id": "sec-4-2-1",
+        "title": "4.2.1 NASM Syntax and Directives",
+        "content": "NASM uses Intel-like syntax. We’ve already seen sections (section .data, .text, .bss) and directives like db, dw, dd, dq, equ, resb, resw, etc.\n\nImportant NASM directives:\n- section .data – initialized data.\n- section .bss – uninitialized data (reserved space).\n- section .text – code.\n- global label – export a symbol so linker can see it.\n- extern label – import a symbol defined elsewhere.\n- equ – define a constant.\n- times – repeat a directive (e.g., times 10 db 0).\n- %define – macro-like text substitution (similar to C #define).\n- %include – include another file."
+      },
+      {
+        "id": "sec-4-2-2",
+        "title": "4.2.2 Producing an Object File",
+        "content": "To assemble a file:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'main.asm',
-            code: `; main.asm
-section .data
-    msg db 'Result: ', 0
-section .text
-    global _start
-    extern add_numbers
-
-_start:
-    ; Call add_numbers(3, 4)
-    mov rdi, 3
-    mov rsi, 4
-    call add_numbers       ; result in rax
-
-    ; Exit with code = result (7)
-    mov rdi, rax           ; exit code
-    mov rax, 60
-    syscall`
+            "language": "bash",
+            "title": "4.2.2 Producing an Object File — listing 1",
+            "code": "nasm -f elf64 hello.asm -o hello.o",
+            "explanation": "-f elf64 selects the output format (ELF 64-bit for Linux). Other formats: elf32, macho64, win64, etc.\n\nThe object file contains:\n- Machine code for each section.\n- Symbol table with names and addresses (or offsets).\n- Relocation entries for symbols whose addresses are not yet known.\n- Debugging information (if requested with -g)."
+          }
+        ]
+      },
+      {
+        "id": "sec-4-2-3",
+        "title": "4.2.3 Viewing Object File Information",
+        "content": "Use objdump or readelf to inspect object files.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "4.2.3 Viewing Object File Information — listing 1",
+            "code": "nasm -f elf64 hello.asm -o hello.o\nreadelf -S hello.o        # list sections\nreadelf -s hello.o        # list symbols\nobjdump -d hello.o        # disassemble code",
+            "explanation": "Sections in a typical assembly object:\n- .text: code.\n- .data: initialized data.\n- .bss: uninitialized data (zero-filled at load).\n- .symtab: symbol table.\n- .rela.text: relocation entries for code section.\n- .rela.data: relocation entries for data section."
+          }
+        ]
+      },
+      {
+        "id": "sec-4-3",
+        "title": "4.3 The Linker: ld",
+        "content": "The linker combines one or more object files and libraries into a single executable or shared library. Its main tasks:\n- Resolve symbol references (e.g., calls to external functions).\n- Assign final memory addresses to sections and symbols.\n- Apply relocations: patch addresses in code and data.\n- Handle library linking (static or dynamic).\n- Produce the executable file in the required format (ELF)."
+      },
+      {
+        "id": "sec-4-3-1",
+        "title": "4.3.1 Linking a Single Object File",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "4.3.1 Linking a Single Object File — listing 1",
+            "code": "ld hello.o -o hello",
+            "explanation": "This links the object file and creates an executable. The entry point defaults to _start.\n\nIf the object file defines main instead of _start, and you link with ld, you must specify the entry point:"
           },
           {
-            language: 'nasm',
-            title: 'func.asm',
-            code: `; func.asm
-section .text
-    global add_numbers
-
-add_numbers:
-    ; Add rdi + rsi, return in rax
-    mov rax, rdi
-    add rax, rsi
-    ret`
+            "language": "bash",
+            "title": "4.3.1 Linking a Single Object File — listing 2",
+            "code": "ld -e main hello.o -o hello",
+            "explanation": "Or link with gcc, which includes the C runtime and sets up _start to call main:"
           },
           {
-            language: 'make',
-            title: 'Makefile',
-            code: `ASM = nasm
-ASMFLAGS = -f elf64
-LD = ld
-TARGET = program
-OBJECTS = main.o func.o
-
-all: $(TARGET)
-
-$(TARGET): $(OBJECTS)
-\t$(LD) $(OBJECTS) -o $(TARGET)
-
-%.o: %.asm
-\t$(ASM) $(ASMFLAGS) $< -o $@
-
-clean:
-\trm -f $(OBJECTS) $(TARGET)`
+            "language": "bash",
+            "title": "4.3.1 Linking a Single Object File — listing 3",
+            "code": "gcc hello.o -o hello"
+          }
+        ]
+      },
+      {
+        "id": "sec-4-3-2",
+        "title": "4.3.2 Linking Multiple Object Files",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "4.3.2 Linking Multiple Object Files — listing 1",
+            "code": "nasm -f elf64 file1.asm -o file1.o\nnasm -f elf64 file2.asm -o file2.o\nld file1.o file2.o -o program",
+            "explanation": "Symbols defined as global in one file can be referenced as extern in another, and the linker resolves them."
+          }
+        ]
+      },
+      {
+        "id": "sec-4-3-3",
+        "title": "4.3.3 Linker Scripts",
+        "content": "A linker script controls the layout of sections in the output file. The default script is usually sufficient, but advanced projects (e.g., bootloaders) may require custom scripts. The script defines memory regions and assigns sections to addresses.\n\nExample minimal linker script:",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "4.3.3 Linker Scripts — listing 1",
+            "code": "OUTPUT_FORMAT(\"elf64-x86-64\")\nENTRY(_start)\n\nSECTIONS\n{\n    . = 0x400000;    /* start address */\n    .text : { *(.text) }\n    .data : { *(.data) }\n    .bss  : { *(.bss) }\n}",
+            "explanation": "Use with ld -T script.ld file.o -o output."
+          }
+        ]
+      },
+      {
+        "id": "sec-4-4",
+        "title": "4.4 Relocations and Symbol Resolution",
+        "content": "When the assembler encounters a reference to a label whose address is not yet known (e.g., a jump to an external function or a data label in another file), it emits a relocation entry. The linker later fills in the correct address."
+      },
+      {
+        "id": "sec-4-4-1",
+        "title": "4.4.1 Example of Relocation",
+        "content": "Consider two files:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "main.asm",
+            "code": "; main.asm\nextern func\nsection .text\nglobal _start\n_start:\n    call func\n    mov rax, 60\n    xor rdi, rdi\n    syscall"
+          },
+          {
+            "language": "nasm",
+            "title": "func.asm",
+            "code": "; func.asm\nsection .text\nglobal func\nfunc:\n    mov rax, 1\n    ret",
+            "explanation": "Assemble both:"
+          },
+          {
+            "language": "bash",
+            "title": "4.4.1 Example of Relocation — listing 3",
+            "code": "nasm -f elf64 main.asm -o main.o\nnasm -f elf64 func.asm -o func.o",
+            "explanation": "Examine relocations in main.o:"
+          },
+          {
+            "language": "bash",
+            "title": "4.4.1 Example of Relocation — listing 4",
+            "code": "readelf -r main.o",
+            "explanation": "Output includes something like:"
+          },
+          {
+            "language": "text",
+            "title": "4.4.1 Example of Relocation — listing 5",
+            "code": "Relocation section '.rela.text' at offset 0x...\n  Offset          Info           Type           Sym. Value    Sym. Name + Addend\n000000000001  000a00000004 R_X86_64_PLT32    0000000000000000 func - 4",
+            "explanation": "The relocation tells the linker: at offset 1 in .text, there is a 32-bit PC-relative reference to func; adjust it based on final address.\n\nAfter linking, the call instruction’s displacement is set correctly."
+          }
+        ]
+      },
+      {
+        "id": "sec-4-4-2",
+        "title": "4.4.2 Types of Relocations",
+        "content": "Common x86-64 relocation types:\n- R_X86_64_64: absolute 64-bit address (used in mov rax, symbol).\n- R_X86_64_PC32: 32-bit PC-relative offset.\n- R_X86_64_PLT32: 32-bit PC-relative offset to PLT entry (for dynamic linking).\n- R_X86_64_GOTPCREL: used for RIP-relative access to GOT.\n\nThe assembler chooses the appropriate type based on the instruction and addressing mode."
+      },
+      {
+        "id": "sec-4-5",
+        "title": "4.5 Static vs Dynamic Linking",
+        "content": ""
+      },
+      {
+        "id": "sec-4-5-1",
+        "title": "4.5.1 Static Linking",
+        "content": "All library code is copied into the executable. The resulting binary is self-contained but larger. Static libraries are archives (.a) of object files.\n\nExample with C library:",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "4.5.1 Static Linking — listing 1",
+            "code": "gcc -static hello.c -o hello_static",
+            "explanation": "For assembly, you can link with static libraries (e.g., libc.a) using ld."
+          }
+        ]
+      },
+      {
+        "id": "sec-4-5-2",
+        "title": "4.5.2 Dynamic Linking",
+        "content": "The executable contains references to shared libraries (.so). At runtime, the dynamic linker (ld.so) loads the libraries and resolves symbols. This saves disk and memory but introduces a dependency.\n\nFor assembly, linking with gcc by default uses dynamic linking against libc. For pure syscall programs, no libraries are needed, so linking with ld produces a static executable (since no shared libraries are involved).\n\nYou can see dynamic dependencies with ldd:",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "4.5.2 Dynamic Linking — listing 1",
+            "code": "ldd hello",
+            "explanation": "If no libraries, it says \"not a dynamic executable\"."
+          }
+        ]
+      },
+      {
+        "id": "sec-4-6",
+        "title": "4.6 The ELF Format",
+        "content": "Executable and Linkable Format (ELF) is the standard binary format on Linux. It consists of:\n- ELF header: magic number, architecture, entry point, section header table offset, etc.\n- Program header table: describes segments for loading into memory (used by loader).\n- Section header table: describes sections for linking (used by linker).\n- Sections: .text, .data, .bss, .rodata, etc.\n- Segments: grouped sections with permissions (read/execute, read/write).\n\nUse readelf -h, readelf -l, readelf -S to inspect."
+      },
+      {
+        "id": "sec-4-7",
+        "title": "4.7 Using GCC for Assembly Linking",
+        "content": "While ld is the raw linker, gcc can be used as a driver that performs assembling and linking. This is convenient when mixing C and assembly or when you want the C runtime.\n\nExamples:\n- Assemble and link a single assembly file with gcc:",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "4.7 Using GCC for Assembly Linking — listing 1",
+            "code": "gcc hello.asm -o hello",
+            "explanation": "(GCC will invoke nasm? Actually GCC expects C source; for assembly you must use -x assembler or use as for GAS syntax. For NASM, you must assemble separately and then link with gcc.)"
+          },
+          {
+            "language": "bash",
+            "title": "4.7 Using GCC for Assembly Linking — listing 2",
+            "code": "nasm -f elf64 hello.asm -o hello.o\ngcc hello.o -o hello",
+            "explanation": "- Link assembly object with C object:"
+          },
+          {
+            "language": "bash",
+            "title": "4.7 Using GCC for Assembly Linking — listing 3",
+            "code": "gcc main.c asm_func.o -o program",
+            "explanation": "When linking with gcc, the entry point is main (by default), and the C runtime performs initialization before calling main."
+          }
+        ]
+      },
+      {
+        "id": "sec-4-8",
+        "title": "4.8 Debugging the Build Process",
+        "content": "- Use readelf -s to view symbols and check for undefined symbols.\n- Use nm to list symbols in object files.\n- Use objdump -d to disassemble and inspect machine code.\n- Use ldd to check dynamic library dependencies.\n- Use strace to trace system calls at runtime (helpful for understanding loading and dynamic linking).\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "4.8 Debugging the Build Process — listing 1",
+            "code": "nm hello.o",
+            "explanation": "Shows symbols with types (T for text, D for data, U for undefined)."
+          }
+        ]
+      },
+      {
+        "id": "sec-4-9",
+        "title": "4.9 Makefiles for Assembly Projects",
+        "content": "A Makefile automates the build process by defining rules and dependencies.\n\nExample Makefile for a project with two assembly files:",
+        "codeSnippets": [
+          {
+            "language": "make",
+            "title": "4.9 Makefiles for Assembly Projects — listing 1",
+            "code": "ASM = nasm\nASMFLAGS = -f elf64\nLD = ld\nLDFLAGS =\n\nSOURCES = main.asm func.asm\nOBJECTS = $(SOURCES:.asm=.o)\nTARGET = program\n\nall: $(TARGET)\n\n$(TARGET): $(OBJECTS)\n\t$(LD) $(LDFLAGS) $(OBJECTS) -o $(TARGET)\n\n%.o: %.asm\n\t$(ASM) $(ASMFLAGS) $< -o $@\n\nclean:\n\trm -f $(OBJECTS) $(TARGET)\n\n.PHONY: all clean",
+            "explanation": "Use:"
+          },
+          {
+            "language": "bash",
+            "title": "4.9 Makefiles for Assembly Projects — listing 2",
+            "code": "make        # builds\nmake clean  # removes artifacts"
+          }
+        ]
+      },
+      {
+        "id": "sec-4-10",
+        "title": "4.10 Practical Example: Two-File Assembly Project",
+        "content": "Let's create a simple project with a main file and a function file.\n\nmain.asm",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "main.asm",
+            "code": "; main.asm\nsection .data\n    msg db 'Result: ', 0\nsection .text\n    global _start\n    extern add_numbers\n\n_start:\n    ; Call add_numbers(3, 4)\n    mov rdi, 3\n    mov rsi, 4\n    call add_numbers       ; result in rax\n\n    ; Exit with code = result (7)\n    mov rdi, rax           ; exit code\n    mov rax, 60\n    syscall",
+            "explanation": "func.asm"
+          },
+          {
+            "language": "nasm",
+            "title": "func.asm",
+            "code": "; func.asm\nsection .text\n    global add_numbers\n\nadd_numbers:\n    ; Add rdi + rsi, return in rax\n    mov rax, rdi\n    add rax, rsi\n    ret",
+            "explanation": "Build:"
+          },
+          {
+            "language": "bash",
+            "title": "4.10 Practical Example: Two-File Assembly Project — listing 3",
+            "code": "nasm -f elf64 main.asm -o main.o\nnasm -f elf64 func.asm -o func.o\nld main.o func.o -o program\n./program\necho $?   # prints 7",
+            "explanation": "Examine the object files:"
+          },
+          {
+            "language": "bash",
+            "title": "4.10 Practical Example: Two-File Assembly Project — listing 4",
+            "code": "readelf -s main.o | grep add_numbers   # shows UND (undefined)\nreadelf -s func.o | grep add_numbers   # shows GLOBAL",
+            "explanation": "After linking:"
+          },
+          {
+            "language": "bash",
+            "title": "4.10 Practical Example: Two-File Assembly Project — listing 5",
+            "code": "nm program | grep add_numbers   # shows address"
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-4-1',
-        title: 'Exercise 4.1: Inspect Relocations',
-        description: 'Assemble a file calling an external function. Use readelf -r to inspect relocation records.',
-        solution: 'nasm -f elf64 main.asm -o main.o && readelf -r main.o',
-        solutionLanguage: 'bash',
-        solutionExplanation: 'Shows relocation entries of type R_X86_64_PLT32 pointing to unresolved symbols.'
-      }
-    ],
-    practiceQuestions: [
-      {
-        question: 'What is a relocation? Why is it needed?',
-        answer: 'A relocation is a record generated by the assembler telling the linker that an instruction refers to a memory address or function not yet placed at a known location. The linker patches this offset when stitching object files together.'
+        "id": "ex-4-1",
+        "title": "Exercise 4.1: Assemble and Link",
+        "description": "Create an assembly file that defines _start, prints \"Hello\" using a syscall, and exits. Assemble with NASM, link with ld, run, and check output.",
+        "solution": "section .data\n    msg db 'Hello', 0xA\n    len equ $ - msg\nsection .text\n    global _start\n_start:\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, msg\n    mov rdx, len\n    syscall\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Build and run: prints \"Hello\"."
       },
       {
-        question: 'Explain the difference between static and dynamic linking.',
-        answer: 'Static linking bundles all library code into the final executable, creating a self-contained file with no runtime dependencies. Dynamic linking leaves references to shared libraries (.so), which the OS loader binds at runtime, saving disk and memory.'
+        "id": "ex-4-2",
+        "title": "Exercise 4.2: Multiple Objects",
+        "description": "Split the program into two files: one with _start and one with a function print_hello that does the actual write syscall. Use extern and global appropriately. Assemble both, link, and run.",
+        "solution": "; main.asm\nsection .text\n    global _start\n    extern print_hello\n_start:\n    call print_hello\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\n; print.asm\nsection .data\n    msg db 'Hello', 0xA\n    len equ $ - msg\nsection .text\n    global print_hello\nprint_hello:\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, msg\n    mov rdx, len\n    syscall\n    ret",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "main.asm:\n\nprint.asm:\n\nAssemble both, link."
+      },
+      {
+        "id": "ex-4-3",
+        "title": "Exercise 4.3: Static vs Dynamic",
+        "description": "Use ldd on your executable. Is it static or dynamic? Why? Now link with gcc (change entry point to main and use gcc -nostartfiles if needed). Check ldd again. Explain differences.",
+        "solution": "When linked with ld and using only syscalls, the executable is static (no dynamic libraries). ldd will say \"not a dynamic executable\". If you link with gcc and use main with C library functions, it will be dynamic (linked against libc). ldd shows libc.so.6. Using gcc -static makes it static."
+      },
+      {
+        "id": "ex-4-4",
+        "title": "Exercise 4.4: Makefile",
+        "description": "Write a Makefile for the two-file project. Add a clean target. Test make and make clean.",
+        "solution": "Makefile as shown in the section; test with make."
+      },
+      {
+        "id": "ex-4-5",
+        "title": "Exercise 4.5: Inspect Relocations",
+        "description": "Assemble a file that calls an external function. Use readelf -r to see relocation entries. Describe what each field means.",
+        "solution": "nasm -f elf64 main.asm -o main.o && readelf -r main.o",
+        "solutionExplanation": "Assemble main.asm with extern func and call func. readelf -r shows a relocation entry of type R_X86_64_PLT32 for func. The offset indicates where the call instruction’s displacement field is; the linker will fill in the correct relative offset to func (or its PLT entry if dynamic).",
+        "solutionLanguage": "bash"
       }
     ],
-    summary: [
-      'Assemblers generate object code, symbols, and relocations.',
-      'Linkers resolve symbols across object files and apply address relocations.',
-      'ELF is the standard executable format on Linux.',
-      'Makefiles automate compiling and linking multi-file projects.'
+    "practiceQuestions": [
+      {
+        "question": "What is the role of the assembler? How does it differ from the compiler?",
+        "answer": "An assembler translates assembly instructions and directives into machine code and object-file metadata. A compiler translates a higher-level language into assembly or machine code, handling higher-level constructs along the way."
+      },
+      {
+        "question": "What information is stored in an object file?",
+        "answer": "An object file contains section contents such as machine code and initialized data, symbol tables, relocation entries, and optionally debugging information. It also describes reserved storage such as .bss."
+      },
+      {
+        "question": "What is a relocation? Why is it needed?",
+        "answer": "A relocation is a record generated by the assembler telling the linker that an instruction refers to a memory address or function not yet placed at a known location. The linker patches this offset when stitching object files together."
+      },
+      {
+        "question": "Explain the difference between static and dynamic linking.",
+        "answer": "Static linking bundles all library code into the final executable, creating a self-contained file with no runtime dependencies. Dynamic linking leaves references to shared libraries (.so), which the OS loader binds at runtime, saving disk and memory."
+      },
+      {
+        "question": "What is the ELF format? Name some of its components.",
+        "answer": "ELF means Executable and Linkable Format. Its components include an ELF header, section headers and sections; executable files also use program headers to describe loadable segments."
+      },
+      {
+        "question": "How does the linker resolve external symbols?",
+        "answer": "The linker matches undefined symbol references in one object file with definitions exported by other object files or libraries, then applies relocations using the resulting layout."
+      },
+      {
+        "question": "What is the difference between global and extern in NASM?",
+        "answer": "global exports a symbol defined in the current assembly module. extern declares a symbol defined in another module for the linker to resolve."
+      },
+      {
+        "question": "How can you inspect the symbol table of an object file?",
+        "answer": "Use readelf -s file.o or nm file.o to inspect symbols and identify definitions and undefined references."
+      },
+      {
+        "question": "What does R_X86_64_PLT32 mean?",
+        "answer": "R_X86_64_PLT32 denotes a 32-bit PC-relative relocation associated with a procedure linkage table reference. The linker resolves the target displacement during linking."
+      },
+      {
+        "question": "When would you use ld versus gcc for linking assembly?",
+        "answer": "Use ld for a program providing its own entry point, such as _start with direct system calls. Use gcc as the linker driver when you need the C runtime or are combining assembly objects with C. Assemble NASM source to an object file first."
+      }
+    ],
+    "summary": [
+      "The assembler translates assembly to object code, generating machine code, symbols, and relocations.",
+      "The linker combines object files, resolves symbols, applies relocations, and produces an executable.",
+      "ELF is the standard executable format on Linux, with sections for code, data, and metadata.",
+      "Relocations allow the linker to patch addresses when final layout is known.",
+      "Static linking copies library code; dynamic linking references shared libraries loaded at runtime.",
+      "Tools like readelf, nm, objdump, and ldd help inspect the build process.",
+      "Makefiles automate building multi-file projects.",
+      "In the next chapter, we’ll begin writing more complex programs using basic instructions, including arithmetic and data movement, to perform useful computations."
     ]
   },
   {
