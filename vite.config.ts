@@ -5,6 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    base: '/Assembly-Language-Mastery-From-Zero-to-Hero/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
