@@ -1363,99 +1363,499 @@ export const CHAPTERS_LEVEL_2: Chapter[] = [
     ]
   },
   {
-    id: 9,
-    slug: 'chapter-9-arrays-strings-memory',
-    level: 2,
-    levelTitle: 'Core Assembly Programming',
-    title: 'Chapter 9: Arrays, Strings, and Memory Operations',
-    subtitle: 'String Primaries: movsb, stosb, lodsb, cmpsb, scasb & ASCII Conversions',
-    learningObjectives: [
-      'Master x86 string primitives with rep, repe, and repne prefixes.',
-      'Understand Direction Flag (DF), cld (forward), and std (backward).',
-      'Implement fast strlen, strcpy, memset, and memcmp.',
-      'Convert between numeric integers and ASCII strings (itoa & atoi).'
+    "id": 9,
+    "slug": "chapter-9-arrays-strings-memory",
+    "level": 2,
+    "levelTitle": "Core Assembly Programming",
+    "title": "Chapter 9: Arrays, Strings, and Memory Operations",
+    "subtitle": "String Primaries: movsb, stosb, lodsb, cmpsb, scasb & ASCII Conversions",
+    "learningObjectives": [
+      "Understand how arrays are stored in memory and how to access elements using addressing modes.",
+      "Master 1D and 2D array traversal with loops and indexing.",
+      "Learn the x86 string instructions (movs, stos, lods, cmps, scas) and their repeat prefixes.",
+      "Use rep movsb, rep stosb, and rep cmpsb for efficient memory block operations.",
+      "Understand the role of the direction flag (DF) and the rsi/rdi registers in string operations.",
+      "Write programs that manipulate arrays and strings, including copying, filling, comparing, and converting between numbers and strings.",
+      "Gain practical experience with memory layout and pointer arithmetic."
     ],
-    prerequisites: ['Chapters 1–8'],
-    keyConcepts: [
-      'rsi points to source memory, rdi points to destination memory.',
-      'repne scasb finds character/null byte in linear string buffers.',
-      'Number conversion requires repetitive division by 10 and remainder push.'
+    "prerequisites": [
+      "Solid understanding of control flow, loops, and jumps (Chapter 8).",
+      "Familiarity with data movement, addressing modes, and the stack (Chapter 6).",
+      "Knowledge of arithmetic and logical instructions (Chapter 7).",
+      "Basic understanding of ASCII representation (Chapter 2)."
     ],
-    diagramType: 'strings_arrays',
-    sections: [
+    "keyConcepts": [
+      "Arrays are contiguous blocks of memory; elements are accessed via base address + index * element size.",
+      "2D arrays are stored in row-major order: row * columns + column.",
+      "String instructions operate on memory using implicit registers rsi (source) and rdi (destination).",
+      "The direction flag (DF) controls whether string operations increment or decrement pointers.",
+      "Repeat prefixes (rep, repe, repne) allow compact loop implementations for string operations.",
+      "Memory block operations are highly optimized on modern CPUs, but may have overhead for small counts."
+    ],
+    "diagramType": "strings_arrays",
+    "sections": [
       {
-        id: 'sec-9-1',
-        title: '9.1 String Primaries & String Length with scasb',
-        content: `x86 string instructions use rsi (source), rdi (destination), and rcx (count):
-• movsb / movsq: Move byte/qword from [rsi] to [rdi]
-• stosb / stosq: Store al/rax to [rdi]
-• scasb: Compare al with byte at [rdi]
-• cmpsb: Compare byte at [rsi] with [rdi]
-
-Direction flag controls step direction: cld sets forward (+), std sets backward (-).`,
-        codeSnippets: [
+        "id": "sec-9-1",
+        "title": "9.1 Arrays in Assembly",
+        "content": "An array is a sequence of elements of the same type stored contiguously in memory. In assembly, we define arrays in the .data or .bss sections and access elements using addressing modes like [base + index*scale]."
+      },
+      {
+        "id": "sec-9-1-1",
+        "title": "9.1.1 Defining Arrays",
+        "content": "In NASM:\n- db – define bytes (8-bit)\n- dw – define words (16-bit)\n- dd – define doublewords (32-bit)\n- dq – define quadwords (64-bit)\n\nExamples:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'uint_to_str.asm (Integer to Decimal ASCII)',
-            code: `; Converts unsigned integer in rax to string at [rdi], null-terminated
-uint_to_str:
-    sub rsp, 32         ; stack buffer
-    mov rbx, rsp
-    mov rcx, 10
-    mov r9, rdi
-    test rax, rax
-    jnz .convert
-    mov byte [rdi], '0'
-    mov byte [rdi+1], 0
-    add rsp, 32
-    mov rax, 1
-    ret
-.convert:
-    mov rsi, rbx
-.digit_loop:
-    xor rdx, rdx
-    div rcx             ; rax = quotient, rdx = remainder
-    add dl, '0'
-    dec rbx
-    mov [rbx], dl
-    test rax, rax
-    jnz .digit_loop
-    mov rcx, rsi
-    sub rcx, rbx        ; length
-    mov r8, rcx
-    mov rsi, rbx
-    mov rdi, r9
-.copy_loop:
-    mov al, [rsi]
-    mov [rdi], al
-    inc rsi
-    inc rdi
-    dec rcx
-    jnz .copy_loop
-    mov byte [rdi], 0
-    mov rax, r8
-    add rsp, 32
-    ret`
+            "language": "nasm",
+            "title": "9.1.1 Defining Arrays — listing 1",
+            "code": "section .data\n    byte_array db 1, 2, 3, 4, 5           ; 5 bytes\n    word_array dw 100, 200, 300           ; 3 words (2 bytes each)\n    dword_array dd 1000, 2000, 3000, 4000 ; 4 dwords\n    qword_array dq 100000, 200000         ; 2 qwords",
+            "explanation": "For uninitialized arrays (or large buffers), use .bss:"
+          },
+          {
+            "language": "nasm",
+            "title": "9.1.1 Defining Arrays — listing 2",
+            "code": "section .bss\n    buffer resb 100       ; reserve 100 bytes\n    int_array resd 20     ; reserve 20 dwords (80 bytes)\n    qarray resq 10        ; reserve 10 qwords"
+          }
+        ]
+      },
+      {
+        "id": "sec-9-1-2",
+        "title": "9.1.2 Accessing Array Elements",
+        "content": "To access the i-th element, compute the address as:\n- Base address (label) + i * element size\n\nUsing indexed addressing:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "sum an array of 10 dwords",
+            "code": "; sum an array of 10 dwords\nsection .data\n    arr dd 1,2,3,4,5,6,7,8,9,10\n    len equ 10\nsection .text\nglobal _start\n_start:\n    xor eax, eax        ; sum\n    xor rcx, rcx        ; index\nloop:\n    cmp rcx, len\n    je done\n    add eax, [arr + rcx*4]   ; load dword at arr + index*4\n    inc rcx\n    jmp loop\ndone:\n    ; eax = 55\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "For an array of qwords, scale factor is 8. For words, 2. For bytes, scale factor can be omitted (or use 1)."
+          }
+        ]
+      },
+      {
+        "id": "sec-9-1-3",
+        "title": "9.1.3 Iterating with Pointers",
+        "content": "Instead of using an index, you can keep a pointer in a register and advance it by the element size. This often produces more efficient code because it avoids the index calculation.\n\nClarification: This loop assumes len is positive. For a potentially empty array, check the count before reading the first element. Pointer iteration is not automatically faster than indexed addressing; measure the workload.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "9.1.3 Iterating with Pointers — listing 1",
+            "code": "section .data\n    arr dq 1,2,3,4,5\n    len equ 5\nsection .text\nglobal _start\n_start:\n    lea rsi, [arr]       ; rsi points to first element\n    mov rcx, len\n    xor rax, rax\nloop:\n    add rax, [rsi]       ; add *rsi\n    add rsi, 8           ; advance pointer by 8 bytes\n    dec rcx\n    jnz loop\n    ; rax = 15\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-9-1-4",
+        "title": "9.1.4 Reversing an Array",
+        "content": "We can reverse an array in place using two pointers (front and back) and swapping elements.\n\nClarification: The sum remains unchanged by reversal, so it does not prove that the array order changed. Verify the resulting elements as well. Use unsigned pointer comparisons for general address ordering.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "9.1.4 Reversing an Array — listing 1",
+            "code": "section .data\n    arr dq 1,2,3,4,5,6,7,8,9,10\n    len equ 10\nsection .text\nglobal _start\n_start:\n    lea rsi, [arr]               ; left pointer\n    lea rdi, [arr + (len-1)*8]   ; right pointer (last element)\nreverse_loop:\n    cmp rsi, rdi\n    jge done                     ; if left >= right, done\n    mov rax, [rsi]\n    mov rbx, [rdi]\n    mov [rsi], rbx               ; swap\n    mov [rdi], rax\n    add rsi, 8\n    sub rdi, 8\n    jmp reverse_loop\ndone:\n    ; exit (sum for verification)\n    xor rax, rax\n    lea rsi, [arr]\n    mov rcx, len\nsum_loop:\n    add rax, [rsi]\n    add rsi, 8\n    dec rcx\n    jnz sum_loop\n    ; sum = 55\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-9-1-5",
+        "title": "9.1.5 Two-Dimensional Arrays",
+        "content": "A 2D array (matrix) is stored in memory as a linear sequence, usually row-major order: element [i][j] is at offset (i * columns + j) * element_size.\n\nExample: 3x3 matrix of dwords:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "9.1.5 Two-Dimensional Arrays — listing 1",
+            "code": "section .data\n    matrix dd 1,2,3\n           dd 4,5,6\n           dd 7,8,9\n    rows equ 3\n    cols equ 3",
+            "explanation": "To access matrix[i][j]:"
+          },
+          {
+            "language": "nasm",
+            "title": "compute address = base + (i * cols + j) * 4",
+            "code": "; compute address = base + (i * cols + j) * 4\nmov rax, i          ; i\nimul rax, cols      ; i * cols\nadd rax, j          ; i * cols + j\nmov ebx, [matrix + rax*4]",
+            "explanation": "Or using lea for address calculation:"
+          },
+          {
+            "language": "nasm",
+            "title": "9.1.5 Two-Dimensional Arrays — listing 3",
+            "code": "mov rax, i\nimul rax, cols\nadd rax, j\nlea rsi, [matrix + rax*4]\nmov ebx, [rsi]",
+            "explanation": "Example: Sum of all elements in a 3x3 matrix:"
+          },
+          {
+            "language": "nasm",
+            "title": "9.1.5 Two-Dimensional Arrays — listing 4",
+            "code": "section .data\n    matrix dd 1,2,3,4,5,6,7,8,9\n    rows equ 3\n    cols equ 3\nsection .text\nglobal _start\n_start:\n    xor eax, eax        ; sum\n    xor rcx, rcx        ; i\nouter_loop:\n    cmp rcx, rows\n    jge outer_done\n    xor rdx, rdx        ; j\ninner_loop:\n    cmp rdx, cols\n    jge inner_done\n    ; index = i*cols + j\n    mov r8, rcx\n    imul r8, cols\n    add r8, rdx\n    add eax, [matrix + r8*4]\n    inc rdx\n    jmp inner_loop\ninner_done:\n    inc rcx\n    jmp outer_loop\nouter_done:\n    ; eax = 45\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-9-2",
+        "title": "9.2 String Instructions",
+        "content": "x86 provides a set of instructions specifically designed for string (or array) processing. They operate on memory using implicit registers:\n- rsi – source index (pointer to source)\n- rdi – destination index (pointer to destination)\n- rcx – counter (for repeat prefixes)\n- al / ax / eax / rax – data for stos and lods, or comparison value for scas\n\nThe direction flag (DF) in RFLAGS determines whether pointers are incremented (DF=0, forward) or decremented (DF=1, backward) after each operation.\n- cld clears DF (forward)\n- std sets DF (backward)"
+      },
+      {
+        "id": "sec-9-2-1",
+        "title": "9.2.1 The String Instructions",
+        "content": "These instructions are typically used with the repeat prefixes:\n\n- rep – repeat while rcx != 0 (used with movs, stos, lods)\n- repe / repz – repeat while rcx != 0 and ZF=1 (used with cmps, scas)\n- repne / repnz – repeat while rcx != 0 and ZF=0 (used with cmps, scas for finding non-matching or specific value)",
+        "tableData": {
+          "headers": [
+            "Instruction",
+            "Operation",
+            "Description"
+          ],
+          "rows": [
+            [
+              "movsb",
+              "[rdi] = [rsi]; rsi += 1; rdi += 1 (if DF=0)",
+              "Move byte from source to dest"
+            ],
+            [
+              "movsw",
+              "move word (2 bytes)",
+              ""
+            ],
+            [
+              "movsd",
+              "move dword (4 bytes)",
+              ""
+            ],
+            [
+              "movsq",
+              "move qword (8 bytes)",
+              ""
+            ],
+            [
+              "stosb",
+              "[rdi] = al; rdi += 1",
+              "Store byte from al to dest"
+            ],
+            [
+              "stosw",
+              "store word from ax",
+              ""
+            ],
+            [
+              "stosd",
+              "store dword from eax",
+              ""
+            ],
+            [
+              "stosq",
+              "store qword from rax",
+              ""
+            ],
+            [
+              "lodsb",
+              "al = [rsi]; rsi += 1",
+              "Load byte from source to al"
+            ],
+            [
+              "lodsw",
+              "load word to ax",
+              ""
+            ],
+            [
+              "lodsd",
+              "load dword to eax",
+              ""
+            ],
+            [
+              "lodsq",
+              "load qword to rax",
+              ""
+            ],
+            [
+              "cmpsb",
+              "compare [rsi] and [rdi], set flags, then increment/decrement both",
+              "Compare byte"
+            ],
+            [
+              "cmpsw",
+              "compare words",
+              ""
+            ],
+            [
+              "cmpsd",
+              "compare dwords",
+              ""
+            ],
+            [
+              "cmpsq",
+              "compare qwords",
+              ""
+            ],
+            [
+              "scasb",
+              "compare al with [rdi], set flags, then inc/dec rdi",
+              "Scan for byte"
+            ],
+            [
+              "scasw",
+              "scan word",
+              ""
+            ],
+            [
+              "scasd",
+              "scan dword",
+              ""
+            ],
+            [
+              "scasq",
+              "scan qword",
+              ""
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-9-2-2",
+        "title": "9.2.2 Example: String Length (using scasb)",
+        "content": "Compute the length of a null-terminated string by scanning for the null byte.\n\nClarification: This example assumes an accessible null-terminated string. RCX=−1 is not a memory bound; without a terminator, the scan can read beyond valid memory.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "9.2.2 Example: String Length (using scasb) — listing 1",
+            "code": "section .data\n    str db 'Hello, World!', 0\nsection .text\nglobal _start\n_start:\n    lea rdi, [str]       ; pointer to string\n    xor al, al           ; search for null (0)\n    mov rcx, -1          ; maximum count (effectively unlimited)\n    cld                  ; forward direction\n    repne scasb          ; scan for byte 0; rdi ends one past null\n    ; rdi points to byte after null\n    ; compute length = rdi - str - 1\n    lea rax, [rdi - 1]   ; address of null\n    sub rax, str         ; length = null_addr - start\n    ; rax = 13\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-9-2-3",
+        "title": "9.2.3 Example: String Copy (using rep movsb)",
+        "content": "Copy a string (including null terminator) from source to destination.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source: String Copy (consumed RCX length bug)",
+            "code": "section .data\n    src db 'Copy this string', 0\nsection .bss\n    dest resb 100\nsection .text\nglobal _start\n_start:\n    ; find length\n    lea rsi, [src]\n    lea rdi, [dest]\n    ; compute length using scasb or manually\n    lea rdi, [src]\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    ; length = rdi - src (since rdi points one past null)\n    mov rcx, rdi\n    sub rcx, src          ; includes null terminator? Actually rdi points after null, so rcx = length+1\n    ; set up for copy\n    lea rsi, [src]\n    lea rdi, [dest]\n    cld\n    rep movsb             ; copy bytes including null\n    ; verify by exiting with length\n    mov rax, rcx\n    dec rax               ; actual string length\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "The copy consumes RCX and leaves it zero. This source listing therefore exits with 255 after decrementing zero, rather than the string length. Use the corrected version below."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected runnable String Copy",
+            "code": "section .data\n    src db 'Copy this string', 0\nsection .bss\n    dest resb 100\nsection .text\nglobal _start\n_start:\n    ; find length\n    lea rsi, [src]\n    lea rdi, [dest]\n    ; compute length using scasb or manually\n    lea rdi, [src]\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    ; length = rdi - src (since rdi points one past null)\n    mov rcx, rdi\n    sub rcx, src          ; includes null terminator? Actually rdi points after null, so rcx = length+1\n    ; set up for copy\n    lea rsi, [src]\n    lea rdi, [dest]\n    cld\n    mov r8, rcx          ; save byte count before REP consumes RCX\n    rep movsb             ; copy bytes including null\n    ; verify by exiting with length\n    mov rax, r8\n    dec rax               ; actual string length\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "Saves length including the terminator before the copy. Expected exit code: 16 for Copy this string; the copied destination includes its null terminator."
+          }
+        ]
+      },
+      {
+        "id": "sec-9-2-4",
+        "title": "9.2.4 Example: Memory Fill (using rep stosb)",
+        "content": "Fill a buffer with a specific byte.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "9.2.4 Example: Memory Fill (using rep stosb) — listing 1",
+            "code": "section .bss\n    buffer resb 100\nsection .text\nglobal _start\n_start:\n    lea rdi, [buffer]\n    mov al, 0x41          ; fill with 'A'\n    mov rcx, 100\n    cld\n    rep stosb             ; fill 100 bytes with 0x41\n    ; exit with 0\n    mov rax, 60\n    xor rdi, rdi\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-9-2-5",
+        "title": "9.2.5 Example: String Compare (using rep cmpsb)",
+        "content": "Compare two strings to see if they are equal.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "9.2.5 Example: String Compare (using rep cmpsb) — listing 1",
+            "code": "section .data\n    str1 db 'hello', 0\n    str2 db 'hello', 0\n    msg_equal db 'Equal', 0xA\n    len_equal equ $ - msg_equal\n    msg_not_equal db 'Not equal', 0xA\n    len_not_equal equ $ - msg_not_equal\nsection .text\nglobal _start\n_start:\n    lea rsi, [str1]\n    lea rdi, [str2]\n    mov rcx, 6            ; compare 6 bytes (including null)\n    cld\n    repe cmpsb            ; repeat while equal and rcx != 0\n    jne not_equal         ; if ZF=0 at end, strings differ\n    ; equal\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, msg_equal\n    mov rdx, len_equal\n    syscall\n    jmp exit\nnot_equal:\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, msg_not_equal\n    mov rdx, len_not_equal\n    syscall\nexit:\n    mov rax, 60\n    xor rdi, rdi\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-9-3",
+        "title": "9.3 Memory Block Operations",
+        "content": "The rep movs, rep stos, and rep cmps are used for efficient block operations. They are optimized on modern CPUs and can move large blocks quickly."
+      },
+      {
+        "id": "sec-9-3-1",
+        "title": "9.3.1 Copying a Block of Memory",
+        "content": "To copy n bytes from source to destination:\n\nClarification: The shown forward copy assumes non-overlapping buffers, or an overlap where forward traversal is safe. For general overlap use a memmove-style direction choice. RCX counts elements: bytes for movsb, qwords for movsq.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "9.3.1 Copying a Block of Memory — listing 1",
+            "code": "lea rsi, [source]\nlea rdi, [destination]\nmov rcx, n\ncld\nrep movsb",
+            "explanation": "For large blocks, using larger element sizes (e.g., movsq for 8-byte chunks) can be faster:"
+          },
+          {
+            "language": "nasm",
+            "title": "copy n qwords",
+            "code": "; copy n qwords\nmov rcx, n_qwords\nrep movsq",
+            "explanation": "If the block size is not a multiple of the chunk size, you must handle the remainder separately."
+          }
+        ]
+      },
+      {
+        "id": "sec-9-3-2",
+        "title": "9.3.2 Filling Memory",
+        "content": "To fill n bytes with a value:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "9.3.2 Filling Memory — listing 1",
+            "code": "lea rdi, [buffer]\nmov al, value\nmov rcx, n\ncld\nrep stosb",
+            "explanation": "Or use larger chunks: mov rax, 0x0101010101010101 and rep stosq."
+          }
+        ]
+      },
+      {
+        "id": "sec-9-3-3",
+        "title": "9.3.3 Comparing Memory Blocks",
+        "content": "To compare two blocks of n bytes:\n\nClarification: After a forward cmpsb mismatch, RSI and RDI point one byte past the compared bytes; inspect RSI−1 and RDI−1 for the mismatch. If the initial count is zero, no comparison runs and flags retain their old values, so handle empty blocks separately.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "9.3.3 Comparing Memory Blocks — listing 1",
+            "code": "lea rsi, [block1]\nlea rdi, [block2]\nmov rcx, n\ncld\nrepe cmpsb\n; after, ZF=1 if equal; if ZF=0, rsi/rdi point to first mismatch"
+          }
+        ]
+      },
+      {
+        "id": "sec-9-3-4",
+        "title": "9.3.4 Performance Considerations",
+        "content": "- rep movsb is fast, but rep movsq (or rep movsd) can be faster for large, aligned blocks because it moves more data per instruction.\n- The CPU may use optimized microcode for rep movs and rep stos, making them very efficient.\n- For small fixed-size copies, explicit mov instructions may be faster because they avoid setup overhead.\n- Always ensure the direction flag is correctly set (cld for forward, std for backward)."
+      },
+      {
+        "id": "sec-9-4",
+        "title": "9.4 Converting Between Numbers and Strings",
+        "content": "A common memory operation is converting integer values to ASCII strings (for output) and parsing ASCII strings to integers (for input). This involves looping over digits and using arithmetic."
+      },
+      {
+        "id": "sec-9-4-1",
+        "title": "9.4.1 Integer to ASCII (Decimal String)",
+        "content": "To convert an unsigned 64-bit integer to a decimal string, repeatedly divide by 10 and store remainders (digits) in reverse order.\n\nClarification: Both original conversion routines are retained below for comparison. The first restores RCX before moving it to RAX, losing the digit count. The second starts at RSP and decrements below the allocated temporary area, and it overwrites RBX without preserving it. Use the corrected routine below with a destination of at least 21 bytes.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source: uint_to_str version 1 (see clarification)",
+            "code": "; Convert unsigned integer in rax to string at buffer (rdi)\n; Returns length in rax\nuint_to_str:\n    push rbx\n    push rcx\n    push rdx\n    push rdi            ; save buffer pointer\n\n    mov rbx, 10         ; divisor\n    xor rcx, rcx        ; digit count\n    ; handle 0 specially\n    test rax, rax\n    jnz .not_zero\n    mov byte [rdi], '0'\n    inc rdi\n    inc rcx\n    jmp .done\n.not_zero:\n.reverse_loop:\n    xor rdx, rdx\n    div rbx             ; rax = quotient, rdx = remainder\n    add dl, '0'         ; convert to ASCII\n    push rdx            ; push digit (but careful: only low byte needed)\n    inc rcx\n    test rax, rax\n    jnz .reverse_loop\n    ; pop digits in correct order and store\n    ; we need to pop into memory; we can pop into a register then store byte\n    ; but easier: store from a temporary stack area? Let's use a local buffer.\n    ; For simplicity, we'll use the stack itself to reverse by storing digits in memory.\n    ; Actually the push rdx pushes 8 bytes with digit in low byte. We'll pop into a reg and store.\n    ; But we must preserve rdi and rcx. Let's use a separate loop with rbx as counter.\n    mov rbx, rcx        ; save count\n.store_loop:\n    pop rax             ; get digit\n    mov [rdi], al       ; store digit\n    inc rdi\n    dec rbx\n    jnz .store_loop\n    ; rcx already has length\n.done:\n    pop rdi             ; restore buffer pointer (not needed if caller expects length)\n    pop rdx\n    pop rcx\n    pop rbx\n    mov rax, rcx        ; return length\n    ret",
+            "explanation": "However, this implementation uses the stack to reverse digits, which is inefficient and may cause alignment issues. A better approach is to write digits backwards into a temporary buffer and then copy them forwards, or use a recursive algorithm. For simplicity in this chapter, we can store digits in a local array on the stack and then copy. We'll present a cleaner version using a local buffer.\n\nImproved uint_to_str:"
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: uint_to_str version 2 (see clarification)",
+            "code": "; Converts unsigned integer in rax to string at [rdi], null-terminated.\n; Returns length in rax.\nuint_to_str:\n    sub rsp, 32         ; local buffer for up to 20 digits\n    mov rbx, rsp        ; pointer to end of buffer (we'll write backwards)\n\n    mov rcx, 10         ; divisor\n    xor rdx, rdx\n    mov r9, rdi         ; save destination\n\n    ; handle zero\n    test rax, rax\n    jnz .convert\n    mov byte [rdi], '0'\n    mov byte [rdi+1], 0\n    add rsp, 32\n    mov rax, 1\n    ret\n\n.convert:\n    ; write digits backwards\n    mov rsi, rbx        ; rsi points to one past last digit\n.digit_loop:\n    xor rdx, rdx\n    div rcx             ; rax = quotient, rdx = remainder\n    add dl, '0'\n    dec rbx\n    mov [rbx], dl       ; store digit\n    test rax, rax\n    jnz .digit_loop\n\n    ; now rbx points to first digit, rsi points to one past last digit\n    ; copy digits to destination\n    mov rcx, rsi\n    sub rcx, rbx        ; number of digits\n    mov r8, rcx         ; save length\n    ; copy\n    mov rsi, rbx\n    mov rdi, r9\n.copy_loop:\n    mov al, [rsi]\n    mov [rdi], al\n    inc rsi\n    inc rdi\n    dec rcx\n    jnz .copy_loop\n    mov byte [rdi], 0   ; null terminate\n    mov rax, r8         ; return length\n    add rsp, 32\n    ret",
+            "explanation": "This version uses a local stack buffer (32 bytes) and writes digits backwards, then copies them forward."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected uint_to_str: unsigned 64-bit conversion",
+            "code": "; Input: RAX = unsigned 64-bit value; RDI = writable buffer of at least 21 bytes.\n; Output: RAX = length, buffer is null-terminated.\n; Clobbers: RCX, RDX, RSI, RDI, R8, R9 and arithmetic flags. DF is cleared.\n; Preserves RBX, RBP, R12-R15 and restores RSP.\nuint_to_str:\n    sub rsp, 32\n    lea r8, [rsp+32]      ; end of the allocated temporary buffer\n    mov r9, r8\n    mov rcx, 10\n.digit_loop:\n    xor rdx, rdx\n    div rcx\n    add dl, '0'\n    dec r9\n    mov [r9], dl\n    test rax, rax\n    jnz .digit_loop       ; zero still produces one digit\n    mov rax, r8\n    sub rax, r9           ; save returned length independently of RCX\n    mov rcx, rax\n    mov rsi, r9\n    cld\n    rep movsb\n    mov byte [rdi], 0\n    add rsp, 32\n    ret",
+            "explanation": "Handles zero through 18446744073709551615, writes a null terminator, returns the length independently of the REP counter, and writes digits inside its allocated stack buffer. Callee-saved registers are preserved."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 9.5 caller (function omitted)",
+            "code": "section .data\n    num dq 12345\n    buffer times 32 db 0\n    newline db 0xA\nsection .text\nglobal _start\n\n; include uint_to_str function here (copy from chapter)\n; ...\n_start:\n    mov rax, [num]\n    lea rdi, [buffer]\n    call uint_to_str    ; length in rax\n    ; write string\n    mov rdx, rax        ; length\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [buffer]\n    syscall\n    ; newline\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [newline]\n    mov rdx, 1\n    syscall\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+            "explanation": "The source leaves uint_to_str as a placeholder. Exercise 9.5 now includes the corrected routine, so its solution assembles as a complete program."
+          }
+        ]
+      },
+      {
+        "id": "sec-9-4-2",
+        "title": "9.4.2 ASCII to Integer",
+        "content": "To parse an ASCII decimal string into an integer:\n\nClarification: This unsigned parser stops at the first non-digit, does not accept a leading sign or whitespace, and does not detect overflow. Arithmetic wraps modulo 2^64; validate or extend it before using it as a general input parser.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Parses string at [rsi] (null-terminated) into unsigned integer in rax.",
+            "code": "; Parses string at [rsi] (null-terminated) into unsigned integer in rax.\n; Stops at first non-digit.\natoi:\n    xor rax, rax        ; result\n    xor rcx, rcx        ; temp\n.loop:\n    movzx rcx, byte [rsi] ; load char\n    test rcx, rcx\n    jz .done            ; end of string\n    cmp rcx, '0'\n    jb .done            ; not a digit\n    cmp rcx, '9'\n    ja .done\n    sub rcx, '0'        ; convert to value\n    imul rax, rax, 10   ; rax *= 10\n    add rax, rcx        ; rax += digit\n    inc rsi\n    jmp .loop\n.done:\n    ret"
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-9-1',
-        title: 'Exercise 9.1: In-Place String Reversal',
-        description: 'Reverse a null-terminated string in place using two pointers (rsi and rdi).',
-        solution: `lea rsi, [str]\nlea rdi, [str + len - 1]\n.rev:\ncmp rsi, rdi\njge .done\nmov al, [rsi]\nmov bl, [rdi]\nmov [rsi], bl\nmov [rdi], al\ninc rsi\ndec rdi\njmp .rev\n.done:`,
-        solutionLanguage: 'nasm'
+        "id": "ex-9-1",
+        "title": "Exercise 9.1: Array Statistics",
+        "description": "Define an array of 10 qwords. Compute the sum, minimum, and maximum. Exit with the sum (mod 256). Then modify to store min and max in variables.",
+        "solution": "section .data\n    arr dq 15, -2, 30, 8, 25, 100, -50, 7, 99, 42\n    len equ 10\nsection .bss\n    min resq 1\n    max resq 1\nsection .text\nglobal _start\n_start:\n    lea rsi, [arr]\n    mov rcx, len\n    xor rax, rax          ; sum\n    mov rbx, [rsi]        ; min = first\n    mov rdx, [rsi]        ; max = first\nloop:\n    add rax, [rsi]\n    cmp [rsi], rbx        ; compare with min (signed? unsigned? Use signed)\n    jge not_less\n    mov rbx, [rsi]        ; update min\nnot_less:\n    cmp [rsi], rdx\n    jle not_greater\n    mov rdx, [rsi]        ; update max\nnot_greater:\n    add rsi, 8\n    dec rcx\n    jnz loop\n    ; store min and max\n    mov [min], rbx\n    mov [max], rdx\n    ; exit with sum (mod 256) = ?\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "For the supplied signed array, sum = 274, minimum = −50, maximum = 100. The program stores min/max and exits with 274 mod 256 = 18."
+      },
+      {
+        "id": "ex-9-2",
+        "title": "Exercise 9.2: String Length with `scasb`",
+        "description": "Write a program that computes the length of a null-terminated string using repne scasb. Print the length as a single digit (if < 10) or exit with length as code. For simplicity, exit with the length as exit code.",
+        "solution": "section .data\n    str db 'Assembly is fun', 0\nsection .text\nglobal _start\n_start:\n    lea rdi, [str]\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    ; rdi points one past null\n    dec rdi\n    sub rdi, str         ; length\n    mov rax, rdi\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-9-3",
+        "title": "Exercise 9.3: String Reverse",
+        "description": "Reverse a string in place (swap characters from both ends). Use a loop with pointers. Print the reversed string using syscalls (if you can, or exit with first character as code). For practice, just reverse and exit with the first character (which should be the original last character).",
+        "solution": "section .data\n    str db 'Hello, World!', 0\nsection .text\nglobal _start\n_start:\n    ; find end of string\n    lea rdi, [str]\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    dec rdi              ; rdi points to null terminator\n    ; now rdi = address of null; we want last character before null: rdi-1\n    dec rdi\n    lea rsi, [str]       ; rsi points to first char\nreverse_loop:\n    cmp rsi, rdi\n    jge done\n    mov al, [rsi]\n    mov bl, [rdi]\n    mov [rsi], bl\n    mov [rdi], al\n    inc rsi\n    dec rdi\n    jmp reverse_loop\ndone:\n    ; exit with first character now (originally '!')\n    movzx rdi, byte [str]\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-9-4",
+        "title": "Exercise 9.4: Memory Copy",
+        "description": "Copy a 100-byte block from source to destination using rep movsb. Verify by comparing the first few bytes or exit with the first byte of destination.",
+        "solution": "section .data\n    src db 'A'          ; we'll define a larger block in .bss or use times\nsection .bss\n    dest resb 100\n    src_block resb 100\nsection .text\nglobal _start\n_start:\n    ; fill src_block with some pattern\n    lea rdi, [src_block]\n    mov al, 0x42         ; 'B'\n    mov rcx, 100\n    cld\n    rep stosb\n\n    ; copy src_block to dest\n    lea rsi, [src_block]\n    lea rdi, [dest]\n    mov rcx, 100\n    cld\n    rep movsb\n\n    ; exit with first byte of dest\n    movzx rdi, byte [dest]\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-9-5",
+        "title": "Exercise 9.5: Number to String Conversion",
+        "description": "Convert the number 12345 to a string using the uint_to_str function provided. Print the string using write syscall. Also implement the function if you haven't used the provided one.",
+        "solution": "section .data\n    num dq 12345\n    buffer times 32 db 0\n    newline db 0xA\nsection .text\nglobal _start\n\n; Input: RAX = unsigned 64-bit value; RDI = writable buffer of at least 21 bytes.\n; Output: RAX = length, buffer is null-terminated.\n; Clobbers: RCX, RDX, RSI, RDI, R8, R9 and arithmetic flags. DF is cleared.\n; Preserves RBX, RBP, R12-R15 and restores RSP.\nuint_to_str:\n    sub rsp, 32\n    lea r8, [rsp+32]      ; end of the allocated temporary buffer\n    mov r9, r8\n    mov rcx, 10\n.digit_loop:\n    xor rdx, rdx\n    div rcx\n    add dl, '0'\n    dec r9\n    mov [r9], dl\n    test rax, rax\n    jnz .digit_loop       ; zero still produces one digit\n    mov rax, r8\n    sub rax, r9           ; save returned length independently of RCX\n    mov rcx, rax\n    mov rsi, r9\n    cld\n    rep movsb\n    mov byte [rdi], 0\n    add rsp, 32\n    ret\n_start:\n    mov rax, [num]\n    lea rdi, [buffer]\n    call uint_to_str    ; length in rax\n    ; write string\n    mov rdx, rax        ; length\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [buffer]\n    syscall\n    ; newline\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [newline]\n    mov rdx, 1\n    syscall\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Use the uint_to_str function provided in section 9.4.1. Write a program that calls it and prints the string. Complete solution: the corrected function is included above. Expected output is 12345 followed by a newline, with exit status 0."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why must you execute cld before rep movsb?',
-        answer: 'cld clears the Direction Flag (DF=0), ensuring rsi and rdi increment forward through memory. If DF=1, pointers would decrement backward, causing data corruption.'
+        "question": "How do you access the element at index i of an array of dwords? Show the addressing mode.",
+        "answer": "Use a four-byte scale: mov eax, [rbx + rcx*4], where RBX holds the array base and RCX holds index i. Validate the index against the array length before accessing memory."
+      },
+      {
+        "question": "What is the role of rsi and rdi in string instructions? How does the direction flag affect them?",
+        "answer": "movs and cmps use RSI as the source pointer and RDI as the destination or second comparison pointer. lods uses RSI; stos and scas use RDI. DF=0 advances the pointers; DF=1 moves them backward by the element width."
+      },
+      {
+        "question": "Explain the difference between rep movsb and rep movsq. When would you prefer one over the other?",
+        "answer": "rep movsb copies RCX bytes; rep movsq copies RCX qwords, eight bytes each. Account for remainder bytes with qword copies. Which is faster depends on the CPU, alignment, and length; benchmark the intended workload."
+      },
+      {
+        "question": "How does repne scasb work? What is it commonly used for?",
+        "answer": "repne scasb compares AL against bytes at RDI, adjusting RDI and decrementing RCX until it finds equality or exhausts the count. With AL=0 and DF clear, it can find a string terminator within an accessible buffer."
+      },
+      {
+        "question": "What is row-major order? How would you compute the address of matrix[i][j] in a 2D array of qwords?",
+        "answer": "Row-major storage places each complete row before the next. For qwords, the address is base + (i × columns + j) × 8."
+      },
+      {
+        "question": "Write a short assembly snippet to fill a 64-byte buffer with the value 0xAA using rep stosb.",
+        "answer": "lea rdi, [rel buffer]; mov al, 0xAA; mov rcx, 64; cld; rep stosb. The destination must contain at least 64 writable bytes."
+      },
+      {
+        "question": "How do you convert an ASCII digit character to its numeric value? How to convert a numeric value to ASCII?",
+        "answer": "After checking that a character is between ASCII zero and nine, subtract ASCII zero to obtain its digit value. Add ASCII zero to a numeric digit from 0 to 9 to obtain its character."
+      },
+      {
+        "question": "Why is the direction flag important? What instructions set or clear it?",
+        "answer": "cld clears the Direction Flag (DF=0), ensuring rsi and rdi increment forward through memory. If DF=1, pointers would decrement backward, causing data corruption. std sets DF for backward traversal. Set up pointers for the selected direction and restore DF to clear before returning to code that expects forward operations."
+      },
+      {
+        "question": "What is the difference between repe and repne? Give an example of each.",
+        "answer": "repe continues after equal comparisons while the count remains nonzero; repne continues after unequal comparisons. Use repe cmpsb to compare blocks and repne scasb to search for a terminator."
+      },
+      {
+        "question": "In the string length example using repne scasb, why is rcx set to -1? What is the maximum length it can handle?",
+        "answer": "Writing −1 to RCX sets the unsigned counter to 2^64−1. That is a theoretical limit of 2^64−1 byte comparisons, allowing at most 2^64−2 non-null bytes if a terminator is included. Actual scans are limited by accessible memory and address-space constraints; pass a known buffer bound when a terminator is not guaranteed."
       }
     ],
-    summary: ['String instructions offer hardware-accelerated memory block operations.', 'ASCII conversions bridge machine words and human text.']
+    "summary": [
+      "Arrays are contiguous memory; access via [base + index*scale] or pointer arithmetic.",
+      "2D arrays use row-major layout: offset = (row * columns + column) * element size.",
+      "String instructions (movs, stos, lods, cmps, scas) operate with rsi/rdi and rcx.",
+      "The direction flag (cld/std) controls pointer direction.",
+      "Repeat prefixes (rep, repe, repne) enable compact loops.",
+      "rep movsb/stosb/cmpsb are efficient for block operations.",
+      "Number conversion requires digit extraction (division by 10) and ASCII addition/subtraction.",
+      "Using string instructions can simplify code but may not always be the fastest for small data.",
+      "In the next chapter, we’ll dive into procedures, calling conventions, and stack frames—essential for writing modular and reusable assembly code."
+    ]
   },
   {
     id: 10,
