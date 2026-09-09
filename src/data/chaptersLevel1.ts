@@ -1881,140 +1881,462 @@ export const CHAPTERS_LEVEL_1: Chapter[] = [
     ]
   },
   {
-    id: 5,
-    slug: 'chapter-5-basic-instructions',
-    level: 1,
-    levelTitle: 'Foundations',
-    title: 'Chapter 5: Basic Instructions and Simple Programs',
-    subtitle: 'Arithmetic, Bitwise Logic, Status Flags, and Control Flow Loops',
-    learningObjectives: [
-      'Understand and use fundamental data movement instructions: mov, lea, xchg.',
-      'Perform arithmetic operations using add, sub, inc, dec, neg, imul, idiv.',
-      'Apply logical and bitwise operations: and, or, xor, not, test.',
-      'Use shift and rotate instructions: shl, shr, sar, rol, ror.',
-      'Understand how instructions affect CPU status flags.',
-      'Write complete assembly programs that perform calculations and output results.',
-      'Implement simple loops using jmp and conditional jumps.'
+    "id": 5,
+    "slug": "chapter-5-basic-instructions",
+    "level": 1,
+    "levelTitle": "Foundations",
+    "title": "Chapter 5: Basic Instructions and Simple Programs",
+    "subtitle": "Arithmetic, Bitwise Logic, Status Flags, and Control Flow Loops",
+    "learningObjectives": [
+      "Understand and use fundamental data movement instructions: mov, lea, xchg.",
+      "Perform arithmetic operations using add, sub, inc, dec, neg, imul, idiv.",
+      "Apply logical and bitwise operations: and, or, xor, not, test.",
+      "Use shift and rotate instructions: shl, shr, sar, rol, ror.",
+      "Understand how instructions affect CPU status flags.",
+      "Write complete assembly programs that perform calculations and output results.",
+      "Implement simple loops using jmp and conditional jumps."
     ],
-    prerequisites: [
-      'Solid understanding of registers, memory, and the stack (Chapter 3).',
-      'Familiarity with the build process using NASM and ld (Chapter 4).',
-      'Basic knowledge of binary and hexadecimal representation (Chapter 2).'
+    "prerequisites": [
+      "Solid understanding of registers, memory, and the stack (Chapter 3).",
+      "Familiarity with the build process using NASM and ld (Chapter 4).",
+      "Basic knowledge of binary and hexadecimal representation (Chapter 2)."
     ],
-    keyConcepts: [
-      'Data movement copies data between registers, memory, and immediate values.',
-      'Arithmetic instructions perform integer addition, subtraction, multiplication, and division.',
-      'Logical instructions operate on individual bits.',
-      'Shift and rotate move bits left or right, useful for multiplication/division by powers of two.',
-      'Flags (Zero, Sign, Carry, Overflow) reflect the result of operations and drive conditional branching.',
-      'Loops are built using jumps and conditional jumps based on comparisons.'
+    "keyConcepts": [
+      "Data movement copies data between registers, memory, and immediate values.",
+      "Arithmetic instructions perform integer addition, subtraction, multiplication, and division.",
+      "Logical instructions operate on individual bits.",
+      "Shift and rotate move bits left or right, useful for multiplication/division by powers of two.",
+      "Flags (Zero, Sign, Carry, Overflow) reflect the result of operations and drive conditional branching.",
+      "Loops are built using jumps and conditional jumps based on comparisons."
     ],
-    diagramType: 'basic_instructions_flags',
-    sections: [
+    "diagramType": "basic_instructions_flags",
+    "sections": [
       {
-        id: 'sec-5-1',
-        title: '5.1 Arithmetic, Signed Multiply & Divide',
-        content: `x86-64 provides rich instructions for integer operations:
-• add / sub: dest = dest ± src. Updates ZF, SF, CF, OF.
-• inc / dec: dest = dest ± 1. Updates ZF, SF, OF, but leaves CF untouched!
-• neg: Two's complement negation (dest = 0 - dest).
-• imul: Signed multiplication. Can take 1, 2, or 3 operands (e.g. imul rax, rbx, 10).
-• idiv: Signed division. Divides rdx:rax by operand. Quotient in rax, remainder in rdx. Must sign-extend rax into rdx using cqo before dividing!`
+        "id": "sec-5-1",
+        "title": "5.1 Data Movement Instructions",
+        "content": "The most fundamental instruction is mov, which copies a value from source to destination. Both operands must be of the same size (or the source is an immediate that can be sign-extended or zero-extended to fit the destination)."
       },
       {
-        id: 'sec-5-2',
-        title: '5.2 Sample Programs: Loop Sum & Even/Odd Branching',
-        content: `Complete runnable assembly programs demonstrating loops and condition flags:`,
-        codeSnippets: [
+        "id": "sec-5-1-1",
+        "title": "5.1.1 mov – Move",
+        "content": "Syntax:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'sum1toN.asm (Sum from 1 to 10)',
-            code: `; sum1toN.asm - Compute sum of 1 to 10, exit with code = sum (55)
-section .text
-    global _start
-
-_start:
-    xor rax, rax        ; accumulator = 0
-    mov rcx, 1          ; counter = 1
-
-loop_start:
-    add rax, rcx        ; sum += counter
-    inc rcx             ; counter++
-    cmp rcx, 10
-    jle loop_start      ; if counter <= 10, repeat
-
-    mov rdi, rax        ; exit code = sum (55)
-    mov rax, 60         ; sys_exit
-    syscall`
+            "language": "nasm",
+            "title": "5.1.1 mov – Move — listing 1",
+            "code": "mov destination, source",
+            "explanation": "Allowed operand combinations:\n- Register to register: mov rax, rbx\n- Immediate to register: mov rax, 42\n- Register to memory: mov [rsp], rax\n- Memory to register: mov rax, [rsp]\n- Immediate to memory (with size specifier): mov qword [rsp], 42\n\nNot allowed:\n- Memory to memory: mov [a], [b] ❌\n- Immediate to segment register (except in special cases)\n- Moving into RIP directly\n\nExamples:"
           },
           {
-            language: 'nasm',
-            title: 'evenodd.asm (Bit Test Branching)',
-            code: `; evenodd.asm - Check if number is even or odd
-section .data
-    number dq 7
-    even_msg db 'Even', 0xA
-    even_len equ $ - even_msg
-    odd_msg db 'Odd', 0xA
-    odd_len equ $ - odd_msg
-
-section .text
-    global _start
-
-_start:
-    mov rax, [number]
-    test rax, 1         ; check bit 0
-    jz is_even
-
-    ; odd branch
-    mov rax, 1          ; sys_write
-    mov rdi, 1
-    mov rsi, odd_msg
-    mov rdx, odd_len
-    syscall
-    jmp exit
-
-is_even:
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, even_msg
-    mov rdx, even_len
-    syscall
-
-exit:
-    mov rax, 60
-    xor rdi, rdi
-    syscall`
+            "language": "nasm",
+            "title": "5.1.1 mov – Move — listing 2",
+            "code": "mov eax, 100          ; eax = 100\nmov rbx, rax          ; rbx = rax\nmov qword [rsp+8], rbx ; store rbx at [rsp+8]\nmov rcx, [rsp+8]      ; load rcx from memory\nmov byte [rdi], 0x41  ; store byte 'A' at address in rdi",
+            "explanation": "When moving a smaller immediate into a 64-bit register, the value is sign-extended if the immediate is negative, or zero-extended if positive. For example, mov rax, -1 sets rax to 0xFFFFFFFFFFFFFFFF."
+          }
+        ]
+      },
+      {
+        "id": "sec-5-1-2",
+        "title": "5.1.2 lea – Load Effective Address",
+        "content": "lea computes the effective address of a memory operand and stores that address (not the value) in a register. It does not access memory; it is often used for pointer arithmetic.\n\nSyntax:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.1.2 lea – Load Effective Address — listing 1",
+            "code": "lea destination_register, memory_operand",
+            "explanation": "Examples:"
+          },
+          {
+            "language": "nasm",
+            "title": "5.1.2 lea – Load Effective Address — listing 2",
+            "code": "lea rax, [rbx + 8]        ; rax = rbx + 8 (address calculation)\nlea rdx, [array + rcx*4]  ; rdx = address of array[rcx]\nlea rsi, [rel msg]        ; rsi = address of msg (RIP-relative)",
+            "explanation": "lea is more efficient than mov + add for address calculation because it uses the CPU’s addressing hardware."
+          }
+        ]
+      },
+      {
+        "id": "sec-5-1-3",
+        "title": "5.1.3 xchg – Exchange",
+        "content": "xchg swaps the contents of two operands. It can be used between two registers or a register and memory.\n\nSyntax:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.1.3 xchg – Exchange — listing 1",
+            "code": "xchg operand1, operand2",
+            "explanation": "Example:"
+          },
+          {
+            "language": "nasm",
+            "title": "5.1.3 xchg – Exchange — listing 2",
+            "code": "xchg rax, rbx   ; swap rax and rbx\nxchg [rsp], rax ; swap memory and register",
+            "explanation": "Note: xchg with memory is slow due to implicit locking on some architectures, but it is still used for atomic operations."
+          }
+        ]
+      },
+      {
+        "id": "sec-5-2",
+        "title": "5.2 Arithmetic Instructions",
+        "content": "Arithmetic instructions operate on integers. The x86-64 ISA provides a rich set for addition, subtraction, multiplication, and division."
+      },
+      {
+        "id": "sec-5-2-1",
+        "title": "5.2.1 add and sub",
+        "content": "- add dest, src : dest = dest + src\n- sub dest, src : dest = dest - src\n\nOperands can be register/register, register/memory, memory/register, register/immediate, memory/immediate (with size specifier). The result is stored in the destination.\n\nExamples:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.2.1 add and sub — listing 1",
+            "code": "add rax, rbx      ; rax = rax + rbx\nsub rax, 10       ; rax = rax - 10\nadd qword [rsp], 5 ; memory = memory + 5\nsub rcx, [rdx]    ; rcx = rcx - memory",
+            "explanation": "Both instructions affect the flags: Zero (ZF), Sign (SF), Carry (CF), Overflow (OF), etc."
+          }
+        ]
+      },
+      {
+        "id": "sec-5-2-2",
+        "title": "5.2.2 inc and dec",
+        "content": "- inc dest : dest = dest + 1\n- dec dest : dest = dest - 1\n\nThese are shorter and faster than add dest, 1 (historically) and do not affect the carry flag (but do affect other flags).\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.2.2 inc and dec — listing 1",
+            "code": "inc rax\ndec rcx"
+          }
+        ]
+      },
+      {
+        "id": "sec-5-2-3",
+        "title": "5.2.3 neg – Negate",
+        "content": "neg dest computes the two’s complement negation of the destination (i.e., dest = 0 - dest). This is equivalent to not dest followed by add dest, 1.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.2.3 neg – Negate — listing 1",
+            "code": "neg rax   ; rax = -rax"
+          }
+        ]
+      },
+      {
+        "id": "sec-5-2-4",
+        "title": "5.2.4 imul – Signed Multiply",
+        "content": "Multiplication in x86 is more complex due to varying operand sizes. The imul instruction has several forms:\n\n1. One-operand form: multiplies rax (or eax, ax, al) with the operand, producing a result twice as wide. For 64-bit:\n   - imul rbx : multiplies rbx by rax, storing the 128-bit result in rdx:rax (high 64 bits in rdx, low 64 bits in rax).\n2. Two-operand form: imul dest, src : dest = dest * src (result truncated to size of dest).\n3. Three-operand form: imul dest, src1, src2 : dest = src1 * src2 (src2 is immediate).\n\nThe two- and three-operand forms are more convenient and often used.\n\nExamples:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.2.4 imul – Signed Multiply — listing 1",
+            "code": "imul rax, rbx        ; rax = rax * rbx\nimul rax, rcx, 10    ; rax = rcx * 10\nimul rbx, [rsp]      ; rbx = rbx * memory"
+          }
+        ]
+      },
+      {
+        "id": "sec-5-2-5",
+        "title": "5.2.5 idiv – Signed Divide",
+        "content": "Division is even more complex. idiv divides a dividend that is twice the size of the divisor. For 64-bit division:\n- The dividend is in rdx:rax (128 bits). The low 64 bits in rax, high 64 bits in rdx.\n- The divisor is the operand to idiv (register or memory).\n- After division:\n  - Quotient stored in rax.\n  - Remainder stored in rdx.\n\nIf the quotient does not fit in the destination register, a division overflow exception occurs.\n\nPreparing for division:\n- To divide a 64-bit value in rax by a 64-bit divisor, we must first sign-extend rax into rdx:rax. Use cqo (Convert Quadword to Octaword) or cdq for 32-bit.\n- cqo sign-extends rax into rdx:rax.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Divide rax by rbx",
+            "code": "; Divide rax by rbx\ncqo                ; sign-extend rax into rdx:rax\nidiv rbx           ; quotient in rax, remainder in rdx",
+            "explanation": "For unsigned division, use div instead of idiv, and zero-extend with xor rdx, rdx (or mov rdx,0).\n\nExample:"
+          },
+          {
+            "language": "nasm",
+            "title": "Unsigned divide rax by rbx",
+            "code": "; Unsigned divide rax by rbx\nxor rdx, rdx       ; clear high part\ndiv rbx            ; quotient in rax, remainder in rdx"
+          }
+        ]
+      },
+      {
+        "id": "sec-5-3",
+        "title": "5.3 Logical and Bitwise Instructions",
+        "content": "Logical instructions operate bitwise on their operands."
+      },
+      {
+        "id": "sec-5-3-1",
+        "title": "5.3.1 and, or, xor, not",
+        "content": "- and dest, src : dest = dest & src\n- or dest, src : dest = dest | src\n- xor dest, src : dest = dest ^ src\n- not dest : dest = ~dest (one’s complement)\n\nThese are used for masking, setting/clearing bits, toggling bits, and clearing registers (xor reg, reg is a common idiom to zero a register, shorter than mov reg, 0).\n\nExamples:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.3.1 and, or, xor, not — listing 1",
+            "code": "and rax, 0xFF        ; keep low byte, clear others\nor  rax, 0x80        ; set bit 7\nxor rax, rax         ; zero rax\nnot rbx              ; invert all bits"
+          }
+        ]
+      },
+      {
+        "id": "sec-5-3-2",
+        "title": "5.3.2 test – Bitwise Test",
+        "content": "test performs a bitwise AND but discards the result, only affecting flags. It is commonly used to check if certain bits are set or if a register is zero.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.3.2 test – Bitwise Test — listing 1",
+            "code": "test eax, eax        ; sets ZF if eax == 0\njz  is_zero          ; jump if zero\ntest al, 1           ; check if lowest bit set (odd)\njnz is_odd",
+            "explanation": "test is preferred over cmp reg, 0 for zero-checking because it is faster and doesn't require a second operand."
+          }
+        ]
+      },
+      {
+        "id": "sec-5-4",
+        "title": "5.4 Shift and Rotate Instructions",
+        "content": "Shifts move bits left or right within a register or memory location. They are often used for fast multiplication/division by powers of two."
+      },
+      {
+        "id": "sec-5-4-1",
+        "title": "5.4.1 Shift Instructions",
+        "content": "- shl dest, count : shift left, filling with zeros; equivalent to multiplying by 2^count (for unsigned/signed positive).\n- shr dest, count : shift right (logical), filling with zeros; equivalent to unsigned division by 2^count.\n- sar dest, count : shift right (arithmetic), preserving sign bit; equivalent to signed division by 2^count.\n\ncount can be an immediate or the cl register (for variable shifts). On 64-bit, shifting by a count greater than operand size is undefined (or masked to 5 bits for 32-bit, 6 bits for 64-bit).\n\nExamples:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.4.1 Shift Instructions — listing 1",
+            "code": "shl rax, 1         ; rax *= 2\nshr rax, 4         ; unsigned rax /= 16\nsar rax, 1         ; signed rax /= 2\nmov cl, 3\nshl rax, cl        ; shift by amount in cl"
+          }
+        ]
+      },
+      {
+        "id": "sec-5-4-2",
+        "title": "5.4.2 Rotate Instructions",
+        "content": "Rotates move bits around in a circle; bits shifted out one end are inserted at the other end.\n\n- rol dest, count : rotate left\n- ror dest, count : rotate right\n\nRotates are less common in high-level code but used in cryptography and bit manipulation.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.4.2 Rotate Instructions — listing 1",
+            "code": "rol rax, 8        ; rotate left 8 bits\nror rbx, 4"
+          }
+        ]
+      },
+      {
+        "id": "sec-5-5",
+        "title": "5.5 Status Flags",
+        "content": "The RFLAGS register contains individual bits (flags) that reflect the outcome of arithmetic and logical operations. The most important flags:\n\n- ZF (Zero Flag): Set if result is zero.\n- SF (Sign Flag): Set if result is negative (most significant bit = 1).\n- CF (Carry Flag): Set on unsigned overflow (carry out of most significant bit) or borrow.\n- OF (Overflow Flag): Set on signed overflow (result too large for signed interpretation).\n\nInstructions like add, sub, and, or, xor, test, cmp, shifts, etc., modify flags. mov, lea, push, pop, inc, dec (except inc/dec do not affect CF) do not modify flags.\n\nFlags are used by conditional jump instructions (jz, jnz, js, jns, jc, jnc, jo, jno, and many others) to alter control flow.\n\nClarification: The preceding source sentence incorrectly includes inc and dec among instructions that preserve flags. Both update OF, SF, ZF, AF and PF while preserving CF, as described in section 5.2.2. mov, lea, and ordinary push/pop preserve arithmetic status flags."
+      },
+      {
+        "id": "sec-5-6",
+        "title": "5.6 Basic Control Flow: Jumps and Comparisons",
+        "content": "To create loops and conditional execution, we use cmp to compare two values and then a conditional jump based on flags."
+      },
+      {
+        "id": "sec-5-6-1",
+        "title": "5.6.1 cmp – Compare",
+        "content": "cmp dest, src computes dest - src but discards the result, only setting flags. It is equivalent to sub without storing.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.6.1 cmp – Compare — listing 1",
+            "code": "cmp rax, 10      ; set flags based on rax - 10\njl  less_than    ; jump if rax < 10 (signed)"
+          }
+        ]
+      },
+      {
+        "id": "sec-5-6-2",
+        "title": "5.6.2 Conditional Jumps",
+        "content": "Conditional jumps check flags and transfer control if the condition is true. Common jumps:\n\n\n\nFor signed comparisons, use jg, jge, jl, jle. For unsigned, use ja, jae, jb, jbe.\n\nExample: loop from 1 to 10",
+        "tableData": {
+          "headers": [
+            "Jump instruction",
+            "Condition",
+            "Flags"
+          ],
+          "rows": [
+            [
+              "je / jz",
+              "equal / zero",
+              "ZF=1"
+            ],
+            [
+              "jne / jnz",
+              "not equal / not zero",
+              "ZF=0"
+            ],
+            [
+              "jg / jnle",
+              "greater (signed)",
+              "ZF=0 and SF=OF"
+            ],
+            [
+              "jge / jnl",
+              "greater or equal (signed)",
+              "SF=OF"
+            ],
+            [
+              "jl / jnge",
+              "less (signed)",
+              "SF≠OF"
+            ],
+            [
+              "jle / jng",
+              "less or equal (signed)",
+              "ZF=1 or SF≠OF"
+            ],
+            [
+              "ja / jnbe",
+              "above (unsigned)",
+              "CF=0 and ZF=0"
+            ],
+            [
+              "jae / jnb",
+              "above or equal (unsigned)",
+              "CF=0"
+            ],
+            [
+              "jb / jnae",
+              "below (unsigned)",
+              "CF=1"
+            ],
+            [
+              "jbe / jna",
+              "below or equal (unsigned)",
+              "CF=1 or ZF=1"
+            ]
+          ]
+        },
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "5.6.2 Conditional Jumps — listing 1",
+            "code": "    mov rcx, 1          ; counter\nloop_start:\n    ; body of loop\n    inc rcx\n    cmp rcx, 10\n    jle loop_start      ; continue while rcx <= 10",
+            "explanation": "Alternatively, use the loop instruction (decrements rcx and jumps if not zero), but it is slower and less flexible. We'll use cmp/jmp for clarity."
+          }
+        ]
+      },
+      {
+        "id": "sec-5-7",
+        "title": "5.7 Simple Programs",
+        "content": "Now we'll write complete programs that demonstrate these instructions."
+      },
+      {
+        "id": "sec-5-7-1",
+        "title": "5.7.1 Program: Sum of Numbers 1 to N",
+        "content": "This program computes the sum of integers from 1 to 10 and exits with that sum as exit code (which will be truncated to 8 bits, so sum=55 -> exit code 55). We'll also print the sum using syscalls if we had conversion, but for now we'll exit with code.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "sum1toN.asm",
+            "code": "; sum1toN.asm\n; Compute sum of 1 to 10, exit with code = sum (55)\n\nsection .text\n    global _start\n\n_start:\n    xor rax, rax        ; accumulator = 0\n    mov rcx, 1          ; counter = 1\n\nloop_start:\n    add rax, rcx        ; sum += counter\n    inc rcx             ; counter++\n    cmp rcx, 10\n    jle loop_start      ; if counter <= 10, repeat\n\n    ; rax = 55\n    mov rdi, rax        ; exit code = sum\n    mov rax, 60         ; sys_exit\n    syscall",
+            "explanation": "Output: echo $? shows 55."
+          }
+        ]
+      },
+      {
+        "id": "sec-5-7-2",
+        "title": "5.7.2 Program: Even/Odd Check",
+        "content": "We'll read a number from command line? That's complex. Instead, we'll define a number in data and check if it's even or odd, then print a message.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "evenodd.asm",
+            "code": "; evenodd.asm\nsection .data\n    number dq 7\n    even_msg db 'Even', 0xA\n    even_len equ $ - even_msg\n    odd_msg db 'Odd', 0xA\n    odd_len equ $ - odd_msg\n\nsection .text\n    global _start\n\n_start:\n    mov rax, [number]\n    test rax, 1         ; check bit 0\n    jz  is_even\n    ; odd\n    mov rax, 1          ; sys_write\n    mov rdi, 1\n    mov rsi, odd_msg\n    mov rdx, odd_len\n    syscall\n    jmp exit\n\nis_even:\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, even_msg\n    mov rdx, even_len\n    syscall\n\nexit:\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+            "explanation": "Change number to 8 to see even output."
+          }
+        ]
+      },
+      {
+        "id": "sec-5-7-3",
+        "title": "5.7.3 Program: Print Digits of a Number (Simple, for numbers < 10)",
+        "content": "We'll convert a single-digit number to ASCII and print it. This is a precursor to full number-to-string conversion.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "print_digit.asm",
+            "code": "; print_digit.asm\nsection .data\n    digit db 0          ; storage for ASCII digit\nsection .text\n    global _start\n\n_start:\n    mov al, 7           ; number to print\n    add al, '0'         ; convert to ASCII\n    mov [digit], al     ; store\n\n    ; write the digit\n    mov rax, 1          ; sys_write\n    mov rdi, 1\n    mov rsi, digit\n    mov rdx, 1\n    syscall\n\n    ; newline\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, newline\n    mov rdx, 1\n    syscall\n\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\nsection .data\n    newline db 0xA"
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-5-1',
-        title: 'Exercise 5.1: Sum of Even Numbers',
-        description: 'Write a program that sums all even numbers from 1 to 20 (2+4+...+20 = 110). Exit with the sum.',
-        solution: `section .text\nglobal _start\n_start:\n    xor rax, rax\n    mov rcx, 2\nloop_start:\n    add rax, rcx\n    add rcx, 2\n    cmp rcx, 20\n    jle loop_start\n    mov rdi, rax\n    mov rax, 60\n    syscall`,
-        solutionLanguage: 'nasm'
-      }
-    ],
-    practiceQuestions: [
-      {
-        question: 'What is the difference between test and cmp?',
-        answer: 'cmp performs subtraction (dest - src) and sets all condition flags without storing the result. test performs bitwise AND (dest & src) and sets ZF, SF, and PF while clearing CF and OF, without altering operands.'
+        "id": "ex-5-1",
+        "title": "Exercise 5.1: Sum of Even Numbers",
+        "description": "Write a program that sums all even numbers from 1 to 20 (2+4+...+20). Exit with the sum (which will be 110, but exit code is low 8 bits: 110 mod 256 = 110). Run and check.",
+        "solution": "section .text\nglobal _start\n_start:\n    xor rax, rax        ; sum = 0\n    mov rcx, 2          ; start at 2\nloop_start:\n    add rax, rcx        ; sum += current even\n    add rcx, 2          ; next even\n    cmp rcx, 20\n    jle loop_start      ; include 20\n    ; rax = 110\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "echo $? shows 110."
       },
       {
-        question: 'Why is cqo necessary before signed 64-bit idiv?',
-        answer: 'The idiv rbx instruction expects a 128-bit dividend across rdx:rax. cqo sign-extends the 64-bit value in rax into rdx, filling rdx with all 0s or all 1s depending on whether rax is positive or negative.'
+        "id": "ex-5-2",
+        "title": "Exercise 5.2: Multiplication Table",
+        "description": "Write a program that computes and prints the multiplication table for a number (e.g., 5 times 1 to 5). Since we haven't covered multi-digit printing, you can output results as single ASCII digits for products < 10 (e.g., 5x1=5, 5x2=10 -> too large, so maybe only for products < 10). Or just compute and exit with the sum of products. Choose an approach.",
+        "solution": "section .text\nglobal _start\n_start:\n    xor rax, rax        ; sum\n    mov rcx, 1          ; multiplier\nloop_start:\n    mov rbx, 5\n    imul rbx, rcx       ; rbx = 5 * rcx\n    add rax, rbx\n    inc rcx\n    cmp rcx, 5\n    jle loop_start\n    ; rax = 75\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "We'll compute sum of products of 5 times 1 to 5, exit with sum (5+10+15+20+25 = 75)."
+      },
+      {
+        "id": "ex-5-3",
+        "title": "Exercise 5.3: Bit Manipulation",
+        "description": "Write a program that loads a value, sets bit 3, clears bit 1, toggles bit 0, and then exits with the final value. Start with al = 0b00000000. After operations, what is the result? Verify.",
+        "solution": "section .text\nglobal _start\n_start:\n    mov al, 0\n    or al, 0b00001000   ; set bit 3 -> 0000 1000 (0x08)\n    and al, 0b11111101  ; clear bit 1 -> 0000 1000 & 1111 1101 = 0000 1000 (0x08)\n    xor al, 0b00000001  ; toggle bit 0 -> 0000 1001 (0x09)\n    ; al = 9\n    movzx rdi, al\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-5-4",
+        "title": "Exercise 5.4: Signed Division",
+        "description": "Compute (-20) / 3 using signed division. What are quotient and remainder? Store them and exit with quotient (or remainder, your choice). Use cqo and idiv.",
+        "solution": "section .text\nglobal _start\n_start:\n    mov rax, -20\n    mov rbx, 3\n    cqo                 ; sign-extend rax into rdx:rax\n    idiv rbx            ; quotient = -6 (rax), remainder = -2 (rdx)\n    ; exit with quotient (as unsigned? -6 as exit code = 250)\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
+      },
+      {
+        "id": "ex-5-5",
+        "title": "Exercise 5.5: Loop with Conditional Jumps",
+        "description": "Write a program that loops from 10 down to 1, summing the numbers. Then exit with the sum (10+9+...+1 = 55). Use jge or jg with appropriate comparison.",
+        "solution": "section .text\nglobal _start\n_start:\n    xor rax, rax\n    mov rcx, 10\nloop_start:\n    add rax, rcx\n    dec rcx\n    cmp rcx, 0\n    jg loop_start       ; continue while rcx > 0\n    ; rax = 55\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": ""
       }
     ],
-    summary: [
-      'mov copies data; lea computes addresses without modifying flags; xchg swaps.',
-      'Arithmetic: add, sub, inc, dec, neg, imul, idiv.',
-      'Signed division requires sign-extension using cqo (or cdq).',
-      'Logical operations (and, or, xor, not, test) manipulate individual bits.',
-      'Shifts and rotates move bits linearly or circularly.',
-      'Status flags drive conditional jump branches.'
+    "practiceQuestions": [
+      {
+        "question": "What is the difference between mov and lea? Give an example where lea is useful.",
+        "answer": "mov copies a value; lea computes an effective address without reading memory or changing flags. For example, lea rdx, [rbx + rcx*4] computes the address of a four-byte array element."
+      },
+      {
+        "question": "How do you perform signed division in x86-64? Explain the role of cqo.",
+        "answer": "The idiv rbx instruction expects a 128-bit dividend across rdx:rax. cqo sign-extends the 64-bit value in rax into rdx, filling rdx with all 0s or all 1s depending on whether rax is positive or negative. After idiv, RAX contains the quotient and RDX the remainder."
+      },
+      {
+        "question": "What is the difference between shr and sar? When would you use each?",
+        "answer": "shr shifts zeros into the high bits and is used for unsigned values. sar repeats the sign bit and is used for signed values. For negative odd values, sar rounds down, whereas idiv truncates toward zero."
+      },
+      {
+        "question": "How does test differ from and? Why is test preferred for zero-checking?",
+        "answer": "and stores the bitwise result in its destination; test updates flags without storing the result. test reg, reg checks for zero without changing the register. cmp performs subtraction (dest - src) and sets all condition flags without storing the result. test performs bitwise AND (dest & src) and sets ZF, SF, and PF while clearing CF and OF, without altering operands."
+      },
+      {
+        "question": "Explain the Zero Flag and Sign Flag. Which instructions set them?",
+        "answer": "ZF is set when the result is zero. SF copies the result’s most significant bit. Instructions such as add, sub, cmp, and, or, xor, test, inc and dec update these flags; mov and lea preserve them."
+      },
+      {
+        "question": "What is the purpose of xor reg, reg? Why is it used to zero a register?",
+        "answer": "xor reg, reg sets a register to zero because each bit XORed with itself is zero. It is a compact zeroing idiom and also changes flags."
+      },
+      {
+        "question": "Describe the difference between signed and unsigned conditional jumps.",
+        "answer": "Signed jumps such as jg and jl interpret the comparison through SF, OF and sometimes ZF. Unsigned jumps such as ja and jb use CF and sometimes ZF. Choose the jump according to the intended interpretation of the operands."
+      },
+      {
+        "question": "How would you multiply a number by 9 using only shifts and addition?",
+        "answer": "Copy the original value, shift one copy left by 3, and add the original: mov rdx, rax; shl rax, 3; add rax, rdx. This computes 8x + x = 9x within the register width."
+      },
+      {
+        "question": "What is the effect of neg on the flags?",
+        "answer": "neg sets flags as subtraction from zero. CF is clear only when the original operand was zero; OF is set when negating the most negative signed value. SF, ZF, AF and PF reflect the result."
+      },
+      {
+        "question": "Write a short assembly snippet to check if a number in rax is between 10 and 20 (inclusive). Use conditional jumps.",
+        "answer": "For a signed value: cmp rax, 10; jl outside; cmp rax, 20; jg outside; jmp inside. For an unsigned value, replace jl with jb and jg with ja. Define inside and outside as the destination labels."
+      }
+    ],
+    "summary": [
+      "mov copies data; lea computes addresses; xchg swaps.",
+      "Arithmetic: add, sub, inc, dec, neg, imul, idiv.",
+      "Signed division requires sign-extension using cqo (or cdq).",
+      "Logical operations (and, or, xor, not, test) manipulate bits.",
+      "Shifts (shl, shr, sar) multiply/divide by powers of two; rotates (rol, ror) move bits circularly.",
+      "Flags (ZF, SF, CF, OF) are set by arithmetic/logical ops and control conditional jumps.",
+      "cmp sets flags without storing result; then jcc branches based on condition.",
+      "Simple programs can be built using loops and conditional jumps.",
+      "In the next chapter, we'll dive deeper into data movement and addressing modes, exploring more advanced ways to access memory."
     ]
   }
+
 ];
