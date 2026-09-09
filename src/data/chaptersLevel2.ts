@@ -1610,8 +1610,27 @@ export const CHAPTERS_LEVEL_2: Chapter[] = [
         "codeSnippets": [
           {
             "language": "nasm",
-            "title": "9.2.2 Example: String Length (using scasb) — listing 1",
-            "code": "section .data\n    str db 'Hello, World!', 0\nsection .text\nglobal _start\n_start:\n    lea rdi, [str]       ; pointer to string\n    xor al, al           ; search for null (0)\n    mov rcx, -1          ; maximum count (effectively unlimited)\n    cld                  ; forward direction\n    repne scasb          ; scan for byte 0; rdi ends one past null\n    ; rdi points to byte after null\n    ; compute length = rdi - str - 1\n    lea rax, [rdi - 1]   ; address of null\n    sub rax, str         ; length = null_addr - start\n    ; rax = 13\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+            "title": "Original source: String Length (STR label needs a colon)",
+            "code": "section .data\n    str db 'Hello, World!', 0\nsection .text\nglobal _start\n_start:\n    lea rdi, [str]       ; pointer to string\n    xor al, al           ; search for null (0)\n    mov rcx, -1          ; maximum count (effectively unlimited)\n    cld                  ; forward direction\n    repne scasb          ; scan for byte 0; rdi ends one past null\n    ; rdi points to byte after null\n    ; compute length = rdi - str - 1\n    lea rax, [rdi - 1]   ; address of null\n    sub rax, str         ; length = null_addr - start\n    ; rax = 13\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "STR is also an instruction mnemonic. Use str: to make the data label unambiguous to NASM. The corrected listing below preserves the algorithm."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected runnable String Length",
+            "code": "section .data\n    str: db 'Hello, World!', 0\nsection .text\nglobal _start\n_start:\n    lea rdi, [str]       ; pointer to string\n    xor al, al           ; search for null (0)\n    mov rcx, -1          ; maximum count (effectively unlimited)\n    cld                  ; forward direction\n    repne scasb          ; scan for byte 0; rdi ends one past null\n    ; rdi points to byte after null\n    ; compute length = rdi - str - 1\n    lea rax, [rdi - 1]   ; address of null\n    sub rax, str         ; length = null_addr - start\n    ; rax = 13\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "The explicit label colon resolves the NASM ambiguity. Expected exit status is 13."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 9.2 (STR label needs a colon)",
+            "code": "section .data\n    str db 'Assembly is fun', 0\nsection .text\nglobal _start\n_start:\n    lea rdi, [str]\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    ; rdi points one past null\n    dec rdi\n    sub rdi, str         ; length\n    mov rax, rdi\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "Retained source listing. The runnable solution in Exercise 9.2 uses str: to disambiguate the data label."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 9.3 (STR label needs a colon)",
+            "code": "section .data\n    str db 'Hello, World!', 0\nsection .text\nglobal _start\n_start:\n    ; find end of string\n    lea rdi, [str]\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    dec rdi              ; rdi points to null terminator\n    ; now rdi = address of null; we want last character before null: rdi-1\n    dec rdi\n    lea rsi, [str]       ; rsi points to first char\nreverse_loop:\n    cmp rsi, rdi\n    jge done\n    mov al, [rsi]\n    mov bl, [rdi]\n    mov [rsi], bl\n    mov [rdi], al\n    inc rsi\n    dec rdi\n    jmp reverse_loop\ndone:\n    ; exit with first character now (originally '!')\n    movzx rdi, byte [str]\n    mov rax, 60\n    syscall",
+            "explanation": "Retained source listing. The runnable solution in Exercise 9.3 uses str: to disambiguate the data label."
           }
         ]
       },
@@ -1774,17 +1793,17 @@ export const CHAPTERS_LEVEL_2: Chapter[] = [
         "id": "ex-9-2",
         "title": "Exercise 9.2: String Length with `scasb`",
         "description": "Write a program that computes the length of a null-terminated string using repne scasb. Print the length as a single digit (if < 10) or exit with length as code. For simplicity, exit with the length as exit code.",
-        "solution": "section .data\n    str db 'Assembly is fun', 0\nsection .text\nglobal _start\n_start:\n    lea rdi, [str]\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    ; rdi points one past null\n    dec rdi\n    sub rdi, str         ; length\n    mov rax, rdi\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solution": "section .data\n    str: db 'Assembly is fun', 0\nsection .text\nglobal _start\n_start:\n    lea rdi, [str]\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    ; rdi points one past null\n    dec rdi\n    sub rdi, str         ; length\n    mov rax, rdi\n    mov rdi, rax\n    mov rax, 60\n    syscall",
         "solutionLanguage": "nasm",
-        "solutionExplanation": ""
+        "solutionExplanation": "Adds a colon to str: because STR is an instruction mnemonic; the rest of the source algorithm is preserved."
       },
       {
         "id": "ex-9-3",
         "title": "Exercise 9.3: String Reverse",
         "description": "Reverse a string in place (swap characters from both ends). Use a loop with pointers. Print the reversed string using syscalls (if you can, or exit with first character as code). For practice, just reverse and exit with the first character (which should be the original last character).",
-        "solution": "section .data\n    str db 'Hello, World!', 0\nsection .text\nglobal _start\n_start:\n    ; find end of string\n    lea rdi, [str]\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    dec rdi              ; rdi points to null terminator\n    ; now rdi = address of null; we want last character before null: rdi-1\n    dec rdi\n    lea rsi, [str]       ; rsi points to first char\nreverse_loop:\n    cmp rsi, rdi\n    jge done\n    mov al, [rsi]\n    mov bl, [rdi]\n    mov [rsi], bl\n    mov [rdi], al\n    inc rsi\n    dec rdi\n    jmp reverse_loop\ndone:\n    ; exit with first character now (originally '!')\n    movzx rdi, byte [str]\n    mov rax, 60\n    syscall",
+        "solution": "section .data\n    str: db 'Hello, World!', 0\nsection .text\nglobal _start\n_start:\n    ; find end of string\n    lea rdi, [str]\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    dec rdi              ; rdi points to null terminator\n    ; now rdi = address of null; we want last character before null: rdi-1\n    dec rdi\n    lea rsi, [str]       ; rsi points to first char\nreverse_loop:\n    cmp rsi, rdi\n    jge done\n    mov al, [rsi]\n    mov bl, [rdi]\n    mov [rsi], bl\n    mov [rdi], al\n    inc rsi\n    dec rdi\n    jmp reverse_loop\ndone:\n    ; exit with first character now (originally '!')\n    movzx rdi, byte [str]\n    mov rax, 60\n    syscall",
         "solutionLanguage": "nasm",
-        "solutionExplanation": ""
+        "solutionExplanation": "Adds a colon to str: because STR is an instruction mnemonic; the rest of the source algorithm is preserved."
       },
       {
         "id": "ex-9-4",
