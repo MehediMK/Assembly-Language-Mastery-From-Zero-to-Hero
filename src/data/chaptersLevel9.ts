@@ -1050,24 +1050,89 @@ buf:
       'Understand the architecture of MIPS32: 32 registers ($zero, $v0–$v1, $a0–$a3, $t0–$t9, $s0–$s7, $sp, $ra).',
       'Manage MIPS branch delay slots effectively.',
       'Write a MIPS32 Hello World program with Linux syscalls ($v0 = 4004).',
-      'Survey historical architectures: SPARC register windows, PowerPC condition fields, AVR 8-bit.'
+      'Survey historical architectures: SPARC register windows, PowerPC condition fields, AVR 8-bit.',
+      'Understand MIPS pipeline and branch delay slots.',
+      'Compare MIPS with modern RISC architectures.',
+      'Learn about embedded architectures (AVR, PIC, MSP430).',
+      'Study SPARC register windows and VLIW architectures.'
     ],
     prerequisites: ['Chapters 1–22, 45, 46'],
     keyConcepts: [
-      'In MIPS, the instruction in the delay slot immediately following a branch executes before the branch takes effect.',
-      'SPARC utilizes overlapping register windows to accelerate function calls.',
-      'MIPS system calls place the syscall number in $v0 (offset by 4000 on Linux O32).'
+      'MIPS: Microprocessor without Interlocked Pipelined Stages.',
+      'Branch delay slot: Instruction after branch executes before jump takes effect.',
+      'SPARC: Scalable Processor Architecture with register windows.',
+      'PowerPC: Performance Optimization With Enhanced RISC Performance Computing.',
+      'AVR: Advanced Virtual RISC (8-bit microcontrollers).',
+      'VLIW: Very Long Instruction Word (EPIC, Itanium).',
+      'Delay slots: Architectural trade-off for pipeline efficiency.',
+      'Register windows: Reduce memory traffic for function calls.'
     ],
     diagramType: 'mips_architecture',
     sections: [
       {
         id: 'sec-47-1',
-        title: '47.1 MIPS32 Linux Hello World with Delay Slots',
-        content: `Complete runnable MIPS assembly program:`,
+        title: '47.1 MIPS Architecture Overview',
+        content: `MIPS pioneered many concepts in modern processor design.
+
+### Why MIPS Matters?
+• Pioneered RISC concepts (delay slots, pipelining)
+• Dominated embedded systems (routers, game consoles)
+• Clean, elegant design
+• Educational standard for computer architecture
+
+### MIPS32 Register Set
+| Register | Number | Purpose | Description |
+|----------|--------|---------|-------------|
+| $zero | $0 | Hardwired zero | Always 0 |
+| $at | $1 | Assembler temp | Reserved for assembler |
+| $v0-$v1 | $2-$3 | Values | Function returns |
+| $a0-$a3 | $4-$7 | Arguments | Function arguments |
+| $t0-$t9 | $8-$15, $24-$25 | Temporaries | Caller-saved |
+| $s0-$s7 | $16-$23 | Saved | Callee-saved |
+| $gp | $28 | Global pointer | Global data |
+| $sp | $29 | Stack pointer | Stack |
+| $fp | $30 | Frame pointer | Stack frame |
+| $ra | $31 | Return address | Function return |
+
+### Key MIPS Features
+1. **Branch delay slot**: Instruction after branch executes
+2. **Load delay slot**: Instruction after load cannot use result immediately
+3. **No condition codes**: Compare instructions set GPRs
+4. **Fixed 32-bit instructions**: Simple decoding
+5. **Harvard architecture**: Separate instruction/data caches
+
+### MIPS Pipeline (Classic 5-stage)
+1. **IF**: Instruction Fetch
+2. **ID**: Instruction Decode / Register Read
+3. **EX**: Execute / Address Calculation
+4. **MEM**: Memory Access
+5. **WB**: Write Back
+
+### Branch Delay Slot Trade-off
+```mips
+# Branch delay slot: instruction AFTER branch executes
+beq $a0, $a1, target
+nop                  # Delay slot (often nop)
+
+# Or use useful instruction:
+beq $a0, $a1, target
+add $v0, $a0, $a1   # Delay slot (useful work)
+```
+
+### Why Delay Slots Exist
+In early pipelined processors, by the time the branch condition was evaluated, the next instruction had already been fetched. Instead of flushing the pipeline, MIPS architecturally executes the delay slot instruction.
+
+### MIPS System Calls (Linux O32)
+| Number | Name | Arguments |
+|--------|------|-----------|
+| 4004 | write | $a0=fd, $a1=buf, $a2=len |
+| 4003 | read | $a0=fd, $a1=buf, $a2=len |
+| 4001 | exit | $a0=status |
+| 4005 | open | $a0=pathname, $a1=flags |`,
         codeSnippets: [
           {
             language: 'mips',
-            title: 'hello_mips.s',
+            title: 'MIPS32 Hello World',
             code: `.section .data
 msg:
     .ascii "Hello, World!\\n"
@@ -1088,6 +1153,289 @@ _start:
     syscall`
           }
         ]
+      },
+      {
+        id: 'sec-47-2',
+        title: '47.2 MIPS Instruction Set',
+        content: `MIPS uses fixed-length 32-bit instructions with 3-operand format.
+
+### Instruction Formats (MIPS)
+| Format | Usage | Layout |
+|--------|-------|--------|
+| R-type | Register | op[31:26] rs[25:21] rt[20:16] rd[15:11] shamt[10:6] funct[5:0] |
+| I-type | Immediate | op[31:26] rs[25:21] rt[20:16] imm[15:0] |
+| J-type | Jump | op[31:26] addr[25:0] |
+
+### Arithmetic Instructions
+```mips
+# Register-register (R-type)
+add  $t0, $t1, $t2    # $t0 = $t1 + $t2 (trap on overflow)
+addu $t0, $t1, $t2    # $t0 = $t1 + $t2 (no trap)
+sub  $t0, $t1, $t2    # $t0 = $t1 - $t2
+subu $t0, $t1, $t2    # $t0 = $t1 - $t2 (no trap)
+and  $t0, $t1, $t2    # $t0 = $t1 & $t2
+or   $t0, $t1, $t2    # $t0 = $t1 | $t2
+xor  $t0, $t1, $t2    # $t0 = $t1 ^ $t2
+nor  $t0, $t1, $t2    # $t0 = ~($t1 | $t2)
+slt  $t0, $t1, $t2    # $t0 = ($t1 < $t2) ? 1 : 0
+sltu $t0, $t1, $t2    # $t0 = ($t1 < $t2) ? 1 : 0 (unsigned)
+
+# Shifts
+sll  $t0, $t1, 5      # $t0 = $t1 << 5
+srl  $t0, $t1, 5      # $t0 = $t1 >> 5 (logical)
+sra  $t0, $t1, 5      # $t0 = $t1 >> 5 (arithmetic)
+sllv $t0, $t1, $t2    # $t0 = $t1 << $t2
+srlv $t0, $t1, $t2    # $t0 = $t1 >> $t2
+
+# Multiply/Divide
+mult $t0, $t1          # HI:LO = $t0 * $t1 (signed)
+multu $t0, $t1         # HI:LO = $t0 * $t1 (unsigned)
+div  $t0, $t1          # LO = $t0 / $t1, HI = $t0 % $t1
+divu $t0, $t1          # LO = $t0 / $t1, HI = $t0 % $t1 (unsigned)
+mfhi $t0               # Move from HI
+mflo $t0               # Move from LO
+```
+
+### Load/Store Instructions
+```mips
+# Load (I-type)
+lb   $t0, 0($t1)      # Load byte (sign-extended)
+lbu  $t0, 0($t1)      # Load byte unsigned
+lh   $t0, 0($t1)      # Load halfword (16-bit)
+lhu  $t0, 0($t1)      # Load halfword unsigned
+lw   $t0, 0($t1)      # Load word (32-bit)
+lwl  $t0, 0($t1)      # Load word left (unaligned)
+lwr  $t0, 0($t1)      # Load word right (unaligned)
+
+# Store (S-type)
+sb   $t0, 0($t1)      # Store byte
+sh   $t0, 0($t1)      # Store halfword
+sw   $t0, 0($t1)      # Store word
+swl  $t0, 0($t1)      # Store word left
+swr  $t0, 0($t1)      # Store word right
+
+# Example: Load/Store with offset
+lw   $t0, 8($sp)      # Load word from sp+8
+sw   $t0, 12($sp)     # Store word to sp+12
+```
+
+### Branch Instructions (I-type)
+```mips
+# Branch on condition
+beq  $t0, $t1, label  # Branch if $t0 == $t1
+bne  $t0, $t1, label  # Branch if $t0 != $t1
+blez $t0, label       # Branch if $t0 <= 0
+bgtz $t0, label       # Branch if $t0 > 0
+bltz $t0, label       # Branch if $t0 < 0
+bgez $t0, label       # Branch if $t0 >= 0
+
+# Jump (J-type)
+j    label            # Jump to label
+jal  label            # Jump and link (call)
+jr   $ra              # Jump to register (return)
+jalr $ra, $t0         # Jump and link register
+
+# Compare and branch (pseudo-instructions)
+beqz $t0, label       # Branch if $t0 == 0
+bnez $t0, label       # Branch if $t0 != 0
+blt  $t0, $t1, label  # Branch if $t0 < $t1 (pseudo)
+bge  $t0, $t1, label  # Branch if $t0 >= $t1 (pseudo)
+```
+
+### Delay Slot Handling
+```mips
+# Bad: Delay slot contains instruction that affects branch
+add $t0, $t1, $t2
+beq $t0, $zero, target
+sub $t0, $t1, $t2   # Delay slot modifies $t0!
+
+# Good: Delay slot contains useful instruction
+beq $a0, $a1, target
+add $v0, $a0, $a1   # Delay slot does useful work
+
+# Or use nop (assembler fills delay slot)
+beq $a0, $a1, target
+nop                  # Safe but wastes cycle
+````,
+        codeSnippets: [
+          {
+            language: 'mips',
+            title: 'MIPS Instruction Examples',
+            code: `.section .text
+.global _start
+
+_start:
+    # Load immediate values
+    li $t0, 10           # $t0 = 10
+    li $t1, 20           # $t1 = 20
+    
+    # Arithmetic
+    add $t2, $t0, $t1    # $t2 = 30
+    sub $t3, $t1, $t0    # $t3 = 10
+    mult $t0, $t1        # HI:LO = 200
+    mflo $t4             # $t4 = 200
+    
+    # Logical
+    and $t5, $t0, $t1    # Bitwise AND
+    or  $t6, $t0, $t1    # Bitwise OR
+    xor $t7, $t0, $t1    # Bitwise XOR
+    
+    # Shifts
+    sll $t0, $t0, 3      # Left shift by 3
+    srl $t1, $t1, 1      # Right shift by 1
+    
+    # Load/Store
+    la  $t3, data        # Get address
+    lw  $t4, 0($t3)      # Load word
+    addi $t4, $t4, 1     # Increment
+    sw  $t4, 0($t3)      # Store word
+    
+    # Branch (with delay slot)
+    beq $t0, $t1, equal
+    nop                  # Delay slot
+    
+    bne $t0, $t1, not_equal
+    nop
+    
+equal:
+    # $t0 == $t1
+    j done
+    
+not_equal:
+    # $t0 != $t1
+    
+done:
+    # Exit
+    li $v0, 4001
+    li $a0, 0
+    syscall
+
+.section .data
+data:
+    .word 42`
+          }
+        ]
+      },
+      {
+        id: 'sec-47-3',
+        title: '47.3 Other Architectures',
+        content: `Survey of other important architectures.
+
+### SPARC (Scalable Processor Architecture)
+• Register windows: Overlapping register sets for fast context switch
+• Used in: Sun/Oracle servers, embedded systems
+• Features: Delay slots, condition codes (ICC, XCC)
+
+```sparc
+# SPARC register window example
+save %sp, -96, %sp    # Create new register window
+...                    # Function body
+restore               # Restore previous window
+```
+
+### PowerPC
+• Big-endian by default (configurable)
+• Condition register field (CR0-CR7)
+• Used in: Game consoles (Wii, Xbox 360), embedded
+• Features: Link register, count register
+
+```powerpc
+# PowerPC example
+add r3, r4, r5        # r3 = r4 + r5
+bctrl                 # Branch to count register (call)
+mflr r0               # Move from link register
+```
+
+### AVR (8-bit Microcontrollers)
+• Harvard architecture (separate program/data)
+• Used in: Arduino, embedded systems
+• Features: Limited registers (R0-R31), I/O ports
+
+```avr
+; AVR assembly example
+ldi r16, 42           ; Load immediate
+out PORTB, r16        ; Output to port
+in r17, PINB          ; Input from port
+```
+
+### MSP430 (16-bit Ultra-Low-Power)
+• RISC architecture for ultra-low power
+• Used in: TI LaunchPad, sensors
+• Features: 16 registers, simple instruction set
+
+```msp430
+; MSP430 assembly example
+mov.w #0x0200, SP     ; Initialize stack pointer
+mov.w #0x0001, &P1OUT ; Set output bit
+```
+
+### VLIW/EPIC (Itanium)
+• Very Long Instruction Word
+• Multiple operations per instruction
+• Used in: Intel Itanium (IA-64)
+• Features: Explicit parallelism, predication
+
+```itanium
+; IA-64 (Itanium) example
+(p1) add r1 = r2, r3  ; Predicate p1 controls execution
+(p2) sub r4 = r5, r6
+```
+
+### Comparison Table
+| Architecture | Bits | Registers | Endian | Features |
+|-------------|------|-----------|--------|----------|
+| x86-64 | 64 | 16 | Little | CISC, variable length |
+| ARM64 | 64 | 31 | Little | RISC, fixed length |
+| RISC-V | 64 | 31 | Little | Open, modular |
+| MIPS | 32/64 | 32 | Bi | Delay slots |
+| SPARC | 32/64 | 128+ | Big | Register windows |
+| PowerPC | 32/64 | 32 | Big | Condition fields |
+| AVR | 8 | 32 | Little | Harvard, embedded |`,
+        codeSnippets: [
+          {
+            language: 'mips',
+            title: 'MIPS Delay Slot Example',
+            code: `.section .text
+.global _start
+
+_start:
+    # Load values
+    li $t0, 10
+    li $t1, 20
+    
+    # Branch with delay slot
+    beq $t0, $t1, equal
+    add $t2, $t0, $t1   # Delay slot: executes before branch!
+    
+    # Not equal path
+    li $v0, 4004
+    li $a0, 1
+    la $a1, msg_ne
+    li $a2, len_ne
+    syscall
+    j exit
+    
+equal:
+    li $v0, 4004
+    li $a0, 1
+    la $a1, msg_eq
+    li $a2, len_eq
+    syscall
+    
+exit:
+    li $v0, 4001
+    li $a0, 0
+    syscall
+
+.section .data
+msg_eq:
+    .ascii "Equal\\n"
+    len_eq = . - msg_eq
+msg_ne:
+    .ascii "Not Equal\\n"
+    len_ne = . - msg_ne`
+          }
+        ]
       }
     ],
     exercises: [
@@ -1097,15 +1445,62 @@ _start:
         description: 'Demonstrate safe branch handling in MIPS by placing a nop in the branch delay slot.',
         solution: `beq $a0, $a1, .target\nnop                  # delay slot executed before branch jump!\nmove $v0, $zero`,
         solutionLanguage: 'mips'
+      },
+      {
+        id: 'ex-47-2',
+        title: 'Exercise 47.2: MIPS Recursive Factorial',
+        description: 'Implement factorial in MIPS32 assembly.',
+        solution: 'Use $ra for return address, $s0 for saved argument. Base case: n<=1 return 1. Recursive: save n, call factorial(n-1), multiply n*result. Save/restore $ra and $s0 on stack.'
+      },
+      {
+        id: 'ex-47-3',
+        title: 'Exercise 47.3: SPARC Register Windows',
+        description: 'Explain how SPARC register windows work for function calls.',
+        solution: 'SPARC has overlapping register windows. save instruction shifts window (new locals/globals), restore shifts back. This avoids saving registers to memory for most function calls, speeding up context switches.'
+      },
+      {
+        id: 'ex-47-4',
+        title: 'Exercise 47.4: Architecture Comparison',
+        description: 'Compare MIPS delay slots with ARM64 conditional execution.',
+        solution: 'MIPS delay slots execute instruction after branch (pipeline optimization). ARM64 CSEL/conditional instructions avoid branches entirely. Different approaches to the same problem: reducing branch penalties.'
       }
     ],
     practiceQuestions: [
       {
         question: 'What is the MIPS branch delay slot?',
-        answer: 'In early pipelined architectures, the instruction following a branch had already been fetched by the time the branch condition was evaluated. Rather than flush the pipeline, MIPS architecturally executes the instruction in the delay slot before jumping.'
+        answer: 'In early pipelined architectures, the instruction following a branch had already been fetched by the time the branch condition was evaluated. Rather than flush the pipeline, MIPS architecturally executes the instruction in the delay slot before jumping. This saves a cycle but complicates programming.'
+      },
+      {
+        question: 'Why do MIPS delay slots exist?',
+        answer: 'Delay slots exist to avoid pipeline flushes when branches are taken. In a 5-stage pipeline, by the time the branch condition is resolved (stage 3), the next instruction is already fetched (stage 1). Instead of discarding it, MIPS executes it, saving a cycle on taken branches.'
+      },
+      {
+        question: 'How do SPARC register windows improve performance?',
+        answer: 'SPARC register windows provide overlapping register sets for function calls. When a function is called, a new window is created with fresh registers, avoiding memory saves. The called function gets new local registers while sharing argument registers with the caller. This reduces memory traffic for function calls.'
+      },
+      {
+        question: 'What is the difference between MIPS and RISC-V?',
+        answer: 'Key differences: MIPS has delay slots (RISC-V does not), MIPS has dedicated HI/LO registers for multiply (RISC-V uses general registers), MIPS has 32 registers with $zero, RISC-V has 32 with x0. RISC-V is open-source and modular, MIPS is proprietary with fixed features.'
+      },
+      {
+        question: 'How do embedded architectures like AVR differ from desktop CPUs?',
+        answer: 'Embedded architectures: (1) Smaller register set (AVR: 32 8-bit), (2) Limited memory (KB vs GB), (3) Lower clock speeds (MHz vs GHz), (4) Power efficiency critical, (5) Often Harvard architecture (separate program/data), (6) Simple instruction sets for small decoders.'
+      },
+      {
+        question: 'What is VLIW and why is it used?',
+        answer: 'VLIW (Very Long Instruction Word) encodes multiple operations in a single large instruction word. The compiler statically schedules parallel operations.优点: Simple hardware (no dynamic scheduling), deterministic timing. 缺点: Code bloat, compiler complexity, poor for dynamic execution.'
       }
     ],
-    summary: ['MIPS shaped the foundation of modern RISC processor design.', 'Understanding historical trade-offs enriches low-level systems engineering.']
+    summary: [
+      'MIPS pioneered RISC concepts and influenced modern architectures.',
+      'Branch delay slots are a pipeline trade-off for performance.',
+      'SPARC register windows accelerate function calls.',
+      'PowerPC uses condition register fields for efficient branching.',
+      'AVR and MSP430 serve ultra-low-power embedded applications.',
+      'Understanding historical architectures enriches systems engineering.',
+      'Each architecture embodies different engineering trade-offs.',
+      'Architecture choice depends on application requirements.'
+    ]
   },
   {
     id: 48,
