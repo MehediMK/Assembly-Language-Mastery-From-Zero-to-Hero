@@ -319,83 +319,512 @@ export const CHAPTERS_LEVEL_6: Chapter[] = [
     ]
   },
   {
-    id: 29,
-    slug: 'chapter-29-project-2-string-manipulation-library',
-    level: 6,
-    levelTitle: 'Advanced Projects',
-    title: 'Chapter 29: Project 2: String Manipulation Library',
-    subtitle: 'Building a Full C-Compatible libstring.asm: strlen, strcpy, strcat, memmove',
-    learningObjectives: [
-      'Design a modular assembly library conforming to System V AMD64 ABI.',
-      'Implement 14 core string and memory functions in pure assembly.',
-      'Handle pointer overlaps safely in memmove using forward/backward rep movsb.',
-      'Build and link test suites with Makefile automation.'
+    "id": 29,
+    "slug": "chapter-29-project-2-string-manipulation-library",
+    "level": 6,
+    "levelTitle": "Advanced Projects",
+    "title": "Chapter 29: Project 2: String Manipulation Library",
+    "subtitle": "Building a Full C-Compatible libstring.asm: strlen, strcpy, strcat, memmove",
+    "learningObjectives": [
+      "Design and implement a reusable assembly library of string and memory manipulation functions.",
+      "Master the use of x86 string instructions (movs, stos, lods, cmps, scas) with repeat prefixes.",
+      "Understand pointer arithmetic and null-terminated string conventions in assembly.",
+      "Handle edge cases: empty strings, overlapping memory, and buffer boundaries.",
+      "Write functions that follow the System V AMD64 ABI for interoperability with C code.",
+      "Create a header file with extern declarations and a test program to validate the library.",
+      "Build and link a multi-file assembly project using NASM and ld.",
+      "Apply techniques for efficient string processing and memory operations."
     ],
-    prerequisites: ['Chapters 1–28'],
-    keyConcepts: [
-      'All string functions assume null-terminated strings and valid pointers.',
-      'memmove checks if dest < src + n to detect overlap and select direction.',
-      'Export symbols with global and declare in stringlib.inc.'
+    "prerequisites": [
+      "Solid understanding of x86-64 assembly, registers, and memory addressing (Chapters 1–13).",
+      "Familiarity with procedures, calling conventions, and stack frames (Chapter 10).",
+      "Knowledge of string instructions and memory operations (Chapter 9).",
+      "Experience with modular programming and linking multiple object files (Chapter 15).",
+      "Basic knowledge of C string functions for reference."
     ],
-    diagramType: 'project_string_lib',
-    sections: [
+    "keyConcepts": [
+      "String library provides common operations on null-terminated character arrays.",
+      "Functions follow the C calling convention: arguments in registers (rdi, rsi, rdx, etc.), return value in rax.",
+      "Null terminator (0) marks the end of strings.",
+      "rep movsb/stosb/cmpsb/scasb accelerate block operations.",
+      "memmove handles overlapping memory correctly by choosing forward or backward copy.",
+      "Return values: strlen returns length, strcpy/strcat return destination pointer, strcmp returns difference, etc.",
+      "Header file (.inc) declares exported functions and constants for use by other modules.",
+      "A test program validates each function and prints results."
+    ],
+    "diagramType": "project_string_lib",
+    "sections": [
       {
-        id: 'sec-29-1',
-        title: '29.1 Safe Overlap memmove Implementation',
-        content: `Handling memory buffer overlap gracefully:`,
-        codeSnippets: [
+        "id": "sec-29-1",
+        "title": "29.1 Project Overview",
+        "content": "We will build a string manipulation library (libstring.asm) containing the following functions:\n\n\n\nAll functions follow the System V AMD64 ABI and are safe to call from C or assembly.\n\nWe will also create:\n- stringlib.inc: header file with extern declarations and any constants.\n- test_strings.asm: a test program that exercises the library and prints results using system calls.\n\nThe library will be assembled separately and linked with the test program.",
+        "tableData": {
+          "headers": [
+            "Function",
+            "Description"
+          ],
+          "rows": [
+            [
+              "strlen",
+              "Return length of null-terminated string."
+            ],
+            [
+              "strcpy",
+              "Copy source string to destination (including null)."
+            ],
+            [
+              "strncpy",
+              "Copy up to n bytes; pad with nulls if source shorter."
+            ],
+            [
+              "strcat",
+              "Concatenate source to end of destination."
+            ],
+            [
+              "strncat",
+              "Concatenate up to n bytes, then add null."
+            ],
+            [
+              "strcmp",
+              "Compare two strings; return difference."
+            ],
+            [
+              "strncmp",
+              "Compare up to n bytes."
+            ],
+            [
+              "strchr",
+              "Find first occurrence of character."
+            ],
+            [
+              "strrchr",
+              "Find last occurrence of character."
+            ],
+            [
+              "strstr",
+              "Find first occurrence of substring."
+            ],
+            [
+              "memset",
+              "Fill memory with a byte."
+            ],
+            [
+              "memcpy",
+              "Copy n bytes (assumes no overlap)."
+            ],
+            [
+              "memmove",
+              "Copy n bytes, handling overlap."
+            ],
+            [
+              "memcmp",
+              "Compare n bytes."
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-29-2",
+        "title": "29.2 Program Design",
+        "content": ""
+      },
+      {
+        "id": "sec-29-2-1",
+        "title": "29.2.1 Conventions",
+        "content": "- All string functions assume pointers are valid and null-terminated where applicable.\n- memset, memcpy, memmove, memcmp operate on raw memory and take an explicit length in rdx.\n- For functions returning a pointer (e.g., strcpy), we return the original destination pointer (passed in rdi) in rax.\n- We use 64-bit registers and the cld instruction to ensure forward direction for string instructions.\n- For memmove, we detect overlap and choose forward or backward copy accordingly."
+      },
+      {
+        "id": "sec-29-2-2",
+        "title": "29.2.2 Efficiency Considerations",
+        "content": "- Use rep movsb for memcpy and strcpy (after computing length) for speed on modern CPUs.\n- Use rep stosb for memset.\n- Use repne scasb for strlen and strchr.\n- For strcmp, use repe cmpsb for byte comparison; alternatively, compare word by word with cmpsq for speed, but byte-wise is simpler.\n- For small counts, explicit loops may be faster due to lower overhead, but for a library, rep is acceptable.\n\nClarification: REP performance depends on CPU, length and alignment; do not promise acceleration for every string instruction. REPE CMPSB does not stop at equal NUL bytes, and REPNE SCASB does not search simultaneously for a character and NUL."
+      },
+      {
+        "id": "sec-29-2-3",
+        "title": "29.2.3 Error Handling",
+        "content": "In C, these functions typically do not check for null pointers; they rely on the caller. We assume valid pointers. If a pointer is null, behavior is undefined (like C). We will not add error checking to keep the library simple and fast."
+      },
+      {
+        "id": "sec-29-3",
+        "title": "29.3 Implementation Details",
+        "content": "We'll implement each function using a mix of string instructions and custom loops."
+      },
+      {
+        "id": "sec-29-3-1",
+        "title": "29.3.1 strlen",
+        "content": "Use repne scasb to scan for null byte.\n\nClarification: The first listing is an unfinished draft with invalid text in an instruction. The corrected full library below provides a complete STRLEN.",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'memmove.asm',
-            code: `global memmove
-section .text
-memmove:
-    push rdi
-    mov rax, rdi        ; destination pointer
-    mov rcx, rdx        ; count
-    cmp rdi, rsi
-    jbe .forward        ; if dest <= src, forward copy is safe
-
-    ; check overlap: dest < src + count
-    lea rdx, [rsi + rcx]
-    cmp rdi, rdx
-    jae .forward        ; no overlap
-
-    ; overlap detected: copy backwards
-    std                 ; set direction flag (backward)
-    lea rsi, [rsi + rcx - 1]
-    lea rdi, [rdi + rcx - 1]
-    rep movsb
-    cld                 ; clear direction flag
-    jmp .done
-
-.forward:
-    cld
-    rep movsb
-
-.done:
-    pop rax             ; return destination
-    ret`
+            "language": "nasm",
+            "title": "strlen: rdi = string",
+            "code": "; strlen: rdi = string\n; returns length in rax (excluding null)\nstrlen:\n    xor al, al          ; search for 0\n    mov rcx, -1         ; max count\n    cld\n    repne scasb\n    ; rdi points one past null; compute length = (rdi - original) - 1\n    mov rax, rdi\n    sub rax, rcx? No, we lost original. Better: save original first.\n    ; We'll use a different method:\n    ; Save rdi, then after scan, compute rdi - original - 1.\n    ; Let's rewrite:",
+            "explanation": "Better implementation:"
+          },
+          {
+            "language": "nasm",
+            "title": "29.3.1 strlen — listing 2",
+            "code": "strlen:\n    push rdi\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    ; rdi points to null terminator? Actually repne scasb increments rdi after each comparison, so when found, rdi points one byte after null.\n    ; So rdi now = original + length + 1\n    pop rsi             ; original pointer\n    mov rax, rdi\n    sub rax, rsi\n    dec rax             ; subtract 1 for null\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-2",
+        "title": "29.3.2 strcpy",
+        "content": "Compute length, then copy including null using rep movsb.\n\nClarification: The original calls strlen with destination in RDI, then loses the destination as the scan advances. Passing the source and preserving both pointers is necessary; the complete library avoids the nested call with a byte loop.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source specimen — see correction: 29.3.2 strcpy — listing 1",
+            "code": "strcpy:\n    ; Save dest in r9\n    mov r9, rdi\n    ; Compute length of src (rsi)\n    push rsi\n    call strlen         ; rax = length of src\n    pop rsi\n    mov rcx, rax\n    inc rcx             ; include null\n    cld\n    rep movsb           ; copy from rsi to rdi\n    mov rax, r9         ; return dest\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-3",
+        "title": "29.3.3 strncpy",
+        "content": "Copy up to n bytes; if source shorter, pad with nulls.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "29.3.3 strncpy — listing 1",
+            "code": "strncpy:\n    mov r9, rdi         ; save dest\n    mov rcx, rdx        ; n\n    xor r8d, r8d        ; copied = 0\n.loop:\n    cmp r8, rdx\n    je .done\n    mov al, [rsi]\n    mov [rdi], al\n    test al, al\n    jz .pad\n    inc rsi\n    inc rdi\n    inc r8\n    jmp .loop\n.pad:\n    ; source ended, pad remaining with null\n    inc rdi\n    inc r8\n    ; fill rest with 0\n    mov al, 0\n    mov rcx, rdx\n    sub rcx, r8\n    cld\n    rep stosb\n.done:\n    mov rax, r9\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-4",
+        "title": "29.3.4 strcat",
+        "content": "Find end of dest, then copy source.\n\nClarification: Neither original strcat version works as written: the source pointer is not passed to strlen, and the second reuses a consumed RCX for unrelated scans/copies. The complete library independently finds the destination terminator and copies through the source NUL.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source specimen — see correction: 29.3.4 strcat — listing 1",
+            "code": "strcat:\n    mov r9, rdi         ; save dest\n    ; find end of dest\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    dec rdi             ; point to null terminator\n    ; copy src\n    mov rsi, rdx? No, second arg is in rsi. We need to preserve rsi before scanning? Actually in our calling convention, dest in rdi, src in rsi.\n    ; rdi currently points at null of dest, so we can copy src there.\n    ; Need to compute length of src.\n    push rsi\n    call strlen\n    pop rsi\n    mov rcx, rax\n    inc rcx             ; include null\n    cld\n    rep movsb           ; copies from rsi to rdi\n    mov rax, r9\n    ret",
+            "explanation": "But careful: we used call strlen which modifies rdi, but we need to preserve the pointer to end of dest. We pushed rsi but not rdi. After repne scasb, rdi points to one past null; we decremented to point at null. Then we call strlen which will modify rdi (as it uses it), so we lose the pointer. We need to save rdi before calling strlen or use a different approach.\n\nBetter: compute length of src first, then find end of dest."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source specimen — see correction: 29.3.4 strcat — listing 2",
+            "code": "strcat:\n    push rdi            ; save dest\n    ; compute length of src\n    push rsi\n    call strlen\n    pop rsi\n    mov rcx, rax        ; length of src\n    inc rcx             ; include null\n    pop rdi             ; restore dest\n    ; find end of dest\n    xor al, al\n    mov rdx, rdi        ; save dest start\n    cld\n    repne scasb         ; scan dest for null\n    dec rdi             ; point to null\n    ; copy src to dest end\n    cld\n    rep movsb\n    mov rax, rdx        ; return dest\n    ret",
+            "explanation": "This works."
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-5",
+        "title": "29.3.5 strncat",
+        "content": "Similar to strcat, but copies at most n bytes, then appends null.\n\nClarification: The first draft overwrites the count and never initializes the scan count. The second listing fixes these points. n bounds bytes read from source, not total destination capacity; leave room for the final NUL.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "29.3.5 strncat — listing 1",
+            "code": "strncat:\n    push rdi\n    ; find end of dest\n    xor al, al\n    mov rdx, rdi\n    cld\n    repne scasb\n    dec rdi             ; point to null\n    ; copy up to n bytes from src\n    mov rcx, rdx        ; n from third arg? In ABI, third arg in rdx. We used rdx as dest start, but we overwrote it. Need to save n before.\n    ; Actually, third argument n is in rdx. We used rdx for dest start, losing n. Let's restructure.",
+            "explanation": "Better implementation:"
+          },
+          {
+            "language": "nasm",
+            "title": "29.3.5 strncat — listing 2",
+            "code": "strncat:\n    push rdi\n    mov r8, rdx         ; save n\n    ; find end of dest\n    xor al, al\n    mov rcx, -1\n    cld\n    repne scasb\n    dec rdi             ; point to null\n    ; copy up to n bytes\n    mov rcx, r8         ; n\n    cld\n.copy_loop:\n    test rcx, rcx\n    jz .done\n    mov al, [rsi]\n    mov [rdi], al\n    test al, al\n    jz .done            ; if null, we're done\n    inc rsi\n    inc rdi\n    dec rcx\n    jmp .copy_loop\n.done:\n    mov byte [rdi], 0   ; null terminate\n    pop rax             ; return dest\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-6",
+        "title": "29.3.6 strcmp",
+        "content": "Compare byte by byte using repe cmpsb, then compute difference.\n\nClarification: REPE CMPSB compares past matching NULs. The original also subtracts second-string byte minus first-string byte, reversing the required sign. Use the NUL-aware unsigned-byte loop in the complete library.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source specimen — see correction: 29.3.6 strcmp — listing 1",
+            "code": "strcmp:\n    xor eax, eax\n    mov rcx, -1\n    cld\n    repe cmpsb\n    je .equal\n    ; find difference: after repe, rsi and rdi point to byte after mismatch\n    movzx eax, byte [rsi-1]\n    movzx edx, byte [rdi-1]\n    sub eax, edx\n    ret\n.equal:\n    xor eax, eax\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-7",
+        "title": "29.3.7 strncmp",
+        "content": "Compare up to n bytes.\n\nClarification: Handle n=0 before any comparison, and stop at a matching NUL. Flags from a zero-iteration REP are stale; pointer-minus-one loads are invalid in that case. The complete library checks these conditions.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source specimen — see correction: 29.3.7 strncmp — listing 1",
+            "code": "strncmp:\n    mov rcx, rdx        ; n\n    cld\n    repe cmpsb\n    je .equal\n    ; if rcx != 0, mismatch occurred\n    movzx eax, byte [rsi-1]\n    movzx edx, byte [rdi-1]\n    sub eax, edx\n    ret\n.equal:\n    xor eax, eax\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-8",
+        "title": "29.3.8 strchr",
+        "content": "Find first occurrence of a character in string. Character passed in sil (low byte of rsi). Return pointer to first occurrence or 0.\n\nClarification: The explanation claiming a nonmatching NUL stops REPNE SCASB is incorrect. It can scan beyond the string. The complete implementation checks target equality and NUL separately.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source specimen — see correction: 29.3.8 strchr — listing 1",
+            "code": "strchr:\n    mov al, sil         ; char to find\n    mov rcx, -1\n    cld\n    repne scasb         ; scan for char or null\n    jne .not_found      ; if not found (ZF=0 means found? Actually repne stops when ZF=1 (match) or rcx=0. If rcx=0 and no match, ZF=0.)\n    ; found: rdi points one past match\n    lea rax, [rdi-1]\n    ret\n.not_found:\n    xor eax, eax\n    ret",
+            "explanation": "Wait, we need to also check for null terminator. The scan will stop at null as well if char is not found before null. The repne scasb stops when al == [rdi] (ZF=1) or rcx == 0. So if we reach null, al != 0 (unless we are searching for null). For normal chars, null will not match al, so the scan stops at null with ZF=0, which we handle as not found. Good."
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-9",
+        "title": "29.3.9 strrchr",
+        "content": "Find last occurrence. Scan forward to find null, then scan backward for char.\n\nClarification: The original starts by searching for the target rather than NUL, then scans backward without a lower bound. The complete implementation tracks the latest matching pointer during one bounded-by-NUL forward pass, including a search for zero.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source specimen — see correction: 29.3.9 strrchr — listing 1",
+            "code": "strrchr:\n    mov al, sil         ; char\n    mov rcx, -1\n    cld\n    repne scasb         ; find null terminator (by searching for 0)\n    ; rdi points one past null\n    dec rdi             ; point to null\n    ; now scan backward for char\n    std                 ; set direction flag (backward)\n    mov rcx, -1\n    repne scasb         ; scan backward for char\n    cld                 ; clear direction flag\n    je .found\n    xor eax, eax\n    ret\n.found:\n    lea rax, [rdi+1]    ; because backward scan leaves rdi one before match? Actually in backward direction, after repne scasb, rdi points one byte before the match. So match is at rdi+1.\n    ret",
+            "explanation": "This is a bit tricky; we need to ensure correctness. We'll test."
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-10",
+        "title": "29.3.10 strstr",
+        "content": "Find first occurrence of substring. Naive algorithm: for each position in haystack, check if needle matches. Use nested loops.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "29.3.10 strstr — listing 1",
+            "code": "strstr:\n    ; rdi = haystack, rsi = needle\n    push r12\n    push r13\n    mov r12, rdi        ; current position in haystack\n    mov r13, rsi        ; save needle\n.outer_loop:\n    mov rdi, r12\n    mov rsi, r13\n    ; compare characters\n.inner_loop:\n    mov al, [rsi]\n    test al, al\n    jz .found           ; reached end of needle, match\n    cmp al, [rdi]\n    jne .not_match\n    inc rsi\n    inc rdi\n    jmp .inner_loop\n.not_match:\n    ; check if we reached end of haystack\n    cmp byte [r12], 0\n    je .not_found\n    inc r12\n    jmp .outer_loop\n.found:\n    mov rax, r12\n    pop r13\n    pop r12\n    ret\n.not_found:\n    xor eax, eax\n    pop r13\n    pop r12\n    ret",
+            "explanation": "This is naive O(n*m); acceptable for a library, but could be optimized with KMP etc."
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-11",
+        "title": "29.3.11 memset",
+        "content": "Fill n bytes with a byte.\n\nClarification: Only the final original version preserves the destination independently of AL. The full library saves the destination in R8 and returns it after the fill.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "29.3.11 memset — listing 1",
+            "code": "memset:\n    mov al, sil         ; byte value (low 8 bits of rsi)\n    mov rcx, rdx        ; count\n    cld\n    rep stosb\n    mov rax, rdi        ; return dest (original rdi before fill)\n    ret",
+            "explanation": "But careful: rep stosb modifies rdi, so we need to return original. Save rdi first."
+          },
+          {
+            "language": "nasm",
+            "title": "29.3.11 memset — listing 2",
+            "code": "memset:\n    mov rax, rdi        ; save dest\n    mov al, sil         ; byte\n    mov rcx, rdx\n    cld\n    rep stosb\n    ret                 ; rax still has original dest? Wait, we used al for byte, overwriting low byte of rax. Need to preserve rax.",
+            "explanation": "Better:"
+          },
+          {
+            "language": "nasm",
+            "title": "29.3.11 memset — listing 3",
+            "code": "memset:\n    push rdi\n    mov al, sil\n    mov rcx, rdx\n    cld\n    rep stosb\n    pop rax\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-12",
+        "title": "29.3.12 memcpy",
+        "content": "Copy n bytes, assume no overlap.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "29.3.12 memcpy — listing 1",
+            "code": "memcpy:\n    push rdi\n    mov rcx, rdx\n    cld\n    rep movsb\n    pop rax\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-13",
+        "title": "29.3.13 memmove",
+        "content": "If destination > source and overlap, copy backward; else copy forward.\n\nClarification: The complete library handles n=0 before computing last-byte addresses and uses destination-source < n to identify backward overlap without adding n to a pointer.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "29.3.13 memmove — listing 1",
+            "code": "memmove:\n    push rdi\n    mov rax, rdi        ; dest\n    mov rcx, rdx        ; n\n    cmp rdi, rsi\n    jbe .forward        ; if dest <= src, forward copy is safe\n    ; check if overlap: dest < src+n?\n    lea rdx, [rsi+rcx]\n    cmp rdi, rdx\n    jae .forward        ; no overlap\n    ; backward copy\n    std                 ; set direction flag\n    lea rsi, [rsi+rcx-1]\n    lea rdi, [rdi+rcx-1]\n    rep movsb\n    cld\n    jmp .done\n.forward:\n    cld\n    rep movsb\n.done:\n    pop rax\n    ret",
+            "explanation": "Need to ensure rsi and rdi are adjusted correctly for backward copy. rep movsb with direction flag set decrements rdi and rsi after each byte. So we set them to end-of-buffer (last byte) and copy backward. Good."
+          }
+        ]
+      },
+      {
+        "id": "sec-29-3-14",
+        "title": "29.3.14 memcmp",
+        "content": "Compare n bytes.\n\nClarification: As with strncmp, explicitly return zero for n=0 and subtract unsigned first-byte minus second-byte at the first mismatch. MEMCMP compares exactly n bytes and does not treat NUL specially.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source specimen — see correction: 29.3.14 memcmp — listing 1",
+            "code": "memcmp:\n    mov rcx, rdx\n    cld\n    repe cmpsb\n    je .equal\n    movzx eax, byte [rsi-1]\n    movzx edx, byte [rdi-1]\n    sub eax, edx\n    ret\n.equal:\n    xor eax, eax\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-29-4",
+        "title": "29.4 Full Library Source Code",
+        "content": "Create stringlib.asm with all functions. We'll include a header stringlib.inc with extern declarations.\n\nstringlib.inc:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "29.4 Full Library Source Code — listing 1",
+            "code": "extern strlen\nextern strcpy\nextern strncpy\nextern strcat\nextern strncat\nextern strcmp\nextern strncmp\nextern strchr\nextern strrchr\nextern strstr\nextern memset\nextern memcpy\nextern memmove\nextern memcmp",
+            "explanation": "stringlib.asm:\nWe'll write the full code as outlined, making sure to preserve registers as needed. We'll add global declarations at top.\n\n(Full code will be provided in the final output, but here we summarize.)"
+          },
+          {
+            "language": "nasm",
+            "title": "Complete stringlib.asm",
+            "code": "; stringlib.asm: NASM ELF64, System V AMD64, valid caller-provided buffers.\n; String copy/concatenation require sufficient capacity and no overlap.\n; Byte comparisons use unsigned char. DF is clear on return.\ndefault rel\nsection .text\nglobal strlen,strcpy,strncpy,strcat,strncat,strcmp,strncmp\nglobal strchr,strrchr,strstr,memset,memcpy,memmove,memcmp\nstrlen:\n    mov rdx,rdi\n    xor eax,eax\n    mov rcx,-1\n    cld\n    repne scasb\n    mov rax,rdi\n    sub rax,rdx\n    dec rax\n    ret\nstrcpy:\n    mov rax,rdi\n.loop:\n    mov dl,[rsi]\n    mov [rdi],dl\n    inc rsi\n    inc rdi\n    test dl,dl\n    jnz .loop\n    ret\nstrncpy:\n    mov r8,rdi\n    mov rcx,rdx\n    cld\n.loop:\n    test rcx,rcx\n    jz .done\n    mov al,[rsi]\n    mov [rdi],al\n    inc rdi\n    dec rcx\n    test al,al\n    jz .pad\n    inc rsi\n    jmp .loop\n.pad:\n    rep stosb\n.done:\n    mov rax,r8\n    ret\nstrcat:\n    mov rax,rdi\n.end:\n    cmp byte [rdi],0\n    je .copy\n    inc rdi\n    jmp .end\n.copy:\n    mov dl,[rsi]\n    mov [rdi],dl\n    inc rsi\n    inc rdi\n    test dl,dl\n    jnz .copy\n    ret\nstrncat:\n    mov rax,rdi\n.end:\n    cmp byte [rdi],0\n    je .copy\n    inc rdi\n    jmp .end\n.copy:\n    test rdx,rdx\n    jz .terminate\n    mov cl,[rsi]\n    test cl,cl\n    jz .terminate\n    mov [rdi],cl\n    inc rdi\n    inc rsi\n    dec rdx\n    jmp .copy\n.terminate:\n    mov byte [rdi],0\n    ret\nstrcmp:\n.loop:\n    movzx eax,byte [rdi]\n    movzx edx,byte [rsi]\n    cmp eax,edx\n    jne .difference\n    test eax,eax\n    jz .difference\n    inc rdi\n    inc rsi\n    jmp .loop\n.difference:\n    sub eax,edx\n    ret\nstrncmp:\n    test rdx,rdx\n    jz .equal\n.loop:\n    movzx eax,byte [rdi]\n    movzx ecx,byte [rsi]\n    cmp eax,ecx\n    jne .difference\n    test eax,eax\n    jz .equal\n    inc rdi\n    inc rsi\n    dec rdx\n    jnz .loop\n.equal:\n    xor eax,eax\n    ret\n.difference:\n    sub eax,ecx\n    ret\nstrchr:\n.loop:\n    mov al,[rdi]\n    cmp al,sil\n    je .found\n    test al,al\n    jz .missing\n    inc rdi\n    jmp .loop\n.found:\n    mov rax,rdi\n    ret\n.missing:\n    xor eax,eax\n    ret\nstrrchr:\n    xor eax,eax\n.loop:\n    mov dl,[rdi]\n    cmp dl,sil\n    cmove rax,rdi\n    inc rdi\n    test dl,dl\n    jnz .loop\n    ret\nstrstr:\n    mov rax,rdi\n.outer:\n    mov r8,rax\n    mov r9,rsi\n.inner:\n    mov dl,[r9]\n    test dl,dl\n    jz .found\n    cmp dl,[r8]\n    jne .next\n    inc r8\n    inc r9\n    jmp .inner\n.next:\n    cmp byte [rax],0\n    je .missing\n    inc rax\n    jmp .outer\n.found:\n    ret\n.missing:\n    xor eax,eax\n    ret\nmemset:\n    mov r8,rdi\n    mov eax,esi\n    mov rcx,rdx\n    cld\n    rep stosb\n    mov rax,r8\n    ret\nmemcpy:\n    mov rax,rdi\n    mov rcx,rdx\n    cld\n    rep movsb\n    ret\nmemmove:\n    mov rax,rdi\n    mov rcx,rdx\n    cld\n    test rcx,rcx\n    jz .done\n    cmp rdi,rsi\n    jbe .forward\n    mov r8,rdi\n    sub r8,rsi\n    cmp r8,rcx\n    jae .forward\n    lea rdi,[rdi+rcx-1]\n    lea rsi,[rsi+rcx-1]\n    std\n    rep movsb\n    cld\n    ret\n.forward:\n    rep movsb\n.done:\n    ret\nmemcmp:\n    test rdx,rdx\n    jz .equal\n.loop:\n    movzx eax,byte [rdi]\n    movzx ecx,byte [rsi]\n    cmp eax,ecx\n    jne .difference\n    inc rdi\n    inc rsi\n    dec rdx\n    jnz .loop\n.equal:\n    xor eax,eax\n    ret\n.difference:\n    sub eax,ecx\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "All 14 exported functions are defined. Standard caller preconditions apply: accessible source, sufficient destination capacity, valid n-byte regions, and no overlap except for memmove. Scalar loops intentionally avoid speculative word reads past NUL."
+          },
+          {
+            "language": "c",
+            "title": "C declarations: stringlib.h",
+            "code": "#ifndef STRINGLIB_H\n#define STRINGLIB_H\n#include <stddef.h>\n/* C test build prefixes exports with asm_ to avoid replacing libc symbols. */\nsize_t asm_strlen(const char *);\nchar *asm_strcpy(char *,const char *);\nchar *asm_strncpy(char *,const char *,size_t);\nchar *asm_strcat(char *,const char *);\nchar *asm_strncat(char *,const char *,size_t);\nint asm_strcmp(const char *,const char *);\nint asm_strncmp(const char *,const char *,size_t);\nchar *asm_strchr(const char *,int);\nchar *asm_strrchr(const char *,int);\nchar *asm_strstr(const char *,const char *);\nvoid *asm_memset(void *,int,size_t);\nvoid *asm_memcpy(void *,const void *,size_t);\nvoid *asm_memmove(void *,const void *,size_t);\nint asm_memcmp(const void *,const void *,size_t);\n#endif",
+            "explanation": "For C tests, objcopy prefixes the object symbols with asm_ so the educational routines do not interpose on libc. The original stringlib.inc continues to work with the unprefixed object."
+          }
+        ]
+      },
+      {
+        "id": "sec-29-5",
+        "title": "29.5 Test Program",
+        "content": "We'll create test_strings.asm that calls each function and prints results. For simplicity, we'll use printf from libc? But we want to avoid libc, so we'll use write syscall and our own itoa for numbers. We'll include a small itoa in the test program, or just exit with codes and verify manually. For better demonstration, we'll print strings and numbers.\n\nWe'll write a helper print_string and print_number using write.\n\nThe test program will:\n- Test strlen on \"Hello\" -> 5\n- Test strcpy copying \"World\" to buffer\n- Test strcat concatenating \"Hello\" and \" World\"\n- Test strcmp on equal strings -> 0\n- Test strchr finding 'l' in \"Hello\" -> pointer to first 'l'\n- Test strstr finding \"ell\" in \"Hello\" -> pointer\n- Test memset and memcpy\n- Test memmove overlap\n\nWe'll print results as strings or numbers.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Complete test_strings.asm",
+            "code": "; test_strings.asm -- raw-syscall smoke test; C companion covers all 14 APIs.\n%include \"stringlib.inc\"\ndefault rel\nsection .data\nhello db 'Hello',0\nworld db ' World',0\nell db 'ell',0\nexpected db 'Hello World',0\nok db 'String library smoke checks passed',10\noklen equ $-ok\nsection .bss\nbuffer resb 64\nsection .text\nglobal _start\n_start:\n    lea rdi,[hello]\n    call strlen\n    cmp rax,5\n    jne fail\n    lea rdi,[buffer]\n    lea rsi,[hello]\n    call strcpy\n    lea rdi,[buffer]\n    lea rsi,[world]\n    call strcat\n    lea rdi,[buffer]\n    lea rsi,[expected]\n    call strcmp\n    test eax,eax\n    jnz fail\n    lea rdi,[hello]\n    mov esi,'l'\n    call strchr\n    lea rdx,[hello+2]\n    cmp rax,rdx\n    jne fail\n    lea rdi,[hello]\n    lea rsi,[ell]\n    call strstr\n    lea rdx,[hello+1]\n    cmp rax,rdx\n    jne fail\n    lea rdi,[buffer]\n    mov esi,'X'\n    mov edx,16\n    call memset\n    cmp byte [buffer+15],'X'\n    jne fail\n    lea rdi,[buffer]\n    lea rsi,[hello]\n    mov edx,6\n    call memcpy\n    lea rdi,[buffer+1]\n    lea rsi,[buffer]\n    mov edx,6\n    call memmove\n    lea rdi,[buffer+1]\n    lea rsi,[hello]\n    call strcmp\n    test eax,eax\n    jnz fail\n    mov eax,1\n    mov edi,1\n    lea rsi,[ok]\n    mov edx,oklen\n    syscall\n    xor edi,edi\n    jmp quit\nfail:\n    mov edi,1\nquit:\n    mov eax,60\n    syscall\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Raw Linux syscall smoke test for the originally listed demonstrations. Returns zero and prints a success message when the checks pass; returns one on a failed assertion."
+          },
+          {
+            "language": "c",
+            "title": "Complete C regression: test_strings.c",
+            "code": "#include \"stringlib.h\"\n#include <assert.h>\n#include <stdio.h>\n#include <string.h>\nint main(void) {\n    char b[64], c[64]; const char s[]=\"Hello\";\n    assert(asm_strlen(s)==5 && asm_strlen(\"\")==0);\n    assert(asm_strcpy(b,\"World\")==b && !strcmp(b,\"World\"));\n    memset(b,0x55,sizeof b);\n    assert(asm_strncpy(b,\"a\",5)==b && !memcmp(b,\"a\\0\\0\\0\\0\",5) && b[5]==0x55);\n    asm_strncpy(b,\"abcdef\",3); assert(!memcmp(b,\"abc\",3));\n    asm_strcpy(b,\"Hello\"); assert(asm_strcat(b,\" World\")==b && !strcmp(b,\"Hello World\"));\n    asm_strcpy(b,\"A\"); assert(asm_strncat(b,\"BCD\",2)==b && !strcmp(b,\"ABC\"));\n    assert(asm_strcmp(\"same\",\"same\")==0 && asm_strcmp(\"a\",\"b\")<0);\n    assert(asm_strcmp(\"\\xff\",\"\\x01\")>0);\n    assert(asm_strncmp(\"a\",\"b\",0)==0 && asm_strncmp(\"ab\",\"ac\",1)==0);\n    assert(asm_strncmp(\"a\",\"aa\",8)<0);\n    assert(asm_strchr(s,'l')==s+2 && asm_strchr(s,'z')==NULL && asm_strchr(s,0)==s+5);\n    assert(asm_strrchr(s,'l')==s+3 && asm_strrchr(s,'z')==NULL && asm_strrchr(s,0)==s+5);\n    assert(asm_strstr(s,\"ell\")==s+1 && asm_strstr(s,\"\")==s && !asm_strstr(s,\"Hello!\"));\n    assert(asm_memset(b,0xAB,8)==b); for(int i=0;i<8;i++)assert((unsigned char)b[i]==0xAB);\n    assert(asm_memcpy(c,b,8)==c && !memcmp(c,b,8));\n    assert(asm_memcmp(\"\\xff\",\"\\x01\",1)>0 && asm_memcmp(\"a\",\"b\",0)==0);\n    for (size_t src=0;src<16;src++) for (size_t dst=0;dst<16;dst++)\n        for (size_t n=0;n<=16;n++) {\n            for (size_t i=0;i<64;i++) b[i]=c[i]=(char)i;\n            memmove(c+dst,c+src,n);\n            assert(asm_memmove(b+dst,b+src,n)==b+dst);\n            assert(!memcmp(b,c,sizeof b));\n        }\n    puts(\"All 14 string/memory functions passed, including overlap cases.\");\n    return 0;\n}",
+            "explanation": "Checks all 14 APIs, return pointers, zero counts, unsigned comparisons, NUL searches, strncpy padding, and 4352 overlapping move cases against libc."
+          }
+        ]
+      },
+      {
+        "id": "sec-29-6",
+        "title": "29.6 Build and Test",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "29.6 Build and Test — listing 1",
+            "code": "nasm -f elf64 stringlib.asm -o stringlib.o\nnasm -f elf64 test_strings.asm -o test_strings.o\nld test_strings.o stringlib.o -o test_strings\n./test_strings",
+            "explanation": "Expected output will show results."
+          },
+          {
+            "language": "bash",
+            "title": "Build and run the C comparison",
+            "code": "nasm -f elf64 stringlib.asm -o stringlib.o\nobjcopy --prefix-symbols=asm_ stringlib.o stringlib-c.o\ngcc -O2 -Wall -Wextra test_strings.c stringlib-c.o -o test_strings_c\n./test_strings_c",
+            "explanation": "Save the header and test source beside the library. The pure-assembly build above uses stringlib.o; this C build uses stringlib-c.o."
+          }
+        ]
+      },
+      {
+        "id": "sec-29-7",
+        "title": "29.7 Possible Extensions",
+        "content": "- Add strdup (allocate memory and copy) using brk or mmap.\n- Implement strtok for tokenizing strings.\n- Add case-insensitive comparison (strcasecmp).\n- Optimize strcmp using word-wise comparison (cmpsq).\n- Implement strstr using Boyer-Moore or KMP for efficiency.\n- Add strlcpy/strlcat for bounded versions.\n\nOriginal source solution placeholder: (Solutions provided for exercises, including code snippets and explanations.)",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Complete exercise support: extensions.asm",
+            "code": "; extensions.asm -- links with prefixed stringlib-c.o and libc using gcc.\ndefault rel\nsection .bss\nnext_token resq 1\nsection .text\nglobal asm_strdup,asm_strtok,asm_strcasecmp,asm_strlen_loop\nextern malloc,asm_strlen,asm_memcpy\nasm_strdup:\n    push rbx\n    push r12\n    sub rsp,8\n    mov rbx,rdi\n    call asm_strlen\n    add rax,1\n    jc .failed\n    mov r12,rax\n    mov rdi,rax\n    call malloc wrt ..plt\n    test rax,rax\n    jz .done\n    mov rdi,rax\n    mov rsi,rbx\n    mov rdx,r12\n    call asm_memcpy\n    jmp .done\n.failed:\n    xor eax,eax\n.done:\n    add rsp,8\n    pop r12\n    pop rbx\n    ret\n; Destructive strtok with static state, not reentrant/thread-safe.\n; RDI=mutable string or NULL, RSI=NUL-terminated delimiter set each call.\nasm_strtok:\n    test rdi,rdi\n    jnz .skip\n    mov rdi,[next_token]\n    test rdi,rdi\n    jz .none\n.skip:\n    mov dl,[rdi]\n    test dl,dl\n    jz .none\n    mov rcx,rsi\n.skip_set:\n    mov r8b,[rcx]\n    test r8b,r8b\n    jz .begin\n    cmp dl,r8b\n    je .skip_char\n    inc rcx\n    jmp .skip_set\n.skip_char:\n    inc rdi\n    jmp .skip\n.begin:\n    mov rax,rdi\n.scan:\n    mov dl,[rdi]\n    test dl,dl\n    jz .last\n    mov rcx,rsi\n.scan_set:\n    mov r8b,[rcx]\n    test r8b,r8b\n    jz .advance\n    cmp dl,r8b\n    je .split\n    inc rcx\n    jmp .scan_set\n.advance:\n    inc rdi\n    jmp .scan\n.split:\n    mov byte [rdi],0\n    inc rdi\n    mov [next_token],rdi\n    ret\n.last:\n    mov qword [next_token],0\n    ret\n.none:\n    mov qword [next_token],0\n    xor eax,eax\n    ret\n; ASCII-only comparison, not locale-aware POSIX strcasecmp.\nasm_strcasecmp:\n.loop:\n    movzx eax,byte [rdi]\n    movzx edx,byte [rsi]\n    cmp eax,'A'\n    jb .second\n    cmp eax,'Z'\n    ja .second\n    add eax,32\n.second:\n    cmp edx,'A'\n    jb .compare\n    cmp edx,'Z'\n    ja .compare\n    add edx,32\n.compare:\n    cmp eax,edx\n    jne .difference\n    test eax,eax\n    jz .difference\n    inc rdi\n    inc rsi\n    jmp .loop\n.difference:\n    sub eax,edx\n    ret\nasm_strlen_loop:\n    xor eax,eax\n.loop:\n    cmp byte [rdi+rax],0\n    je .done\n    inc rax\n    jmp .loop\n.done:\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Exports asm_strdup, asm_strtok, asm_strcasecmp and asm_strlen_loop. Links with the prefixed core object and libc. ASCII case folding is explicit; strtok uses shared static state and modifies its input."
+          },
+          {
+            "language": "bash",
+            "title": "Exercise support build",
+            "code": "nasm -f elf64 extensions.asm -o extensions.o\n# Link any exercise C file with:\n# gcc -O2 exercise.c extensions.o stringlib-c.o -o exercise",
+            "explanation": "The malloc-based duplicate is released with free. The educational strtok is not reentrant; do not use it concurrently or on string literals."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-29-1',
-        title: 'Exercise 29.1: Case-Insensitive strcmp (strcasecmp)',
-        description: 'Implement strcasecmp by normalizing letters with and al, 0xDF or adding 32.',
-        solution: `strcasecmp:\n.loop:\n    mov al, [rsi]\n    mov dl, [rdi]\n    ; convert lowercase to uppercase\n    cmp al, 'a'; jb .no1; cmp al, 'z'; ja .no1; sub al, 32\n.no1:\n    cmp dl, 'a'; jb .no2; cmp dl, 'z'; ja .no2; sub dl, 32\n.no2:\n    cmp al, dl\n    jne .diff\n    test al, al; jz .equal\n    inc rsi; inc rdi; jmp .loop`,
-        solutionLanguage: 'nasm'
+        "id": "ex-29-1",
+        "title": "Exercise 29.1: Implement `strdup`",
+        "description": "Write a function strdup that allocates memory (using malloc or brk) and copies the source string into it. Return pointer to new string.",
+        "solution": "#include <assert.h>\n#include <stdlib.h>\n#include <string.h>\nextern char *asm_strdup(const char *);\nint main(void) {\n    char source[]=\"duplicate me\";\n    char *copy=asm_strdup(source);\n    assert(copy && copy!=source && strcmp(copy,source)==0);\n    source[0]='D'; assert(copy[0]=='d'); free(copy);\n    copy=asm_strdup(\"\"); assert(copy && copy[0]==0); free(copy);\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Use the full asm_strdup in extensions.asm. It preserves callee-saved registers, aligns calls, checks allocation failure, and copies the terminator. Link with extensions.o and stringlib-c.o using gcc; allocated memory belongs to the caller."
+      },
+      {
+        "id": "ex-29-2",
+        "title": "Exercise 29.2: Implement `strtok`",
+        "description": "Write strtok that tokenizes a string based on delimiters. It should maintain a static pointer for subsequent calls.",
+        "solution": "#include <assert.h>\n#include <stddef.h>\n#include <string.h>\nextern char *asm_strtok(char *,const char *);\nint main(void) {\n    char text[]=\" ,one,,two;three;\";\n    assert(!strcmp(asm_strtok(text,\" ,;\"),\"one\"));\n    assert(!strcmp(asm_strtok(NULL,\" ,;\"),\"two\"));\n    assert(!strcmp(asm_strtok(NULL,\" ,;\"),\"three\"));\n    assert(asm_strtok(NULL,\" ,;\")==NULL);\n    char whole[]=\"a,b\";assert(!strcmp(asm_strtok(whole,\"\"),\"a,b\"));\n    char empty[]=\"\";assert(asm_strtok(empty,\",\")==NULL);\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Use asm_strtok from the complete extensions.asm. It skips delimiter runs, inserts NULs, saves the next position and accepts a fresh delimiter set on every call. Its static pointer makes concurrent or nested tokenization unsuitable; a reentrant variant would accept caller-owned state."
+      },
+      {
+        "id": "ex-29-3",
+        "title": "Exercise 29.3: Optimize `strlen`",
+        "description": "Compare performance of repne scasb version vs a simple loop. Write two versions and benchmark with perf.",
+        "solution": "#define _POSIX_C_SOURCE 200809L\n#include \"stringlib.h\"\n#include <assert.h>\n#include <stdio.h>\n#include <string.h>\n#include <time.h>\nextern size_t asm_strlen_loop(const char *);\nstatic double now(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return t.tv_sec+t.tv_nsec*1e-9;}\nint main(void) {\n    char s[4097]; memset(s,'a',sizeof s); s[4096]=0;\n    size_t lengths[]={0,1,15,64,1024,4096};\n    for(size_t k=0;k<sizeof lengths/sizeof lengths[0];k++) {\n        size_t n=lengths[k];s[n]=0;\n        assert(asm_strlen(s)==n && asm_strlen_loop(s)==n);\n        for(int mode=0;mode<2;mode++) {\n            size_t checksum=0;double start=now();\n            for(size_t i=0;i<20000;i++) checksum+=mode?asm_strlen_loop(s):asm_strlen(s);\n            printf(\"n=%zu mode=%s seconds=%.6f checksum=%zu\\n\",n,mode?\"loop\":\"scas\",now()-start,checksum);\n            assert(checksum==20000*n);\n        }\n        s[n]='a';\n    }\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Save as bench.c and link with extensions.o/stringlib-c.o. The benchmark measures both complete NASM routines over multiple lengths and checks results outside and inside timed loops. Repeat runs and report CPU/compiler/lengths. Optional: perf stat -e cycles,instructions ./bench when permitted; elapsed time works without performance-counter access."
+      },
+      {
+        "id": "ex-29-4",
+        "title": "Exercise 29.4: Add `strcasecmp`",
+        "description": "Implement case-insensitive comparison by converting characters to lowercase before comparing.",
+        "solution": "#include <assert.h>\nextern int asm_strcasecmp(const char *,const char *);\nint main(void) {\n    assert(asm_strcasecmp(\"Hello\",\"hELLo\")==0);\n    assert(asm_strcasecmp(\"a\",\"B\")<0);\n    assert(asm_strcasecmp(\"Z\",\"y\")>0);\n    assert(asm_strcasecmp(\"\",\"\")==0);\n    assert(asm_strcasecmp(\"[\",\"{\")<0);\n    assert(asm_strcasecmp(\"\\xff\",\"\\x01\")>0);\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "The full ASCII-only routine appears in extensions.asm. It folds only A–Z, so punctuation and high bytes remain unchanged; blindly OR-ing 0x20 would also alter nonletters. Compare unsigned byte values and stop at NUL. Locale and Unicode handling require a different contract."
+      },
+      {
+        "id": "ex-29-5",
+        "title": "Exercise 29.5: Test `memmove` with Overlap",
+        "description": "Write a test program that copies a buffer to an overlapping destination and verifies correctness using both forward and backward overlap scenarios.",
+        "solution": "#include \"stringlib.h\"\n#include <assert.h>\n#include <stdio.h>\n#include <string.h>\nint main(void) {\n    char b[64], c[64]; const char s[]=\"Hello\";\n    assert(asm_strlen(s)==5 && asm_strlen(\"\")==0);\n    assert(asm_strcpy(b,\"World\")==b && !strcmp(b,\"World\"));\n    memset(b,0x55,sizeof b);\n    assert(asm_strncpy(b,\"a\",5)==b && !memcmp(b,\"a\\0\\0\\0\\0\",5) && b[5]==0x55);\n    asm_strncpy(b,\"abcdef\",3); assert(!memcmp(b,\"abc\",3));\n    asm_strcpy(b,\"Hello\"); assert(asm_strcat(b,\" World\")==b && !strcmp(b,\"Hello World\"));\n    asm_strcpy(b,\"A\"); assert(asm_strncat(b,\"BCD\",2)==b && !strcmp(b,\"ABC\"));\n    assert(asm_strcmp(\"same\",\"same\")==0 && asm_strcmp(\"a\",\"b\")<0);\n    assert(asm_strcmp(\"\\xff\",\"\\x01\")>0);\n    assert(asm_strncmp(\"a\",\"b\",0)==0 && asm_strncmp(\"ab\",\"ac\",1)==0);\n    assert(asm_strncmp(\"a\",\"aa\",8)<0);\n    assert(asm_strchr(s,'l')==s+2 && asm_strchr(s,'z')==NULL && asm_strchr(s,0)==s+5);\n    assert(asm_strrchr(s,'l')==s+3 && asm_strrchr(s,'z')==NULL && asm_strrchr(s,0)==s+5);\n    assert(asm_strstr(s,\"ell\")==s+1 && asm_strstr(s,\"\")==s && !asm_strstr(s,\"Hello!\"));\n    assert(asm_memset(b,0xAB,8)==b); for(int i=0;i<8;i++)assert((unsigned char)b[i]==0xAB);\n    assert(asm_memcpy(c,b,8)==c && !memcmp(c,b,8));\n    assert(asm_memcmp(\"\\xff\",\"\\x01\",1)>0 && asm_memcmp(\"a\",\"b\",0)==0);\n    for (size_t src=0;src<16;src++) for (size_t dst=0;dst<16;dst++)\n        for (size_t n=0;n<=16;n++) {\n            for (size_t i=0;i<64;i++) b[i]=c[i]=(char)i;\n            memmove(c+dst,c+src,n);\n            assert(asm_memmove(b+dst,b+src,n)==b+dst);\n            assert(!memcmp(b,c,sizeof b));\n        }\n    puts(\"All 14 string/memory functions passed, including overlap cases.\");\n    return 0;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "The full test program in section 29.5 exercises both overlap directions, equal pointers and zero lengths using a separate libc reference buffer. It checks all bytes, not just the return pointer. Build using the section 29.6 C commands. The assembly routine restores DF after backward copying."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why does memcpy produce undefined behavior on overlapping buffers?',
-        answer: 'memcpy uses forward copying (cld; rep movsb). If destination is higher than source and overlaps, writing earlier bytes overwrites unread source bytes ahead, corrupting the copy. memmove detects this and copies backward.'
+        "question": "How does strlen work using repne scasb? Explain the register setup and result calculation.",
+        "answer": "Set AL=0, RCX to a large count, clear DF, and scan from RDI using REPNE SCASB. It advances past the NUL; subtract the original pointer and one. This requires an accessible terminated string, not just RCX=-1."
+      },
+      {
+        "question": "Why is it necessary to save rdi before calling strlen in strcpy? What would happen if you didn't?",
+        "answer": "STRLEN takes its input in RDI and may change caller-saved registers. Save the destination, pass the source in RDI, retain the source pointer and length, then restore the copy destination. The original source forgets to pass the source. The corrected strcpy uses a direct byte loop."
+      },
+      {
+        "question": "How does memmove determine whether to copy forward or backward? Why is this important?",
+        "answer": "Copy forward when destination is below/equal to source or outside its range. When destination is above source and destination-source < n, copy backward from the last byte. Otherwise a forward copy can overwrite unread source bytes. Restore DF afterward."
+      },
+      {
+        "question": "What is the difference between strcpy and strncpy? When would you use strncpy?",
+        "answer": "STRCPY copies through the NUL. STRNCPY writes exactly n bytes, pads short sources with zeros, and may omit termination when the source length is at least n. It fits fixed-width fields; it is not a general safe-string substitute. Capacity is always the caller’s responsibility."
+      },
+      {
+        "question": "Explain how strchr uses repne scasb and how it detects not found.",
+        "answer": "REPNE SCASB searches only for AL or count exhaustion; it does not also stop at NUL for a nonzero target. Use a byte loop testing both conditions, or determine a safe bounded count first. Searching for NUL must return the terminator pointer."
+      },
+      {
+        "question": "In strcat, why do you need to find the end of the destination before copying? Show the assembly steps.",
+        "answer": "Concatenation replaces the old destination terminator with source data. Save the original destination, advance a temporary pointer until byte zero, copy source bytes including their terminator, and return the saved destination. Ensure capacity for both lengths plus one."
+      },
+      {
+        "question": "How would you implement strcmp using word-wise comparison instead of byte-wise? What are the trade-offs?",
+        "answer": "Word loads can reduce loop iterations but require zero-byte detection, mismatch-byte localization and care around page boundaries. Compare unsigned bytes in lexical order; comparing little-endian qwords numerically gives the wrong ordering. Do not read inaccessible bytes past a terminator."
+      },
+      {
+        "question": "What is the purpose of the direction flag in string instructions? How do you set/clear it?",
+        "answer": "DF=0 advances RSI/RDI, DF=1 decrements them for string instructions. CLD clears and STD sets it. The SysV ABI expects DF clear at entry and return, so a backward memmove must execute CLD before returning."
+      },
+      {
+        "question": "Describe how strstr works in a naive implementation. What is its time complexity?",
+        "answer": "For each candidate haystack position, compare successive bytes with the needle until mismatch or needle NUL. Empty needle matches the starting pointer; reaching haystack NUL without a match fails. Worst-case work is O(n*m)."
+      },
+      {
+        "question": "How does the ABI specify the return value for functions like strcpy and memset? Why is it useful?",
+        "answer": "Pointer results return in RAX under SysV AMD64. STRCPY and MEMSET return the original destination, enabling chained use. REP changes RDI, and storing a fill byte into AL can corrupt a pointer saved in RAX; keep it elsewhere until returning."
       }
     ],
-    summary: ['libstring provides clean C-compatible low-level memory utilities.', 'Direction flag management is critical for backwards memory copies.']
+    "summary": [
+      "A string library in assembly provides low-level implementations of common C string functions.",
+      "String instructions with repeat prefixes offer efficient block operations.",
+      "Pointer arithmetic and null-terminated string handling are fundamental.",
+      "The ABI must be followed for interoperability.",
+      "Testing with a separate program validates the library."
+    ]
   },
   {
     id: 30,
