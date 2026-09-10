@@ -1917,61 +1917,588 @@ loop:
       'Abstract architecture-specific instruction and register differences.',
       'Use the C preprocessor (cpp) with uppercase .S files to conditionally target architectures.',
       'Construct a portable system call wrapper layer across x86-64, ARM64, and RISC-V.',
-      'Implement a cross-platform portable strlen routine.'
+      'Implement a cross-platform portable strlen routine.',
+      'Understand portable assembly design principles.',
+      'Learn macro techniques for cross-platform code.',
+      'Study build system integration for multi-architecture projects.',
+      'Explore testing and validation strategies.'
     ],
     prerequisites: ['Chapters 1–48'],
     keyConcepts: [
-      'Conditional compilation (#ifdef __x86_64__) selects target-specific code at build time.',
-      'Macros abstract register names (REG_A) and opcode mnemonics.',
-      'System call abstractions bridge differences in syscall numbers and invocation instructions.'
+      'Conditional compilation: #ifdef selects target-specific code at build time.',
+      'Macros: Abstract register names and opcode mnemonics.',
+      'System call abstractions: Bridge differences in syscall numbers and invocation.',
+      'Build systems: Makefile, CMake for multi-architecture builds.',
+      'Testing: Cross-compilation and emulation for validation.',
+      'Portability vs performance: Trade-offs in abstraction layers.',
+      'ABI compatibility: Ensure consistent calling conventions.',
+      'Documentation: Essential for portable assembly projects.'
     ],
     diagramType: 'portable_assembly',
     sections: [
       {
         id: 'sec-49-1',
-        title: '49.1 Portable "Hello, World!" for x86-64, ARM64, and RISC-V',
-        content: `A single portable assembly file that compiles and runs on x86-64, ARM64, and RISC-V:`,
+        title: '49.1 Portable Assembly Design Principles',
+        content: `Writing assembly that works across multiple architectures requires careful abstraction.
+
+### Design Principles
+1. **Separate platform-specific code**: Use #ifdef for different architectures
+2. **Abstract register names**: Define macros for common registers
+3. **Create function wrappers**: Consistent API across platforms
+4. **Use portable data types**: Fixed-width types (uint32_t, int64_t)
+5. **Document assumptions**: Architecture-specific behaviors
+6. **Test thoroughly**: Validate on all target platforms
+
+### Why Portable Assembly?
+• Single codebase for multiple architectures
+• Reduced maintenance burden
+• Easier testing and validation
+• Leverages architecture-specific optimizations
+• Enables cross-platform libraries
+
+### Challenges
+1. **Different instruction sets**: x86 CISC vs ARM/RISC-V MIPS
+2. **Register naming**: Different names across architectures
+3. **Calling conventions**: Different argument passing rules
+4. **System calls**: Different numbers and invocation methods
+5. **Data types**: Size differences (32-bit vs 64-bit)
+6. **Endianness**: Little vs big endian
+
+### Solutions
+1. **Preprocessor macros**: #ifdef for architecture detection
+2. **Register abstraction**: Define portable register names
+3. **Function wrappers**: Consistent API with arch-specific implementations
+4. **System call layer**: Abstract syscall differences
+5. **Type definitions**: Use stdint.h types
+6. **Byte order macros**: Check endianness at compile time
+
+### Project Structure
+```
+project/
+├── include/
+│   ├── asm/
+│   │   ├── x86_64/
+│   │   │   └── asm.h
+│   │   ├── aarch64/
+│   │   │   └── asm.h
+│   │   └── riscv/
+│   │       └── asm.h
+│   └── portable.h
+├── src/
+│   ├── x86_64/
+│   │   └── syscall_x86_64.S
+│   ├── aarch64/
+│   │   └── syscall_aarch64.S
+│   ├── riscv/
+│   │   └── syscall_riscv.S
+│   └── portable/
+│       └── strlen.S
+└── Makefile
+````,
+        codeSnippets: []
+      },
+      {
+        id: 'sec-49-2',
+        title: '49.2 Conditional Compilation and Macros',
+        content: `Using C preprocessor for architecture-specific code.
+
+### Architecture Detection Macros
+GCC/Clang provide predefined macros:
+```c
+#if defined(__x86_64__)
+    // x86-64 code
+#elif defined(__aarch64__)
+    // ARM64 code
+#elif defined(__riscv) && (__riscv_xlen == 64)
+    // RISC-V 64-bit code
+#elif defined(__mips__)
+    // MIPS code
+#else
+    #error "Unsupported architecture"
+#endif
+```
+
+### Register Abstraction Macros
+```c
+// x86-64
+#define REG_A  rax
+#define REG_B  rbx
+#define REG_C  rcx
+#define REG_D  rdx
+#define REG_DI rdi
+#define REG_SI rsi
+
+// ARM64
+#define REG_A  x0
+#define REG_B  x1
+#define REG_C  x2
+#define REG_D  x3
+#define REG_DI x0
+#define REG_SI x1
+
+// RISC-V
+#define REG_A  a0
+#define REG_B  a1
+#define REG_C  a2
+#define REG_D  a3
+#define REG_DI a0
+#define REG_SI a1
+```
+
+### Instruction Abstraction Macros
+```c
+// Return instruction
+#if defined(__x86_64__)
+    #define RET ret
+#elif defined(__aarch64__)
+    #define RET ret
+#elif defined(__riscv)
+    #define RET ret
+#endif
+
+// Load immediate
+#if defined(__x86_64__)
+    #define LI(reg, imm) mov reg, imm
+#elif defined(__aarch64__)
+    #define LI(reg, imm) mov reg, #imm
+#elif defined(__riscv)
+    #define LI(reg, imm) li reg, imm
+#endif
+
+// System call
+#if defined(__x86_64__)
+    #define SYSCALL syscall
+#elif defined(__aarch64__)
+    #define SYSCALL svc #0
+#elif defined(__riscv)
+    #define SYSCALL ecall
+#endif
+```
+
+### Function Prologue/Epilogue Macros
+```c
+// Function prologue
+#if defined(__x86_64__)
+    #define FUNC_PROLOGUE \
+        push rbp; \
+        mov rbp, rsp
+#elif defined(__aarch64__)
+    #define FUNC_PROLOGUE \
+        stp x29, x30, [sp, #-16]!; \
+        mov x29, sp
+#elif defined(__riscv)
+    #define FUNC_PROLOGUE \
+        addi sp, sp, -16; \
+        sd ra, 8(sp); \
+        sd s0, 0(sp)
+#endif
+
+// Function epilogue
+#if defined(__x86_64__)
+    #define FUNC_EPILOGUE \
+        pop rbp; \
+        ret
+#elif defined(__aarch64__)
+    #define FUNC_EPILOGUE \
+        ldp x29, x30, [sp], #16; \
+        ret
+#elif defined(__riscv)
+    #define FUNC_EPILOGUE \
+        ld s0, 0(sp); \
+        ld ra, 8(sp); \
+        addi sp, sp, 16; \
+        ret
+#endif
+```
+
+### Data Section Macros
+```c
+// Data declaration
+#if defined(__x86_64__) || defined(__aarch64__) || defined(__riscv)
+    #define QUAD .quad
+    #define WORD .word
+    #define HALF .hword
+    #define BYTE .byte
+    #define ASCIZ .asciz
+    #define ALIGN .align
+#endif
+
+// Section directives
+#define SECTION_DATA .section .data
+#define SECTION_TEXT .section .text
+#define SECTION_BSS  .section .bss
+````,
         codeSnippets: [
           {
             language: 'c',
-            title: 'portable_defs.h',
-            code: `#if defined(__x86_64__)
-#define SYS_WRITE(fd, buf, len) \\
-    mov rax, 1; mov rdi, fd; mov rsi, buf; mov rdx, len; syscall
-#define SYS_EXIT(code) \\
-    mov rax, 60; mov rdi, code; syscall
+            title: 'portable_macros.h',
+            code: `#ifndef PORTABLE_ASM_MACROS_H
+#define PORTABLE_ASM_MACROS_H
 
+// Architecture detection
+#if defined(__x86_64__)
+    #define ARCH_X86_64 1
 #elif defined(__aarch64__)
-#define SYS_WRITE(fd, buf, len) \\
-    mov x0, fd; mov x1, buf; mov x2, len; mov x8, 64; svc #0
-#define SYS_EXIT(code) \\
-    mov x0, code; mov x8, 93; svc #0
+    #define ARCH_AARCH64 1
+#elif defined(__riscv) && (__riscv_xlen == 64)
+    #define ARCH_RISCV64 1
+#else
+    #error "Unsupported architecture"
+#endif
 
-#elif defined(__riscv)
-#define SYS_WRITE(fd, buf, len) \\
-    li a0, fd; la a1, buf; li a2, len; li a7, 64; ecall
-#define SYS_EXIT(code) \\
-    li a0, code; li a7, 93; ecall
-#endif`
-          },
-          {
-            language: 'arm',
-            title: 'hello_portable.S',
-            code: `#include "portable_defs.h"
+// Register abstractions
+#if defined(ARCH_X86_64)
+    #define REG_RET    rax
+    #define REG_ARG0   rdi
+    #define REG_ARG1   rsi
+    #define REG_ARG2   rdx
+    #define REG_SP     rsp
+    #define REG_FP     rbp
+#elif defined(ARCH_AARCH64)
+    #define REG_RET    x0
+    #define REG_ARG0   x0
+    #define REG_ARG1   x1
+    #define REG_ARG2   x2
+    #define REG_SP     sp
+    #define REG_FP     x29
+#elif defined(ARCH_RISCV64)
+    #define REG_RET    a0
+    #define REG_ARG0   a0
+    #define REG_ARG1   a1
+    #define REG_ARG2   a2
+    #define REG_SP     sp
+    #define REG_FP     s0
+#endif
 
-.section .data
-msg:
-    .ascii "Hello, Cross-Platform World!\\n"
-    len = . - msg
+// Instruction abstractions
+#if defined(ARCH_X86_64)
+    #define INSTR_RET        ret
+    #define INSTR_NOP        nop
+    #define INSTR_SYSCALL    syscall
+    #define INSTR_MOVE(d, s) mov d, s
+#elif defined(ARCH_AARCH64)
+    #define INSTR_RET        ret
+    #define INSTR_NOP        nop
+    #define INSTR_SYSCALL    svc #0
+    #define INSTR_MOVE(d, s) mov d, s
+#elif defined(ARCH_RISCV64)
+    #define INSTR_RET        ret
+    #define INSTR_NOP        nop
+    #define INSTR_SYSCALL    ecall
+    #define INSTR_MOVE(d, s) mv d, s
+#endif
 
-.section .text
-.global _start
-
-_start:
-    SYS_WRITE(1, msg, len)
-    SYS_EXIT(0)`
+#endif // PORTABLE_ASM_MACROS_H`
           }
         ]
+      },
+      {
+        id: 'sec-49-3',
+        title: '49.3 Portable System Call Layer',
+        content: `Abstracting system call differences across architectures.
+
+### System Call Abstraction
+```c
+// syscalls.h - Portable system call numbers
+#ifndef SYSCALLS_H
+#define SYSCALLS_H
+
+#if defined(__x86_64__)
+    #define SYS_WRITE  1
+    #define SYS_READ   0
+    #define SYS_EXIT   60
+    #define SYS_OPEN   2
+    #define SYS_CLOSE  3
+#elif defined(__aarch64__)
+    #define SYS_WRITE  64
+    #define SYS_READ   63
+    #define SYS_EXIT   93
+    #define SYS_OPEN   56
+    #define SYS_CLOSE  57
+#elif defined(__riscv)
+    #define SYS_WRITE  64
+    #define SYS_READ   63
+    #define SYS_EXIT   93
+    #define SYS_OPEN   56
+    #define SYS_CLOSE  57
+#endif
+
+// Portable syscall function
+#if defined(__x86_64__)
+    static inline long syscall_write(int fd, const void *buf, size_t count) {
+        long ret;
+        asm volatile (
+            "syscall"
+            : "=a" (ret)
+            : "a" (SYS_WRITE), "D" (fd), "S" (buf), "d" (count)
+            : "rcx", "r11", "memory"
+        );
+        return ret;
+    }
+#elif defined(__aarch64__)
+    static inline long syscall_write(int fd, const void *buf, size_t count) {
+        register long x0 asm("x0") = fd;
+        register const void *x1 asm("x1") = buf;
+        register long x2 asm("x2") = count;
+        register long x8 asm("x8") = SYS_WRITE;
+        asm volatile ("svc #0" : "+r" (x0) : "r" (x1), "r" (x2), "r" (x8) : "memory");
+        return x0;
+    }
+#elif defined(__riscv)
+    static inline long syscall_write(int fd, const void *buf, size_t count) {
+        register long a0 asm("a0") = fd;
+        register const void *a1 asm("a1") = buf;
+        register long a2 asm("a2") = count;
+        register long a7 asm("a7") = SYS_WRITE;
+        asm volatile ("ecall" : "+r" (a0) : "r" (a1), "r" (a2), "r" (a7) : "memory");
+        return a0;
+    }
+#endif
+
+#endif // SYSCALLS_H
+```
+
+### Assembly System Call Wrapper
+```asm
+// syscall_wrapper.S - Portable syscall wrapper
+#include "portable_macros.h"
+
+.section .text
+.global portable_write
+.global portable_exit
+
+portable_write:
+    FUNC_PROLOGUE
+    # Arguments already in correct registers for each arch
+    LI REG_RET, SYS_WRITE
+    SYSCALL
+    FUNC_EPILOGUE
+
+portable_exit:
+    FUNC_PROLOGUE
+    LI REG_RET, SYS_EXIT
+    SYSCALL
+    FUNC_EPILOGUE
+```
+
+### Building Multi-Architecture
+```makefile
+# Makefile for cross-compilation
+CC_X86_64 = gcc
+CC_AARCH64 = aarch64-linux-gnu-gcc
+CC_RISCV = riscv64-linux-gnu-gcc
+
+CFLAGS = -O2 -Wall
+
+all: x86_64 aarch64 riscv
+
+x86_64:
+	$(CC_X86_64) $(CFLAGS) -o program_x86_64 src/*.S
+
+aarch64:
+	$(CC_AARCH64) $(CFLAGS) -o program_aarch64 src/*.S
+
+riscv:
+	$(CC_RISCV) $(CFLAGS) -o program_riscv src/*.S
+
+clean:
+	rm -f program_*
+```
+
+### Testing with QEMU
+```bash
+# Run ARM64 binary on x86-64 host
+qemu-aarch64 ./program_aarch64
+
+# Run RISC-V binary on x86-64 host
+qemu-riscv64 ./program_riscv
+
+# Or use Docker with multi-arch support
+docker run --rm -v $(pwd):/work -w /work arm64v8/ubuntu ./program_aarch64
+````,
+        codeSnippets: []
+      },
+      {
+        id: 'sec-49-4',
+        title: '49.4 Complete Portable Assembly Example',
+        content: `A complete portable strlen implementation across x86-64, ARM64, and RISC-V.
+
+### Portable strlen Design
+```c
+// strlen.h - Portable strlen declaration
+#ifndef STRLEN_H
+#define STRLEN_H
+
+#include <stddef.h>
+
+size_t portable_strlen(const char *s);
+
+#endif // STRLEN_H
+```
+
+### Architecture-Specific Implementations
+```asm
+// strlen_x86_64.S - x86-64 implementation
+.section .text
+.global portable_strlen
+
+portable_strlen:
+    xor eax, eax
+.loop:
+    cmp byte [rdi+rax], 0
+    je .done
+    inc eax
+    jmp .loop
+.done:
+    ret
+```
+
+```asm
+// strlen_aarch64.S - ARM64 implementation
+.section .text
+.global portable_strlen
+
+portable_strlen:
+    mov x2, x0
+.loop:
+    ldrb w1, [x2], #1
+    cbnz w1, .loop
+    sub x0, x2, x0
+    ret
+```
+
+```asm
+// strlen_riscv.S - RISC-V implementation
+.section .text
+.global portable_strlen
+
+portable_strlen:
+    li a1, 0
+.loop:
+    lb a2, 0(a0)
+    addi a0, a0, 1
+    addi a1, a1, 1
+    bnez a2, .loop
+    addi a0, a1, -1
+    ret
+```
+
+### Build System
+```makefile
+# Makefile
+CC_X86_64 = gcc
+CC_AARCH64 = aarch64-linux-gnu-gcc
+CC_RISCV = riscv64-linux-gnu-gcc
+
+CFLAGS = -O2 -Wall
+
+all: x86_64 aarch64 riscv
+
+x86_64: strlen_x86_64.S test.c
+	$(CC_X86_64) $(CFLAGS) -o test_x86_64 strlen_x86_64.S test.c
+
+aarch64: strlen_aarch64.S test.c
+	$(CC_AARCH64) $(CFLAGS) -o test_aarch64 strlen_aarch64.S test.c
+
+riscv: strlen_riscv.S test.c
+	$(CC_RISCV) $(CFLAGS) -o test_riscv strlen_riscv.S test.c
+
+test: all
+	./test_x86_64
+	qemu-aarch64 ./test_aarch64
+	qemu-riscv64 ./test_riscv
+	@echo "All tests passed!"
+
+clean:
+	rm -f test_*
+```
+
+### Test Program
+```c
+// test.c - Test portable strlen
+#include <stdio.h>
+#include <string.h>
+#include "strlen.h"
+
+int main() {
+    const char *test_strings[] = {
+        "Hello, World!",
+        "",
+        "Short",
+        "A longer string for testing",
+        NULL
+    };
+    
+    for (int i = 0; test_strings[i] != NULL; i++) {
+        size_t result = portable_strlen(test_strings[i]);
+        size_t expected = strlen(test_strings[i]);
+        
+        if (result != expected) {
+            printf("FAIL: strlen(\"%s\") = %zu, expected %zu\\n",
+                   test_strings[i], result, expected);
+            return 1;
+        }
+        printf("PASS: strlen(\"%s\") = %zu\\n", test_strings[i], result);
+    }
+    
+    printf("All tests passed!\\n");
+    return 0;
+}
+```
+
+### Running Tests
+```bash
+# Build and test
+make test
+
+# Cross-compile and test with QEMU
+make all
+qemu-aarch64 ./test_aarch64
+qemu-riscv64 ./test_riscv
+```
+
+### Alternative: Unified Source File
+```asm
+// strlen_portable.S - Single file with conditional compilation
+#include "portable_macros.h"
+
+.section .text
+.global portable_strlen
+
+portable_strlen:
+#if defined(ARCH_X86_64)
+    xor eax, eax
+.loop:
+    cmp byte [rdi+rax], 0
+    je .done
+    inc eax
+    jmp .loop
+.done:
+    ret
+
+#elif defined(ARCH_AARCH64)
+    mov x2, x0
+.loop:
+    ldrb w1, [x2], #1
+    cbnz w1, .loop
+    sub x0, x2, x0
+    ret
+
+#elif defined(ARCH_RISCV64)
+    li a1, 0
+.loop:
+    lb a2, 0(a0)
+    addi a0, a0, 1
+    addi a1, a1, 1
+    bnez a2, .loop
+    addi a0, a1, -1
+    ret
+
+#else
+    #error "Unsupported architecture"
+#endif
+````,
+        codeSnippets: []
       }
     ],
     exercises: [
@@ -1981,17 +2508,60 @@ _start:
         description: 'Define a macro that expands to rep stosb on x86-64 and a register loop on ARM64.',
         solution: `#if defined(__x86_64__)\n#define PORTABLE_MEMSET(dst, val, count) \\\n    mov rdi, dst; mov al, val; mov rcx, count; cld; rep stosb\n#elif defined(__aarch64__)\n#define PORTABLE_MEMSET(dst, val, count) \\\n    bl memset_arm64_helper\n#endif`,
         solutionLanguage: 'c'
+      },
+      {
+        id: 'ex-49-2',
+        title: 'Exercise 49.2: Portable strcmp',
+        description: 'Write a portable strcmp function that works on x86-64, ARM64, and RISC-V.',
+        solution: 'Use conditional compilation (#ifdef) to provide architecture-specific implementations. Each architecture loads bytes, compares, and branches. Use portable register names via macros.'
+      },
+      {
+        id: 'ex-49-3',
+        title: 'Exercise 49.3: Build System',
+        description: 'Create a Makefile that cross-compiles for x86-64, ARM64, and RISC-V.',
+        solution: 'Define CC_X86_64, CC_AARCH64, CC_RISCV variables. Create separate targets for each architecture. Use QEMU to test non-native architectures.'
+      },
+      {
+        id: 'ex-49-4',
+        title: 'Exercise 49-4: Portable memcpy',
+        description: 'Implement a portable memcpy function across architectures.',
+        solution: 'Use rep movsb (x86-64), ldp/stp loops (ARM64), or ld/sd loops (RISC-V). Handle alignment requirements for each architecture.'
       }
     ],
     practiceQuestions: [
       {
         question: 'What is the role of the C preprocessor in writing portable assembly with GNU tools?',
-        answer: 'When assembly files are named with an uppercase .S extension, GCC automatically runs the C preprocessor (cpp) before assembling. This allows developers to use #include, #define, #ifdef, and architecture macros (__x86_64__, __aarch64__, __riscv) directly.'
+        answer: 'When assembly files are named with an uppercase .S extension, GCC automatically runs the C preprocessor (cpp) before assembling. This allows developers to use #include, #define, #ifdef, and architecture macros (__x86_64__, __aarch64__, __riscv) directly, enabling a single source file to target multiple architectures.'
+      },
+      {
+        question: 'How do you test portable assembly code?',
+        answer: 'Testing strategies: (1) Cross-compile for each architecture, (2) Use QEMU for emulation on x86-64 host, (3) Docker multi-architecture containers, (4) CI/CD with multiple architectures, (5) Unit tests for each function, (6) Performance benchmarks across architectures.'
+      },
+      {
+        question: 'What are the trade-offs of portable assembly?',
+        answer: 'Trade-offs: (1) Abstraction overhead vs performance, (2) Code complexity vs maintainability, (3) Testing burden vs reliability, (4) Build system complexity vs flexibility. Portable assembly adds layers but reduces duplication and maintenance.'
+      },
+      {
+        question: 'How do you handle endianness in portable assembly?',
+        answer: 'Handle endianness by: (1) Using byte-swap instructions when needed, (2) Checking endianness at compile time (#if __BYTE_ORDER__), (3) Using endian-agnostic algorithms, (4) Providing separate implementations for little/big endian, (5) Using portable data types (uint32_t).'
+      },
+      {
+        question: 'What is the best approach for portable system calls?',
+        answer: 'Best approach: (1) Define syscall numbers in header files, (2) Create wrapper functions in C with inline assembly, (3) Use architecture-specific assembly files for optimized paths, (4) Test all paths on each architecture, (5) Document syscall differences.'
+      },
+      {
+        question: 'How do you optimize portable assembly for each architecture?',
+        answer: 'Optimization techniques: (1) Use architecture-specific instructions (SIMD, crypto), (2) Exploit pipeline characteristics, (3) Optimize for cache behavior, (4) Use architecture-specific calling conventions, (5) Profile and benchmark on each target.'
       }
     ],
     summary: [
       'Portable assembly abstracts register and syscall divergence.',
       'Preprocessors enable a single codebase to support multiple hardware targets.',
+      'Macros provide abstraction for registers and instructions.',
+      'System call wrappers bridge architecture-specific differences.',
+      'Build systems enable cross-compilation and testing.',
+      'QEMU provides emulation for non-native architectures.',
+      'Testing is essential for portable assembly reliability.',
       'The journey from zero to hero equips you with deep systems mastery across all major computing platforms.'
     ]
   }
