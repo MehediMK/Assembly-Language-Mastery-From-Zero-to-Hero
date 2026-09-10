@@ -9,23 +9,246 @@ export const CHAPTERS_LEVEL_7: Chapter[] = [
     title: 'Chapter 35: Introduction to Embedded Systems and Microcontrollers',
     subtitle: 'ARM Cortex-M Architecture, Vector Tables, and Bare-Metal LED Blinking',
     learningObjectives: [
-      'Understand the architecture of microcontrollers (CPU, Flash, SRAM, Peripherals).',
+      'Define embedded systems and distinguish them from general-purpose computers.',
+      'Understand the role of microcontrollers (MCUs) in embedded systems.',
       'Master ARM Cortex-M programmer model: R0-R12, SP (R13), LR (R14), PC (R15), xPSR.',
+      'Learn about memory-mapped I/O and how peripherals are controlled via registers.',
       'Construct a bare-metal vector table with initial stack pointer and Reset_Handler.',
-      'Write a complete Thumb-2 assembly program to blink an LED on STM32F4.'
+      'Write a complete Thumb-2 assembly program to blink an LED on STM32F4.',
+      'Understand bare-metal programming: no operating system, direct hardware access.',
+      'Recognize the importance of real-time constraints and how they shape software design.'
     ],
     prerequisites: ['Chapters 1–18'],
     keyConcepts: [
       'Microcontrollers integrate compute, memory, and peripheral buses on a single die.',
+      'Memory-mapped I/O: Peripherals are accessed by reading/writing special memory addresses (registers).',
       'The vector table at 0x08000000 holds the initial SP and Reset Handler address.',
-      'Cross-compilers (arm-none-eabi-as/ld) build binaries for ARM targets.'
+      'Bare-metal programming requires startup code, vector table, and linker script.',
+      'Cross-compilers (arm-none-eabi-as/ld) build binaries for ARM targets.',
+      'Real-time constraints: Deadlines that must be met; deterministic behavior is required.',
+      'GPIO (General Purpose Input/Output): Simple digital pins configured as input or output.'
     ],
     diagramType: 'embedded_mcu',
     sections: [
       {
         id: 'sec-35-1',
-        title: '35.1 Bare-Metal STM32F4 LED Blink in Pure Assembly',
-        content: `Complete bare-metal program toggling PD12 on STM32F4:`,
+        title: '35.1 What is an Embedded System?',
+        content: `An embedded system is a computer system designed to perform a dedicated function, often with real-time computing constraints. Unlike a general-purpose PC, embedded systems are embedded as part of larger devices with specific purposes.
+
+Key characteristics:
+• Dedicated function: Performs a specific task (unlike a PC)
+• Real-time constraints: Must respond to events within strict deadlines (e.g., airbag deployment)
+• Resource constraints: Limited RAM, flash storage, and processing power
+• Low power: Often battery-operated, requiring careful power management
+• Reliability: Must operate continuously for years without failure
+• Cost sensitivity: Often produced in millions; even cents matter in Bill of Materials
+
+Common examples include microcontrollers in washing machines, automotive engine controllers, IoT sensors, medical devices (pacemakers, insulin pumps), industrial automation, and consumer electronics.
+
+### Microcontrollers vs Microprocessors
+• Microprocessor: Just a CPU; requires external memory, I/O controllers (e.g., x86 in PCs)
+• Microcontroller: Integrates CPU, RAM, flash, and peripherals on a single chip (e.g., ARM Cortex-M, AVR, PIC)
+
+### Common MCU Families
+| Family | Bits | Clock | RAM | Typical Use |
+|--------|------|-------|-----|-------------|
+| AVR (ATmega328) | 8 | 16 MHz | 2 KB | Arduino, hobby projects |
+| MSP430 | 16 | 25 MHz | 1-5 KB | Ultra-low power sensors |
+| ARM Cortex-M0 | 32 | 48 MHz | 4-32 KB | Cost-sensitive IoT |
+| ARM Cortex-M4 | 32 | 168 MHz | 128-256 KB | DSP, motor control |
+| ARM Cortex-M7 | 32 | 480 MHz | 512 KB-1 MB | High-performance MCU |`,
+        codeSnippets: []
+      },
+      {
+        id: 'sec-35-2',
+        title: '35.2 Memory-Mapped I/O',
+        content: `In embedded systems, peripherals are controlled by reading and writing special registers. These registers are accessed via normal memory load/store instructions; they are mapped into the address space. This is called memory-mapped I/O (MMIO).
+
+For example, on an ARM Cortex-M microcontroller, the GPIO port for pin configuration might be located at address 0x40020000. Writing a value to that address sets the mode (input/output) of the pins.
+
+### Memory Map Visualization (STM32F407)
+| Address Range | Region | Description |
+|---------------|--------|-------------|
+| 0x00000000-0x000FFFFF | Code Flash | Program memory (1 MB) |
+| 0x08000000-0x080FFFFF | System Memory | Bootloader |
+| 0x20000000-0x2001FFFF | SRAM | Data memory (128 KB) |
+| 0x40000000-0x40007FFF | APB1 Peripherals | TIM2-7, USART2-3, I2C1-3 |
+| 0x40020000-0x40023FFF | AHB1 Peripherals | GPIO A-H, RCC, FLASH |
+| 0xE0000000-0xE00FFFFF | System Space | NVIC, SysTick, SCB |
+
+### Peripheral Register Types
+| Register Type | Read Behavior | Write Behavior | Example |
+|---------------|---------------|----------------|---------|
+| Read-only | Returns current state | Ignored | GPIO_IDR |
+| Write-only | Undefined | Configures hardware | GPIO_BSRR |
+| Read-write | Returns current state | Modifies state | GPIO_MODER |
+| Write-1-to-clear | Returns current state | Clears bits | USART_SR |
+
+Important: Reading from a peripheral register may have side effects (e.g., clearing a flag). In C, we use volatile. In assembly, we simply perform the load/store.`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'Memory-Mapped I/O Example',
+            code: `; Set port B pin 0 as output
+LDR R0, =0x40020400   ; GPIOB_MODER (mode register)
+LDR R1, [R0]
+ORR R1, R1, #0x1      ; set bits 0-1 to 01 (output)
+STR R1, [R0]
+
+; Set pin high
+LDR R0, =0x40020414   ; GPIOB_ODR (output data register)
+LDR R1, [R0]
+ORR R1, R1, #0x1
+STR R1, [R0]`
+          }
+        ]
+      },
+      {
+        id: 'sec-35-3',
+        title: '35.3 ARM Cortex-M Architecture Overview',
+        content: `ARM Cortex-M is a family of 32-bit RISC microcontrollers widely used in embedded systems. It has a clean, simple instruction set (Thumb-2) and a well-defined programmer's model.
+
+### Registers
+• R0–R12: General-purpose registers
+• R13 (SP): Stack Pointer (MSP and PSP variants)
+• R14 (LR): Link Register (holds return address)
+• R15 (PC): Program Counter
+• xPSR: Program Status Register (flags, interrupt state)
+
+### Special Registers
+| Register | Purpose | Key Bits |
+|----------|---------|----------|
+| xPSR | Program Status | N, Z, C, V, T (Thumb state) |
+| PRIMASK | Priority Mask | Bit 0: 1 = all exceptions disabled |
+| BASEPRI | Base Priority | Bits 7-0: Priority threshold |
+| CONTROL | Stack/Privilege | Bit 0: 0=MSP, 1=PSP; Bit 1: privilege level |
+
+### Processor Modes
+• Thread Mode: Normal execution of application code (can use MSP or PSP)
+• Handler Mode: Executing exception/interrupt handler (always uses MSP)
+
+### Memory Map (Cortex-M4)
+• 0x00000000: Flash (code)
+• 0x20000000: SRAM (data)
+• 0x40000000: Peripherals (GPIO, timers, UART)
+• 0xE000E000: System control block (NVIC, debug)
+
+### Thumb-2 Instruction Set
+Instructions can be 16-bit or 32-bit:
+• Data processing: MOV, ADD, SUB, AND, ORR, EOR
+• Load/store: LDR, STR (with various addressing modes)
+• Branch: B, BL, BX
+• Conditional execution: BEQ, BNE, etc.`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'ARM Thumb-2 Basic Instructions',
+            code: `MOV R0, #5          ; R0 = 5
+ADD R1, R0, #3      ; R1 = R0 + 3
+SUB R2, R1, R0      ; R2 = R1 - R0
+LDR R3, [R0]        ; R3 = memory[R0]
+STR R3, [R1]        ; memory[R1] = R3
+AND R4, R0, #0xFF   ; R4 = R0 AND 0xFF
+ORR R5, R0, #0x100  ; R5 = R0 OR 0x100`
+          }
+        ]
+      },
+      {
+        id: 'sec-35-4',
+        title: '35.4 Bare-Metal Programming',
+        content: `Bare-metal programming means writing software that runs directly on hardware without an operating system. The program must initialize the hardware, set up the stack, and manage all resources itself.
+
+### Why Bare-Metal?
+• No OS is available (most small MCUs don't have an OS)
+• Deterministic timing is required (no OS scheduler jitter)
+• Minimal resource usage (no OS overhead)
+• Safety-critical systems (medical devices, automotive)
+• Bootloaders and startup code (runs before OS loads)
+
+### Startup Code
+When the MCU resets, it reads the initial stack pointer from address 0x00000000 and the reset handler address from 0x00000004. The startup code performs:
+1. Set the stack pointer (usually already set from vector table)
+2. Copy initialized data from flash to RAM
+3. Zero the BSS section
+4. Call main function (if using C) or jump to main assembly routine
+
+### Vector Table in Detail
+| Entry | Name | Description |
+|-------|------|-------------|
+| 0 | Initial MSP | Main Stack Pointer value at reset |
+| 1 | Reset | Reset handler address |
+| 2 | NMI | Non-Maskable Interrupt handler |
+| 3 | HardFault | Hard fault handler |
+| 4-6 | MemManage/BusFault/UsageFault | Fault handlers |
+| 11 | SVCall | Supervisor call |
+| 14 | PendSV | Pendable service request |
+| 15 | SysTick | System tick timer |
+| 16+ | IRQ0+ | External interrupts |
+
+### Linker Script
+A linker script defines where sections are placed in memory:
+MEMORY { FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 512K
+         RAM (rwx) : ORIGIN = 0x20000000, LENGTH = 128K }
+SECTIONS { .isr_vector : { *(.isr_vector) } >FLASH
+           .text : { *(.text) } >FLASH
+           .data : { *(.data) } >RAM AT> FLASH
+           .bss : { *(.bss) } >RAM }`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'Startup Code (Simplified)',
+            code: `.section .isr_vector, "a"
+.word _estack          ; initial stack pointer
+.word Reset_Handler    ; reset handler
+
+.section .text
+Reset_Handler:
+    ; Copy .data from flash to SRAM
+    ldr r0, =_sdata
+    ldr r1, =_edata
+    ldr r2, =_sidata
+    b 2f
+1:  ldr r3, [r2], #4
+    str r3, [r0], #4
+2:  cmp r0, r1
+    bne 1b
+
+    ; Zero .bss
+    ldr r0, =_sbss
+    ldr r1, =_ebss
+    movs r2, #0
+    b 2f
+1:  str r2, [r0], #4
+2:  cmp r0, r1
+    bne 1b
+
+    ; Call main (if using C)
+    bl main
+    b .    ; loop forever if main returns`
+          }
+        ]
+      },
+      {
+        id: 'sec-35-5',
+        title: '35.5 Example: Blinking an LED (STM32F4 Discovery)',
+        content: `As a classic first embedded program, we'll blink an LED on an STM32F4 board. The LED is connected to GPIO port D, pin 12 (PD12).
+
+Steps to control the LED:
+1. Enable the clock for GPIOD (via RCC_AHB1ENR register)
+2. Configure PD12 as output (via GPIOD_MODER register)
+3. Toggle PD12 (via GPIOD_ODR register) in a loop with a delay
+
+### Code Walkthrough
+1. Constants (.equ): Define register addresses for readability
+2. Vector Table: Contains initial stack pointer and reset handler address
+3. Reset Handler: Enable GPIOD clock, configure PD12 as output
+4. Main Loop: Toggle LED with software delay
+
+### Improving the Delay
+The software delay is inaccurate because it depends on clock speed. A better approach uses SysTick timer:
+• SysTick is a 24-bit countdown timer built into Cortex-M
+• Configured via SYSTICK_RVR (reload value) and SYSTICK_CSR (control)
+• More accurate than software loops`,
         codeSnippets: [
           {
             language: 'arm',
@@ -87,8 +310,142 @@ delay2:
 .section .bss
 .align 3
 _estack: .space 0x400`
+          },
+          {
+            language: 'arm',
+            title: 'SysTick Delay Function',
+            code: `.equ SYSTICK_CSR, 0xE000E010
+.equ SYSTICK_RVR, 0xE000E014
+
+delay_ms:
+    ; R0 = milliseconds to delay
+    push {r4, lr}
+    mov r4, r0
+delay_loop:
+    ldr r0, =SYSTICK_RVR
+    mov r1, #16000      ; 1ms at 16MHz
+    str r1, [r0]
+    ldr r0, =SYSTICK_CSR
+    mov r1, #1
+    str r1, [r0]
+wait_flag:
+    ldr r0, =SYSTICK_CSR
+    ldr r1, [r0]
+    tst r1, #(1<<16)    ; COUNTFLAG
+    beq wait_flag
+    subs r4, r4, #1
+    bne delay_loop
+    pop {pc}`
           }
         ]
+      },
+      {
+        id: 'sec-35-6',
+        title: '35.6 Real-Time Considerations',
+        content: `Embedded systems often have real-time requirements: they must respond to events within a guaranteed time.
+
+### Real-Time Classification
+| Category | Deadline | Example |
+|----------|----------|---------|
+| Hard real-time | Must meet, or system fails | Airbag deployment, pacemaker |
+| Firm real-time | Should meet, occasional miss tolerable | Video frame rendering |
+| Soft real-time | Best-effort, quality degrades | Network streaming |
+
+### Timing Analysis
+Understanding execution time is critical. Consider the LED blink delay:
+• Software delay: cycles = N × (1 + 1) = 2N cycles
+• At 16 MHz: each cycle = 62.5 ns
+• 1,000,000 iterations × 2 cycles = 125 ms
+
+### Worst-Case Execution Time (WCET)
+For safety-critical systems, calculate maximum cycles through each code path. Factors affecting timing:
+• Branch penalties vary by pipeline state
+• Flash memory wait states affect fetch time
+• Interrupts can preempt the delay
+
+### Common Real-Time Pitfalls
+1. Interrupts disabled too long
+2. Unbounded loops (while(1) with no exit)
+3. Recursive calls (unpredictable stack usage)
+4. Dynamic memory allocation (malloc is slow)
+5. Floating-point without FPU (very slow software emulation)`,
+        codeSnippets: []
+      },
+      {
+        id: 'sec-35-7',
+        title: '35.7 Tools and Cross-Compilation',
+        content: `To develop for embedded targets, you need a cross-toolchain: a compiler/assembler that runs on your PC but produces code for the target architecture.
+
+### ARM Toolchain
+• GNU Arm Embedded Toolchain: arm-none-eabi-gcc, arm-none-eabi-as, arm-none-eabi-ld
+• LLVM/Clang with --target=arm-none-eabi
+• IDE: STM32CubeIDE, Keil, IAR (commercial)
+
+### Build Process
+Source Code (.s, .c) → Assembler/Compiler → Object Files (.o) → Linker → ELF → ObjCopy → Binary (.bin) → Flash Programmer → MCU Flash
+
+### Essential Debugging Tools
+| Tool | Purpose | Example |
+|------|---------|---------|
+| OpenOCD | On-chip debugger | openocd -f interface/stlink.cfg |
+| GDB | Debug symbols and stepping | arm-none-eabi-gdb firmware.elf |
+| st-flash | Flash programming | st-flash write firmware.bin 0x08000000 |
+| Logic Analyzer | Pin signal analysis | Saleae Logic, PulseView |
+
+### Development Board Options
+| Board | MCU | Price | Features |
+|-------|-----|-------|----------|
+| STM32F4 Discovery | STM32F407VG | ~$20 | LEDs, accelerometer, audio |
+| Nucleo-F446RE | STM32F446RE | ~$13 | Arduino-compatible, ST-Link |
+| Raspberry Pi Pico | RP2040 | ~$4 | Dual-core ARM, MicroPython |`,
+        codeSnippets: [
+          {
+            language: 'bash',
+            title: 'Build Commands',
+            code: `# Assemble
+arm-none-eabi-as -mcpu=cortex-m4 -o blink.o blink.s
+
+# Link
+arm-none-eabi-ld -T linker.ld -o blink.elf blink.o
+
+# Convert to binary
+arm-none-eabi-objcopy -O binary blink.elf blink.bin
+
+# Flash to MCU
+st-flash write blink.bin 0x08000000`
+          }
+        ]
+      },
+      {
+        id: 'sec-35-8',
+        title: '35.8 Common Pitfalls and Best Practices',
+        content: `### Common Beginner Mistakes
+1. Forgetting to enable peripheral clocks: Peripherals are clock-gated by default
+2. Wrong memory access: Accessing non-existent address causes bus fault
+3. Stack overflow: Insufficient stack space corrupts data
+4. Incorrect vector table: Wrong initial SP or reset handler causes crash
+5. Not aligning data: ARM requires word-aligned access for 32-bit operations
+6. Missing return instruction: Functions must end with BX LR or POP {PC}
+
+### Best Practices
+1. Use symbolic names: Define register addresses with .equ for readability
+2. Comment extensively: Embedded code is hardware-specific
+3. Start with known-good code: Use vendor examples as foundation
+4. Test incrementally: Get one peripheral working before adding another
+5. Use version control: Track changes to understand what broke
+6. Read the errata: Silicon bugs are common in MCUs
+7. Design for debug: Include LED indicators and UART debug output
+
+### Code Review Checklist
+☑ Peripheral clock enabled before register access
+☑ Stack pointer initialized correctly
+☑ Vector table placed at correct address
+☑ Data alignment requirements met
+☑ No unbounded loops (all loops have exits)
+☑ Interrupt handlers properly save/restore registers
+☑ Memory barriers used where needed (DMA, multi-core)
+☑ Power consumption considered (clock gating, sleep modes)`,
+        codeSnippets: []
       }
     ],
     exercises: [
@@ -98,15 +455,68 @@ _estack: .space 0x400`
         description: 'Modify the blink program to toggle pin 13 instead of pin 12.',
         solution: 'Change #(1 << 12) to #(1 << 13) in ODR, and modify MODER bits from (3 << 24)/(1 << 24) to (3 << 26)/(1 << 26).',
         solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-35-2',
+        title: 'Exercise 35.2: Multi-LED Knight Rider',
+        description: 'Write assembly code to create a "Knight Rider" effect on four LEDs connected to PD12-PD15. The pattern should shift left then right continuously.',
+        solution: 'Use a shift register pattern with delay. Start with bit 12, shift left to 15, then shift right back to 12. Use EOR to toggle bits and delay between each step.',
+        solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-35-3',
+        title: 'Exercise 35.3: Button Input',
+        description: 'Extend the LED blink program to read a button connected to PA0. When pressed (active low), toggle LED faster; when released, use normal speed.',
+        solution: 'Read GPIOA_IDR bit 0. If 0 (pressed), use shorter delay; if 1 (released), use longer delay.',
+        solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-35-4',
+        title: 'Exercise 35.4: Timer-Based Blink',
+        description: 'Replace the software delay with a hardware timer (TIM2). Configure TIM2 to generate a 1-second delay using prescaler and auto-reload register.',
+        solution: 'Enable TIM2 clock, set PSC = 16000-1 (1 kHz), ARR = 1000 (1 second). Poll UIF flag or use interrupt.',
+        solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-35-5',
+        title: 'Exercise 35.5: UART Debug Output',
+        description: 'Write a minimal UART initialization routine for USART2 at 9600 baud (assuming 16 MHz clock). Then write a function to send a single character.',
+        solution: 'Enable GPIOA and USART2 clocks, configure PA2/PA3 as AF7, set BRR = 1667 (0x683), enable TE/RE/UE. Poll TXE before writing to DR.',
+        solutionLanguage: 'arm'
       }
     ],
     practiceQuestions: [
       {
         question: 'What are the first two entries of the ARM Cortex-M vector table?',
         answer: 'Entry 0 (address 0x00000000) is the initial Main Stack Pointer (MSP) value. Entry 1 (address 0x00000004) is the address of the Reset_Handler.'
+      },
+      {
+        question: 'What is the difference between a microprocessor and a microcontroller?',
+        answer: 'A microprocessor is just a CPU that requires external memory and I/O controllers. A microcontroller integrates CPU, RAM, flash, and peripherals on a single chip, making it self-contained and cost-effective for embedded applications.'
+      },
+      {
+        question: 'Explain memory-mapped I/O. How do you read/write a peripheral register?',
+        answer: 'Memory-mapped I/O maps peripheral registers into the processor address space. You access them using normal load/store instructions to specific memory addresses. For example, LDR R0, =0x40020C00 loads the GPIO MODER register address, then LDR R1, [R0] reads it.'
+      },
+      {
+        question: 'Why is assembly language sometimes used in embedded systems?',
+        answer: 'Assembly provides precise timing control, minimal code size, and direct hardware access. It is used in startup code, interrupt handlers, and performance-critical sections where every cycle matters.'
+      },
+      {
+        question: 'What is cross-compilation? Which tools are used for ARM Cortex-M?',
+        answer: 'Cross-compilation means building code on one architecture (x86 PC) that runs on another (ARM MCU). Tools include arm-none-eabi-as (assembler), arm-none-eabi-gcc (compiler), arm-none-eabi-ld (linker), and arm-none-eabi-objcopy (binary conversion).'
       }
     ],
-    summary: ['Microcontrollers combine CPU, flash, and SRAM on-chip.', 'Bare-metal development starts at the vector table and initializes hardware directly.']
+    summary: [
+      'Embedded systems are dedicated-function computers with real-time constraints and limited resources.',
+      'Microcontrollers integrate CPU, memory, and peripherals on one chip.',
+      'Memory-mapped I/O controls hardware via special addresses.',
+      'ARM Cortex-M is a popular 32-bit MCU architecture with a simple programming model.',
+      'Bare-metal programming requires startup code, vector table, and linker script.',
+      'Blinking an LED is the "Hello World" of embedded systems.',
+      'Real-time systems demand deterministic behavior and low interrupt latency.',
+      'Cross-compilation with GNU Arm Embedded Toolchain enables development on a PC.'
+    ]
   },
   {
     id: 36,
