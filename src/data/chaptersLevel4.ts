@@ -1877,74 +1877,442 @@ export const CHAPTERS_LEVEL_4: Chapter[] = [
     ]
   },
   {
-    id: 22,
-    slug: 'chapter-22-atomic-operations-multithreading',
-    level: 4,
-    levelTitle: 'Advanced Assembly',
-    title: 'Chapter 22: Atomic Operations, Multithreading, and Concurrency',
-    subtitle: 'Lock Prefix, CMPXCHG, Memory Fences (mfence), Spinlocks, and Futex',
-    learningObjectives: [
-      'Understand race conditions and the necessity of hardware atomicity.',
-      'Master the lock prefix and atomic xchg and cmpxchg instructions.',
-      'Apply memory ordering fences: mfence, lfence, sfence.',
-      'Implement an efficient assembly spinlock with pause.',
-      'Implement sleeping mutexes using the Linux futex system call.'
+    "id": 22,
+    "slug": "chapter-22-atomic-operations-multithreading",
+    "level": 4,
+    "levelTitle": "Advanced Assembly",
+    "title": "Chapter 22: Atomic Operations, Multithreading, and Concurrency",
+    "subtitle": "Lock Prefix, CMPXCHG, Memory Fences (mfence), Spinlocks, and Futex",
+    "learningObjectives": [
+      "Understand the need for atomic operations in concurrent programming.",
+      "Master x86-64 atomic instructions: lock prefix, xchg, cmpxchg, and atomic arithmetic.",
+      "Learn about memory ordering, barriers, and the role of mfence, lfence, sfence.",
+      "Implement synchronization primitives such as spinlocks and mutexes using atomic operations and futex.",
+      "Explore multithreading models: clone system call and POSIX threads (pthread).",
+      "Write assembly functions that safely share data between threads.",
+      "Understand data races, memory models, and how to avoid them.",
+      "Apply these concepts to build a thread-safe counter and a simple spinlock-protected data structure."
     ],
-    prerequisites: ['Chapters 1–21'],
-    keyConcepts: [
-      'The lock prefix asserts hardware bus/cache locking for read-modify-write operations.',
-      'xchg is implicitly locked when accessing memory operands.',
-      'cmpxchg (Compare-and-Swap) is the cornerstone of lock-free data structures.'
+    "prerequisites": [
+      "Solid understanding of x86-64 assembly, registers, and memory addressing (Chapters 3, 6, 13).",
+      "Familiarity with procedures, calling conventions, and stack frames (Chapter 10).",
+      "Knowledge of system calls and interaction with the OS (Chapter 16).",
+      "Basic understanding of CPU caches and memory hierarchy (Chapter 18).",
+      "Exposure to C programming and pthreads (optional but helpful)."
     ],
-    diagramType: 'atomic_concurrency',
-    sections: [
+    "keyConcepts": [
+      "Atomic operation: An operation that appears indivisible; no other thread can observe intermediate states.",
+      "lock prefix: Makes certain memory-modifying instructions atomic with respect to other processors.",
+      "xchg: Atomic exchange; implicitly locked when a memory operand is used.",
+      "cmpxchg: Compare-and-swap; the cornerstone of lock-free programming.",
+      "Memory barriers: Instructions that enforce ordering of memory operations (mfence, lfence, sfence).",
+      "Spinlock: A lock that repeatedly checks a variable until it becomes available, using an atomic test-and-set.",
+      "Mutex: A sleeping lock that uses futex to avoid busy-waiting.",
+      "Data race: Concurrent access to a memory location where at least one access is a write and no synchronization orders the accesses.",
+      "Cache coherence: Hardware ensures that all cores see a consistent view of memory, but ordering may vary; barriers help.",
+      "Thread-local storage (TLS): Per-thread data accessed via the fs segment."
+    ],
+    "diagramType": "atomic_concurrency",
+    "sections": [
       {
-        id: 'sec-22-1',
-        title: '22.1 Assembly Spinlock Implementation',
-        content: `A high-performance spinlock using test-and-test-and-set and the pause instruction:`,
-        codeSnippets: [
+        "id": "sec-22-1",
+        "title": "22.1 Introduction to Concurrency",
+        "content": "Modern computers have multiple CPU cores, and programs often run multiple threads to utilize them. Concurrent execution introduces challenges: when two threads access the same memory location, the result may depend on the interleaving of their operations. Without synchronization, data races can produce incorrect results.\n\nExample: Unsynchronized increment\nTwo threads each increment a shared counter 1000 times. Without synchronization, the final count may be less than 2000 because the sequence load, add, store is not atomic. Thread A may load the value, then Thread B increments and stores, then A stores a stale value, overwriting B's update.\n\nTo prevent this, we need atomic operations that read-modify-write memory in a single indivisible step, and synchronization primitives that coordinate thread access."
+      },
+      {
+        "id": "sec-22-2",
+        "title": "22.2 Atomic Instructions in x86-64",
+        "content": "The x86 architecture provides a set of instructions that can be made atomic using the lock prefix. The lock prefix asserts a hardware signal that prevents other processors from accessing the memory location during the operation.\n\nClarification: LOCK is legal only for specified read-modify-write instructions with a memory destination, not arbitrary instructions or register-only operations. Modern cached locked operations normally obtain exclusive cache-line ownership rather than locking the entire bus. Avoid split/unaligned atomics and MMIO assumptions."
+      },
+      {
+        "id": "sec-22-2-1",
+        "title": "22.2.1 The lock Prefix",
+        "content": "The lock prefix can be applied to the following instructions when one of the operands is a memory location:\n\n- add, sub, inc, dec, and, or, xor\n- not, neg (not lockable? Actually not and neg are lockable? Check: The Intel manual says lock can be used with ADD, ADC, AND, BTC, BTR, BTS, CMPXCHG, CMPXCH8B, CMPXCHG16B, DEC, INC, NEG, NOT, OR, SBB, SUB, XOR, XADD, XCHG. Yes, not and neg can be locked.)\n- xadd (exchange and add)\n- cmpxchg, cmpxchg8b, cmpxchg16b\n- bts, btr, btc (bit test and set/reset/complement)\n\nThe lock prefix makes the instruction atomic with respect to all other processors and ensures that the operation is performed on the memory location directly, without any intermediate state visible.\n\nExample: Atomic increment of a memory variable",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'spinlock.asm',
-            code: `global spin_lock
-global spin_unlock
-
-section .text
-spin_lock:
-    mov rax, 1
-.retry:
-    cmp qword [rdi], 0   ; non-atomic test to prevent cache thrashing
-    jne .spin
-    xchg rax, [rdi]      ; atomic swap (implicitly locked)
-    test rax, rax
-    jnz .retry           ; if was 1, someone else grabbed it; spin
-    ret                  ; lock acquired!
-.spin:
-    pause                ; de-pipeline spin loop to reduce power/latency
-    jmp .retry
-
-spin_unlock:
-    mov qword [rdi], 0   ; release lock
-    ret`
+            "language": "nasm",
+            "title": "22.2.1 The lock Prefix — listing 1",
+            "code": "lock inc qword [counter]   ; atomically increment counter",
+            "explanation": "Without lock, inc [counter] is not atomic because another core could read/write between the load and store micro-operations."
           }
         ]
-      }
-    ],
-    exercises: [
+      },
       {
-        id: 'ex-22-1',
-        title: 'Exercise 22.1: Lock-Free Stack Push',
-        description: 'Implement lock-free push onto a singly linked list using cmpxchg in a retry loop.',
-        solution: `push_node:\n    mov rax, [rdi]        ; current head\n.retry:\n    mov [rsi + Node.next], rax\n    lock cmpxchg [rdi], rsi\n    jnz .retry\n    ret`,
-        solutionLanguage: 'nasm'
-      }
-    ],
-    practiceQuestions: [
+        "id": "sec-22-2-2",
+        "title": "22.2.2 xchg – Atomic Exchange",
+        "content": "The xchg instruction exchanges the contents of two operands. When one operand is a memory location, the exchange is atomic, and the lock prefix is implicit (even if not specified). This makes xchg a fundamental primitive for spinlocks.\n\nExample: Atomic swap",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "22.2.2 xchg – Atomic Exchange — listing 1",
+            "code": "mov rax, 1\nxchg rax, [lock_var]   ; atomically set lock_var to 1 and get old value in rax",
+            "explanation": "If the old value was 0, we acquired the lock; otherwise, we must spin."
+          }
+        ]
+      },
       {
-        question: 'What does the pause instruction do inside a spinlock loop?',
-        answer: 'pause hints to the CPU pipeline that a spin-wait loop is running, reducing power consumption and preventing speculative execution pipeline flushes upon exiting the loop.'
+        "id": "sec-22-2-3",
+        "title": "22.2.3 cmpxchg – Compare and Swap",
+        "content": "cmpxchg is the most versatile atomic instruction. It compares the accumulator (rax, eax, ax, or al) with the destination operand. If they are equal, the source operand is loaded into the destination; otherwise, the destination is loaded into the accumulator. The Zero Flag (ZF) is set if the comparison was equal (and the swap occurred).\n\nSyntax:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "22.2.3 cmpxchg – Compare and Swap — listing 1",
+            "code": "cmpxchg [mem], reg",
+            "explanation": "- reg must be a general-purpose register.\n- rax (or its sub-register) is the implicit comparand.\n- The size is determined by the register size (e.g., cmpxchg dword [mem], ecx uses eax).\n\nExample: Atomic compare-and-swap"
+          },
+          {
+            "language": "nasm",
+            "title": "Atomically check if [lock_var] == 0; if so, set to 1",
+            "code": "; Atomically check if [lock_var] == 0; if so, set to 1\nmov rax, 0          ; expected value\nmov rbx, 1          ; new value\nlock cmpxchg [lock_var], rbx\n; If ZF set, success (old value was 0); if not, rax = old value",
+            "explanation": "cmpxchg is the basis for lock-free data structures and mutex implementations."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-2-4",
+        "title": "22.2.4 Atomic Arithmetic with lock add, lock sub, etc.",
+        "content": "Many arithmetic operations can be made atomic with the lock prefix.\n\nExample: Atomic decrement",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "22.2.4 Atomic Arithmetic with lock add, lock sub, etc. — listing 1",
+            "code": "lock sub qword [counter], 1",
+            "explanation": "These are convenient for simple counters and reference counting."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-2-5",
+        "title": "22.2.5 Memory Ordering and Barriers",
+        "content": "Modern CPUs may reorder memory operations to improve performance. For single-threaded programs, this is transparent, but in multithreaded code, reordering can cause subtle bugs. Memory barriers enforce ordering constraints:\n\n- mfence – full memory fence: all loads and stores before it are globally visible before any loads/stores after it.\n- lfence – load fence: prevents loads from being reordered across the fence.\n- sfence – store fence: prevents stores from being reordered across the fence.\n\nThe lock prefix also acts as a full memory barrier, so locked instructions are sequentially consistent.\n\nExample: Using mfence\n\nClarification: For ordinary write-back memory, x86 preserves StoreStore and LoadLoad ordering; the source message-passing example does not require MFENCE merely to preserve those orders. StoreLoad ordering is the notable relaxation. Compiler ordering and the C/C++ memory model still require proper atomics or supported synchronization. Also specify the width in mov dword [flag],1; immediate-to-memory MOV cannot infer it.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Store to flag after data is written",
+            "code": "; Store to flag after data is written\nmov [data], rax\nmfence\nmov [flag], 1",
+            "explanation": "Without mfence, another thread might see flag = 1 before data is updated, leading to incorrect behavior.\n\nNote: On x86-64, stores are not reordered with other stores (store-store ordering is preserved), but loads may be reordered. However, for portability and clarity, use explicit fences when ordering matters."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-3",
+        "title": "22.3 Implementing a Spinlock",
+        "content": "A spinlock is a simple synchronization primitive that uses atomic operations to protect a critical section. The lock variable is 0 (unlocked) or 1 (locked). To acquire, a thread atomically attempts to change 0 to 1 using xchg or lock bts. If it gets 0, it acquired the lock; otherwise, it spins (busy-waits) until the lock becomes available."
+      },
+      {
+        "id": "sec-22-3-1",
+        "title": "22.3.1 Spinlock Acquire and Release",
+        "content": "\n\nClarification: Use a naturally aligned qword restricted to states 0 and 1. An aligned plain store of zero is sufficient for release under the stated x86 write-back-memory assumptions; compiler callers still need a synchronization contract. PAUSE is a spin-wait hint, not a memory fence or fairness guarantee.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Acquire spinlock at address in rdi",
+            "code": "; Acquire spinlock at address in rdi\nspin_lock:\n    mov rax, 1\n.retry:\n    xchg rax, [rdi]   ; atomically set [rdi] = 1, get old value in rax\n    test rax, rax\n    jnz .retry        ; if old value was 1, lock was held; spin\n    ret               ; acquired\n\n; Release spinlock\nspin_unlock:\n    mov qword [rdi], 0 ; just store 0 (no need for atomic? Actually need to ensure visibility)\n    ret",
+            "explanation": "Optimization: Use pause instruction inside the spin loop to reduce power consumption and avoid memory order violations."
+          },
+          {
+            "language": "nasm",
+            "title": "22.3.1 Spinlock Acquire and Release — listing 2",
+            "code": ".retry:\n    pause\n    xchg rax, [rdi]\n    test rax, rax\n    jnz .retry"
+          }
+        ]
+      },
+      {
+        "id": "sec-22-3-2",
+        "title": "22.3.2 Test and Test-and-Set",
+        "content": "A more efficient spinlock uses a test-and-test-and-set approach: first read the lock variable non-atomically; only if it appears unlocked, attempt the atomic exchange. This reduces cache-line bouncing.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "22.3.2 Test and Test-and-Set — listing 1",
+            "code": "spin_lock:\n    mov rax, 1\n.retry:\n    cmp qword [rdi], 0   ; test first (non-atomic read)\n    jne .spin\n    xchg rax, [rdi]      ; attempt atomic swap\n    test rax, rax\n    jnz .retry\n    ret\n.spin:\n    pause\n    jmp .retry"
+          }
+        ]
+      },
+      {
+        "id": "sec-22-3-3",
+        "title": "22.3.3 Spinlock Example with a Shared Counter",
+        "content": "We'll create a simple program where two threads increment a shared counter 1,000,000 times each, protected by a spinlock. We'll use pthread for thread creation and our assembly spinlock.\n\nC wrapper (main.c):",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "22.3.3 Spinlock Example with a Shared Counter — listing 1",
+            "code": "#include <pthread.h>\n#include <stdio.h>\n\nextern void spin_lock(unsigned long long *lock);\nextern void spin_unlock(unsigned long long *lock);\nextern unsigned long long shared_counter;\n\nvoid *thread_func(void *arg) {\n    unsigned long long *lock = (unsigned long long *)arg;\n    for (int i = 0; i < 1000000; i++) {\n        spin_lock(lock);\n        shared_counter++;\n        spin_unlock(lock);\n    }\n    return NULL;\n}\n\nint main() {\n    pthread_t t1, t2;\n    unsigned long long lock = 0;\n    shared_counter = 0;\n    pthread_create(&t1, NULL, thread_func, &lock);\n    pthread_create(&t2, NULL, thread_func, &lock);\n    pthread_join(t1, NULL);\n    pthread_join(t2, NULL);\n    printf(\"Counter: %llu\\n\", shared_counter);\n    return 0;\n}",
+            "explanation": "Assembly (spinlock.asm):"
+          },
+          {
+            "language": "nasm",
+            "title": "22.3.3 Spinlock Example with a Shared Counter — listing 2",
+            "code": "global spin_lock\nglobal spin_unlock\nglobal shared_counter\n\nsection .bss\n    shared_counter resq 1\n\nsection .text\nspin_lock:\n    mov rax, 1\n.retry:\n    xchg rax, [rdi]\n    test rax, rax\n    jnz .retry\n    ret\n\nspin_unlock:\n    mov qword [rdi], 0\n    ret",
+            "explanation": "Compile:"
+          },
+          {
+            "language": "bash",
+            "title": "22.3.3 Spinlock Example with a Shared Counter — listing 3",
+            "code": "nasm -f elf64 spinlock.asm -o spinlock.o\ngcc -c main.c -o main.o\ngcc main.o spinlock.o -o spinlock_test -lpthread\n./spinlock_test",
+            "explanation": "Output should be 2000000."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-4",
+        "title": "22.4 Compare-and-Swap and Lock-Free Programming",
+        "content": "Lock-free programming uses atomic operations like cmpxchg to update data structures without explicit locks, avoiding blocking and deadlocks. The basic pattern is optimistic: read current value, compute new value, attempt to atomically replace with CAS; if the current value changed, retry."
+      },
+      {
+        "id": "sec-22-4-1",
+        "title": "22.4.1 Lock-Free Counter",
+        "content": "Instead of a spinlock, we can use lock add to atomically increment a counter without any lock.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Atomically increment counter at [rdi]",
+            "code": "; Atomically increment counter at [rdi]\nlock inc qword [rdi]",
+            "explanation": "This is simpler and faster for simple counters."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-4-2",
+        "title": "22.4.2 Lock-Free Stack Push",
+        "content": "A lock-free stack uses cmpxchg to update the head pointer.\n\nAssume a node structure:\n\nClarification: This is a push-only pattern with a privately owned new node. Safe concurrent popping/reuse needs a memory-reclamation and ABA strategy; CAS alone does not make a complete stack safe. Do not enqueue the same node concurrently twice.",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "22.4.2 Lock-Free Stack Push — listing 1",
+            "code": "struc Node\n    .value: resq 1\n    .next:  resq 1\nendstruc",
+            "explanation": "Push a new node (pointed by rsi) onto stack whose head pointer is at [rdi]."
+          },
+          {
+            "language": "nasm",
+            "title": "push node: rdi = address of head pointer, rsi = new node",
+            "code": "; push node: rdi = address of head pointer, rsi = new node\npush_node:\n    mov rax, [rdi]        ; current head\n.retry:\n    mov [rsi + Node.next], rax   ; new node's next = current head\n    lock cmpxchg [rdi], rsi      ; if head unchanged, set to new node\n    jnz .retry                  ; if head changed, rax = new head, retry\n    ret",
+            "explanation": "This is lock-free and safe for multiple threads."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-5",
+        "title": "22.5 Multithreading Models",
+        "content": ""
+      },
+      {
+        "id": "sec-22-5-1",
+        "title": "22.5.1 clone System Call",
+        "content": "Linux provides the clone system call to create new threads or processes. It allows fine-grained control over shared resources (memory, file descriptors, signal handlers). Creating a thread with clone is complex and usually done via libraries like pthreads.\n\nPrototype:",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "22.5.1 clone System Call — listing 1",
+            "code": "long clone(unsigned long flags, void *stack, int *parent_tid, int *child_tid, unsigned long tls);",
+            "explanation": "The flags determine what is shared. For threads, CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD | CLONE_SYSVSEM are typical.\n\nIn assembly, calling clone directly is possible but requires careful stack setup. Most programs use pthread_create from the C library, which wraps clone."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-5-2",
+        "title": "22.5.2 POSIX Threads (pthreads)",
+        "content": "From assembly, we can call pthread_create and related functions if we link with libc. We declare them extern and follow the ABI. The function pointer to the thread routine is passed as an argument.\n\nExample: Creating a thread from assembly\n\nClarification: The source main makes calls with unadjusted entry RSP, violating call-site alignment, and ignores pthread errors. Add a prologue and check return codes. Pthread routines return error numbers directly, not raw negative syscall errno.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "22.5.2 POSIX Threads (pthreads) — listing 1",
+            "code": "extern pthread_create, pthread_join\nextern thread_func\n\nsection .data\n    tid dq 0\n    arg dq 0\n\nsection .text\nglobal main\nmain:\n    ; pthread_create(&tid, NULL, thread_func, NULL)\n    lea rdi, [tid]\n    xor rsi, rsi\n    lea rdx, [thread_func]\n    xor rcx, rcx\n    call pthread_create\n    ; pthread_join(tid, NULL)\n    mov rdi, [tid]\n    xor rsi, rsi\n    call pthread_join\n    ; exit\n    xor eax, eax\n    ret",
+            "explanation": "The thread function must follow the ABI and be defined separately."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-5-3",
+        "title": "22.5.3 Thread-Local Storage (TLS)",
+        "content": "Thread-local storage allows each thread to have its own copy of global variables. In x86-64, the fs segment register points to the thread control block (TCB) or TLS area. Variables are accessed relative to fs, e.g., mov rax, [fs:0]. In C, __thread variables use TLS.\n\nIn assembly, accessing TLS directly is tricky and usually done through compiler-generated code or by using pthread_getspecific. We'll not delve deeply here.\n\nClarification: On Linux x86-64 FS base is configured per thread; [fs:0] is not an arbitrary user TLS variable. The TLS model and relocations define variable access. Raw clone also requires stack and TLS/runtime setup beyond selecting flags."
+      },
+      {
+        "id": "sec-22-6",
+        "title": "22.6 Synchronization with Futex",
+        "content": "A futex (fast userspace mutex) is a Linux mechanism for building sleeping locks. The futex system call provides atomic compare-and-sleep operations. A mutex can be implemented by using an atomic variable in userspace and falling back to futex when contention occurs."
+      },
+      {
+        "id": "sec-22-6-1",
+        "title": "22.6.1 Futex System Call",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "22.6.1 Futex System Call — listing 1",
+            "code": "int futex(int *uaddr, int op, int val, const struct timespec *timeout, int *uaddr2, int val3);",
+            "explanation": "Common ops:\n- FUTEX_WAIT (0): if *uaddr == val, sleep.\n- FUTEX_WAKE (1): wake up to val waiters.\n\nThe syscall number for futex is 202 (on x86-64)."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-6-2",
+        "title": "22.6.2 Implementing a Mutex",
+        "content": "A simple mutex with futex:\n\nClarification: SYSCALL overwrites RCX, so the original mutex reuses a corrupted desired value after waiting. Reload ECX=1 on every retry. FUTEX_WAIT requires a four-byte aligned word, checks the expected value atomically before sleeping, and can return EINTR/EAGAIN or wake spuriously. Retry acquisition, and report unexpected errors.",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "Mutex lock: rdi = mutex pointer (int)",
+            "code": "; Mutex lock: rdi = mutex pointer (int)\nmutex_lock:\n    mov ecx, 1\n.retry:\n    xor eax, eax\n    lock cmpxchg [rdi], ecx   ; try to set from 0 to 1\n    jz .acquired\n    ; contention: futex_wait\n    mov eax, 202              ; futex\n    mov rsi, 0                ; FUTEX_WAIT\n    mov edx, ecx              ; expected value (1)\n    xor r10, r10\n    xor r8, r8\n    syscall\n    jmp .retry\n.acquired:\n    ret\n\n; Mutex unlock: rdi = mutex pointer\nmutex_unlock:\n    mov dword [rdi], 0        ; unlock\n    ; wake up one waiter\n    mov eax, 202              ; futex\n    mov rsi, 1                ; FUTEX_WAKE\n    mov edx, 1                ; wake 1\n    xor r10, r10\n    xor r8, r8\n    syscall\n    ret",
+            "explanation": "This is a simplified version; real mutexes handle recursive locking, priority inheritance, etc."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-7",
+        "title": "22.7 Memory Models and Data Races",
+        "content": "The C11 and C++11 standards define memory models that specify when concurrent accesses are safe. At the assembly level, we rely on hardware guarantees and explicit barriers. The x86-64 has a relatively strong memory model (TSO – Total Store Order), but some reordering is possible:\n\n- Loads may be reordered with older stores to different locations.\n- Stores are not reordered with other stores.\n- Loads are not reordered with other loads.\n\nThe lock prefix and mfence enforce full ordering. For most synchronization, lock instructions are sufficient.\n\nData race example:\nTwo threads write to the same variable without synchronization. Even if the CPU does not reorder, the interleaving of instructions may produce non-deterministic results. Always use atomic operations or locks for shared mutable data.\n\nClarification: C/C++ data races are not repaired by inserting a hardware fence around ordinary racing variables. Use language atomics or a toolchain-supported assembly synchronization boundary. These examples target coherent ordinary RAM, not device memory or non-temporal stores."
+      },
+      {
+        "id": "sec-22-8",
+        "title": "22.8 Practical Examples",
+        "content": ""
+      },
+      {
+        "id": "sec-22-8-1",
+        "title": "22.8.1 Thread-Safe Counter with lock inc",
+        "content": "Assembly function:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "22.8.1 Thread-Safe Counter with lock inc — listing 1",
+            "code": "global atomic_inc\n; atomic_inc: rdi = pointer to qword\natomic_inc:\n    lock inc qword [rdi]\n    ret",
+            "explanation": "Called from multiple threads, this guarantees correct increments."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 22.1",
+            "code": "Use C program with assembly function atomic_inc. Non-atomic version uses inc qword [rdi] without lock. The non-atomic will likely produce incorrect count.",
+            "explanation": "Original exercise material retained; the completed solution below specifies the complete test and synchronization contract."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 22.2",
+            "code": "See spinlock example in section 22.3.3.",
+            "explanation": "Original exercise material retained; the completed solution below specifies the complete test and synchronization contract."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 22.3",
+            "code": "; lock-free inc using cmpxchg\nlock_free_inc:\n    mov rax, [rdi]          ; read current\n.retry:\n    lea rbx, [rax + 1]      ; compute new\n    lock cmpxchg [rdi], rbx ; attempt\n    jnz .retry\n    ret",
+            "explanation": "Original exercise material retained; the completed solution below specifies the complete test and synchronization contract."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 22.4",
+            "code": "Use mutex functions from section 22.6.2. Ensure proper futex syscall numbers (202 for futex on x86-64). The mutex variable must be 4-byte (int) aligned.",
+            "explanation": "Original exercise material retained; the completed solution below specifies the complete test and synchronization contract."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 22.5",
+            "code": "mov [data], rax\nmfence\nmov [flag], 1\n\n.wait:\n    cmp [flag], 0\n    je .wait\n    mfence\n    mov rax, [data]",
+            "explanation": "Original exercise material retained; the completed solution below specifies the complete test and synchronization contract."
+          }
+        ]
+      },
+      {
+        "id": "sec-22-8-2",
+        "title": "22.8.2 Spinlock-Protected Queue (Conceptual)",
+        "content": "We can protect a simple array-based queue with a spinlock. The lock is acquired before enqueue/dequeue and released after. This ensures only one thread modifies the queue at a time."
       }
     ],
-    summary: ['Atomic instructions guarantee thread safety across CPU cores.', 'Memory fences prevent out-of-order memory reordering bugs.']
+    "exercises": [
+      {
+        "id": "ex-22-1",
+        "title": "Exercise 22.1: Atomic Operations",
+        "description": "Write a program that uses lock add to increment a shared counter 1,000,000 times from two threads. Verify the final count is 2,000,000. Compare with non-atomic increment (no lock).",
+        "solution": "; File: counter.asm\nsection .text\nglobal increment\nincrement:\n    lock add qword [rdi], 1\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits\n\n; File: main.c\n#include <pthread.h>\n#include <stdint.h>\n#include <stdio.h>\nstatic uint64_t counter;\nextern void increment(uint64_t *);\nstatic void *worker(void *unused){\n    (void)unused;\n    for(unsigned i=0;i<1000000;i++) increment(&counter);\n    return 0;\n}\nint main(void){\n    pthread_t a,b;\n    if(pthread_create(&a,0,worker,0)) return 2;\n    if(pthread_create(&b,0,worker,0)){pthread_join(a,0);return 2;}\n    if(pthread_join(a,0) || pthread_join(b,0)) return 3;\n    printf(\"Counter: %llu\\n\",(unsigned long long)counter);\n    return counter!=2000000;\n}",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nSave the File blocks separately. nasm -f elf64 counter.asm -o counter.o; gcc -O2 -pthread main.c counter.o -o counter_test; ./counter_test. Expected count 2000000. The shared counter is only accessed by assembly during concurrent execution and read by C after both joins. This targets GCC/Linux x86-64, uses naturally aligned storage, and preserves callee-saved registers. Remove LOCK only in an explicitly separate negative-control build: lost updates are possible, but one matching run does not prove atomicity."
+      },
+      {
+        "id": "ex-22-2",
+        "title": "Exercise 22.2: Spinlock Implementation",
+        "description": "Implement a spinlock and use it to protect a critical section that increments a counter 1,000,000 times per thread. Ensure correct result.",
+        "solution": "; File: counter.asm\nsection .text\nglobal increment\nsection .bss\n    alignb 8\n    lock_word resq 1\nsection .text\nincrement:\n.retry:\n    mov eax, 1\n    xchg rax, [rel lock_word]\n    test rax, rax\n    jz .held\n.wait:\n    pause\n    cmp qword [rel lock_word], 0\n    jne .wait\n    jmp .retry\n.held:\n    inc qword [rdi]\n    mov qword [rel lock_word], 0\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits\n\n; File: main.c\n#include <pthread.h>\n#include <stdint.h>\n#include <stdio.h>\nstatic uint64_t counter;\nextern void increment(uint64_t *);\nstatic void *worker(void *unused){\n    (void)unused;\n    for(unsigned i=0;i<1000000;i++) increment(&counter);\n    return 0;\n}\nint main(void){\n    pthread_t a,b;\n    if(pthread_create(&a,0,worker,0)) return 2;\n    if(pthread_create(&b,0,worker,0)){pthread_join(a,0);return 2;}\n    if(pthread_join(a,0) || pthread_join(b,0)) return 3;\n    printf(\"Counter: %llu\\n\",(unsigned long long)counter);\n    return counter!=2000000;\n}",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nSave the File blocks separately. nasm -f elf64 counter.asm -o counter.o; gcc -O2 -pthread main.c counter.o -o counter_test; ./counter_test. Expected count 2000000. The shared counter is only accessed by assembly during concurrent execution and read by C after both joins. This targets GCC/Linux x86-64, uses naturally aligned storage, and preserves callee-saved registers."
+      },
+      {
+        "id": "ex-22-3",
+        "title": "Exercise 22.3: Compare-and-Swap",
+        "description": "Implement a lock-free counter using lock cmpxchg in a loop. Compare performance with lock inc.",
+        "solution": "; File: counter.asm\nsection .text\nglobal increment\nincrement:\n    mov rax, [rdi]\n.retry:\n    lea rdx, [rax+1]\n    lock cmpxchg [rdi], rdx\n    jnz .retry\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits\n\n; File: main.c\n#include <pthread.h>\n#include <stdint.h>\n#include <stdio.h>\nstatic uint64_t counter;\nextern void increment(uint64_t *);\nstatic void *worker(void *unused){\n    (void)unused;\n    for(unsigned i=0;i<1000000;i++) increment(&counter);\n    return 0;\n}\nint main(void){\n    pthread_t a,b;\n    if(pthread_create(&a,0,worker,0)) return 2;\n    if(pthread_create(&b,0,worker,0)){pthread_join(a,0);return 2;}\n    if(pthread_join(a,0) || pthread_join(b,0)) return 3;\n    printf(\"Counter: %llu\\n\",(unsigned long long)counter);\n    return counter!=2000000;\n}",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "This is slower than lock inc due to loop overhead, but demonstrates the pattern.\n\nSave the File blocks separately. nasm -f elf64 counter.asm -o counter.o; gcc -O2 -pthread main.c counter.o -o counter_test; ./counter_test. Expected count 2000000. The shared counter is only accessed by assembly during concurrent execution and read by C after both joins. This targets GCC/Linux x86-64, uses naturally aligned storage, and preserves callee-saved registers. RDX replaces the original RBX temporary. CAS retries can add contention cost, but relative performance must be measured."
+      },
+      {
+        "id": "ex-22-4",
+        "title": "Exercise 22.4: Futex Mutex",
+        "description": "Implement the mutex using futex as described. Test it with two threads and a shared counter.",
+        "solution": "; File: counter.asm\nsection .text\nglobal increment\nsection .bss\n    alignb 4\n    mutex_word resd 1\nsection .text\nincrement:\n    push r12\n    mov r12, rdi\n.acquire:\n    xor eax, eax\n    mov ecx, 1                 ; reload after every SYSCALL\n    lock cmpxchg [rel mutex_word], ecx\n    jz .held\n    lea rdi, [rel mutex_word]\n    mov esi, 128               ; FUTEX_WAIT_PRIVATE\n    mov edx, 1\n    xor r10d, r10d\n    xor r8d, r8d\n    xor r9d, r9d\n    mov eax, 202\n    syscall\n    test rax, rax\n    jz .acquire\n    cmp rax, -4                ; EINTR\n    je .acquire\n    cmp rax, -11               ; EAGAIN\n    je .acquire\n    jmp .fatal\n.held:\n    inc qword [r12]\n    mov dword [rel mutex_word], 0\n    lea rdi, [rel mutex_word]\n    mov esi, 129               ; FUTEX_WAKE_PRIVATE\n    mov edx, 1\n    xor r10d, r10d\n    xor r8d, r8d\n    xor r9d, r9d\n    mov eax, 202\n    syscall\n    test rax, rax\n    js .fatal\n    pop r12\n    ret\n.fatal:\n    mov edi, 4\n    mov eax, 231               ; terminate test process on unexpected futex error\n    syscall\nsection .note.GNU-stack noalloc noexec nowrite progbits\n\n; File: main.c\n#include <pthread.h>\n#include <stdint.h>\n#include <stdio.h>\nstatic uint64_t counter;\nextern void increment(uint64_t *);\nstatic void *worker(void *unused){\n    (void)unused;\n    for(unsigned i=0;i<1000000;i++) increment(&counter);\n    return 0;\n}\nint main(void){\n    pthread_t a,b;\n    if(pthread_create(&a,0,worker,0)) return 2;\n    if(pthread_create(&b,0,worker,0)){pthread_join(a,0);return 2;}\n    if(pthread_join(a,0) || pthread_join(b,0)) return 3;\n    printf(\"Counter: %llu\\n\",(unsigned long long)counter);\n    return counter!=2000000;\n}",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nSave the File blocks separately. nasm -f elf64 counter.asm -o counter.o; gcc -O2 -pthread main.c counter.o -o counter_test; ./counter_test. Expected count 2000000. The shared counter is only accessed by assembly during concurrent execution and read by C after both joins. This targets GCC/Linux x86-64, uses naturally aligned storage, and preserves callee-saved registers. The simple mutex wakes one waiter on every unlock, including uncontended unlocks. It has no ownership checking, recursion, priority inheritance or cancellation support; prefer pthread_mutex for production use."
+      },
+      {
+        "id": "ex-22-5",
+        "title": "Exercise 22.5: Memory Barrier",
+        "description": "Write a program where one thread writes data and then sets a flag, and another thread reads the flag and then reads data. Use mfence to ensure ordering. Explain why the fence is needed.",
+        "solution": "#include <pthread.h>\n#include <stdatomic.h>\n#include <stdio.h>\nstatic int data;\nstatic atomic_int flag;\nstatic void *writer(void *unused){\n    (void)unused; data=42;\n    atomic_store_explicit(&flag,1,memory_order_release);\n    return 0;\n}\nint main(void){\n    pthread_t t;\n    if(pthread_create(&t,0,writer,0))return 2;\n    while(!atomic_load_explicit(&flag,memory_order_acquire)) {}\n    int result=data;\n    if(pthread_join(t,0))return 3;\n    printf(\"Data: %d\\n\",result);\n    return result!=42;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Writer:\n\nReader:\n\nThe reader's mfence ensures the load of data happens after the load of flag. Without fences, the CPU might reorder the reader's loads, seeing data before the write.\n\nCorrection: release/acquire establishes the required C happens-before relationship. On ordinary x86 RAM these operations typically compile to plain stores/loads without MFENCE, because StoreStore and LoadLoad are already ordered. Build gcc -std=c11 -O2 -pthread message.c -o message; inspect gcc -S -O2 message.c. Adding MFENCE alone to racing ordinary C accesses would not fix the language-level race. Expected Data: 42."
+      }
+    ],
+    "practiceQuestions": [
+      {
+        "question": "What is an atomic operation? Why are they necessary in multithreaded programming?",
+        "answer": "An atomic operation is indivisible to other observers. It prevents interleaved read-modify-write sequences from losing updates, but larger invariants may still require locks or protocols."
+      },
+      {
+        "question": "Explain the purpose of the lock prefix. Which instructions can it be used with?",
+        "answer": "LOCK makes supported memory-destination read-modify-write operations atomic and strongly ordered for normal memory. Examples include ADD, INC, XADD and CMPXCHG; it is not legal on arbitrary MOV or register-only arithmetic."
+      },
+      {
+        "question": "How does cmpxchg work? Describe its operands and the role of rax.",
+        "answer": "CMPXCHG compares the accumulator with destination. Equality stores the source and sets ZF; failure loads the observed destination into the accumulator and clears ZF. Use LOCK for inter-core atomic memory CAS."
+      },
+      {
+        "question": "What is a spinlock? How does it differ from a mutex?",
+        "answer": "A spinlock busy-waits, ideally with PAUSE and test-before-exchange. A blocking mutex can sleep through the kernel. Spins suit brief waits when the owner can run; neither design guarantees fairness by itself."
+      },
+      {
+        "question": "What is the futex system call? How is it used to implement a mutex?",
+        "answer": "Futex atomically checks a four-byte user word and sleeps if it still matches, while wake requests resume waiters. User-space atomics manage ownership; retry after wakes, EINTR or a changed value."
+      },
+      {
+        "question": "What are memory barriers? When are they needed on x86-64?",
+        "answer": "Fences constrain hardware memory ordering; compiler barriers and language synchronization are separate. x86 ordinary RAM preserves StoreStore/LoadLoad but permits a load to pass an older store to a different address. Use the required semantics, not blanket fences."
+      },
+      {
+        "question": "Compare lock inc with a cmpxchg-based increment. Which is faster and why?",
+        "answer": "LOCK INC directly performs an increment; a CAS loop also computes and may retry. LOCK INC often has less work, but actual throughput depends on contention, CPU and measurement."
+      },
+      {
+        "question": "What is a data race? Provide an example.",
+        "answer": "Two unsynchronized accesses to the same C object, at least one a write, form a data race unless atomic or otherwise ordered. Concurrent ordinary counter++ is an example; volatile does not fix it."
+      },
+      {
+        "question": "How does the xchg instruction ensure atomicity when one operand is memory?",
+        "answer": "XCHG with a memory operand implicitly performs a locked atomic exchange, unlike register-register XCHG. Ensure suitable alignment and valid normal memory."
+      },
+      {
+        "question": "What is the difference between mfence and sfence?",
+        "answer": "MFENCE orders loads and stores; SFENCE orders stores, especially relevant to streaming/non-temporal stores. Neither by itself defines a C/C++ happens-before relation for racing ordinary variables."
+      }
+    ],
+    "summary": [
+      "Atomic operations are essential for correct concurrent programming.",
+      "The lock prefix makes memory-modifying instructions atomic.",
+      "xchg and cmpxchg are fundamental for locks and lock-free structures.",
+      "Memory barriers (mfence, lfence, sfence) enforce ordering.",
+      "Spinlocks use atomic test-and-set; they are simple but busy-wait.",
+      "Futex-based mutexes sleep when contended, avoiding CPU waste.",
+      "clone and pthreads are the main multithreading mechanisms; pthreads is recommended.",
+      "Data races cause undefined behavior; always synchronize shared data.",
+      "The x86 memory model is relatively strong, but fences may be needed for correctness.",
+      "In the next chapter, we'll explore executable formats (ELF and PE) in detail, preparing for reverse engineering."
+    ]
   }
 ];
