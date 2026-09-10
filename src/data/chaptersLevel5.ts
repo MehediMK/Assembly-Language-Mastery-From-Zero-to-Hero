@@ -366,67 +366,576 @@ export const CHAPTERS_LEVEL_5: Chapter[] = [
     ]
   },
   {
-    id: 24,
-    slug: 'chapter-24-disassembly-reading-compiler-assembly',
-    level: 5,
-    levelTitle: 'Low-Level Systems and Reverse Engineering',
-    title: 'Chapter 24: Disassembly and Reading Compiler-Generated Assembly',
-    subtitle: 'Decoding C Constructs: If-Else, Loops, Switch Tables, and Optimizations',
-    learningObjectives: [
-      'Disassemble binaries using objdump -d -M intel and GDB.',
-      'Identify compiler idioms across optimization levels (-O0, -O2, -O3).',
-      'Recognize jump tables, loop induction variables, and tail-call jumps.',
-      'Read array and struct indexing in compiled assembly.'
+    "id": 24,
+    "slug": "chapter-24-disassembly-reading-compiler-assembly",
+    "level": 5,
+    "levelTitle": "Low-Level Systems and Reverse Engineering",
+    "title": "Chapter 24: Disassembly and Reading Compiler-Generated Assembly",
+    "subtitle": "Decoding C Constructs: If-Else, Loops, Switch Tables, and Optimizations",
+    "learningObjectives": [
+      "Understand the role of disassembly in analyzing binary executables and object files.",
+      "Master tools for disassembling: objdump, gdb disassemble, ndisasm, and llvm-objdump.",
+      "Learn to read and interpret compiler-generated assembly from C/C++ code at various optimization levels.",
+      "Recognize common assembly patterns for functions, loops, conditionals, switch statements, and data structures.",
+      "Identify stack frame setup and teardown, parameter passing, and return value handling according to the ABI.",
+      "Understand how compiler optimizations transform source code: inlining, loop unrolling, vectorization, and tail-call elimination.",
+      "Apply this knowledge to reverse engineering and debugging tasks."
     ],
-    prerequisites: ['Chapters 1–23'],
-    keyConcepts: [
-      '-O0 stores variables on stack; -O2 relies heavily on registers and omits frame pointers.',
-      'Switch statements compile to dense jump tables or binary decision trees.',
-      'Tail-call optimization replaces call/ret with jmp.'
+    "prerequisites": [
+      "Solid understanding of x86-64 assembly, registers, addressing modes, and instructions (Chapters 1–13).",
+      "Familiarity with the build process, object files, and executable formats (Chapters 4, 23).",
+      "Knowledge of calling conventions and stack frames (Chapter 10).",
+      "Basic C programming experience.",
+      "Ability to use command-line tools like gcc, objdump, and gdb (Chapters 4, 17)."
     ],
-    diagramType: 'disassembly_analysis',
-    sections: [
+    "keyConcepts": [
+      "Disassembly is the process of converting machine code back into assembly language.",
+      "Compiler-generated assembly reflects the compiler’s implementation of high-level constructs, often with optimizations.",
+      "Optimization levels (-O0, -O1, -O2, -O3, -Os, -Og) trade off speed, size, and debuggability.",
+      "Prologue and epilogue set up and tear down the stack frame; may be omitted in leaf functions or with frame pointer omission.",
+      "Function calls follow the ABI: arguments in registers (first six), return in rax.",
+      "Loops are implemented with conditional jumps; compilers may unroll or vectorize.",
+      "Switch statements may use jump tables or decision trees.",
+      "Arrays and structs are accessed via base+offset addressing.",
+      "Tail calls may be optimized into jumps.",
+      "Debug symbols (-g) greatly aid disassembly by providing names and source line mappings."
+    ],
+    "diagramType": "disassembly_analysis",
+    "sections": [
       {
-        id: 'sec-24-1',
-        title: '24.1 Switch Statement Jump Table Disassembly',
-        content: `How compilers translate a switch statement into an indexed jump table:`,
-        codeSnippets: [
+        "id": "sec-24-1",
+        "title": "24.1 Introduction to Disassembly",
+        "content": "Disassembly is the reverse of assembly: it translates raw machine code into human-readable assembly instructions. While high-level decompilation aims to recover C-like code, disassembly works at the instruction level and is essential for understanding compiler output, reverse engineering, and debugging.\n\nWhy read compiler-generated assembly?\n- To verify what the compiler did and identify inefficiencies.\n- To debug optimized code where source-level debugging is difficult.\n- To reverse engineer proprietary or malware binaries.\n- To learn optimization techniques used by compilers.\n\nDisassemblers rely on binary analysis and may struggle with variable-length x86 instructions, indirect jumps, and data embedded in code. However, with proper symbols and section information, disassembly is usually straightforward."
+      },
+      {
+        "id": "sec-24-2",
+        "title": "24.2 Tools for Disassembly",
+        "content": ""
+      },
+      {
+        "id": "sec-24-2-1",
+        "title": "24.2.1 objdump",
+        "content": "The most common Linux disassembler. For Intel syntax (preferred):",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'jump_table_disassembly.asm',
-            code: `; Compiled from switch(val):
-    mov eax, edi
-    cmp eax, 3
-    ja .Ldefault
-    lea rdx, [.Ltable]
-    mov rax, [rdx + rax*8]
-    jmp rax
-
-.Ltable:
-    dq .Lcase0
-    dq .Lcase1
-    dq .Lcase2
-    dq .Lcase3`
+            "language": "bash",
+            "title": "24.2.1 objdump — listing 1",
+            "code": "objdump -d -M intel ./program",
+            "explanation": "Options:\n- -d: disassemble executable sections.\n- -D: disassemble all sections (including data, sometimes producing garbage if data is interpreted as code).\n- -M intel: use Intel syntax.\n- -S: intermix source lines if debug info available.\n- --start-address=, --stop-address=: limit range."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-2-2",
+        "title": "24.2.2 GDB Disassemble",
+        "content": "Inside GDB:\n\nClarification: Prefer disassemble /s for source mixed with assembly; /m is deprecated and can omit instructions after optimization. Use set disassembly-flavor intel and disassemble /r for bytes. Reference: https://sourceware.org/gdb/current/onlinedocs/gdb.html/Machine-Code.html",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "24.2.2 GDB Disassemble — listing 1",
+            "code": "disassemble /m function_name\ndisassemble 0x400080, 0x4000a0",
+            "explanation": "The /m option shows source lines mixed with assembly if debug info present."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-2-3",
+        "title": "24.2.3 ndisasm",
+        "content": "The NASM disassembler, useful for raw binary blobs:\n\nClarification: ndisasm does not interpret ELF sections or relocations. Extract a known code region first, select the correct bitness and supply its origin with -o when useful.",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "24.2.3 ndisasm — listing 1",
+            "code": "ndisasm -b64 file.bin"
+          }
+        ]
+      },
+      {
+        "id": "sec-24-2-4",
+        "title": "24.2.4 llvm-objdump",
+        "content": "Similar to GNU objdump, part of LLVM toolchain:",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "24.2.4 llvm-objdump — listing 1",
+            "code": "llvm-objdump -d -M intel ./program"
+          }
+        ]
+      },
+      {
+        "id": "sec-24-3",
+        "title": "24.3 Compiler Optimization Levels",
+        "content": "GCC offers various optimization levels that dramatically affect generated assembly.\n\n\n\nWe'll examine examples at -O0 and -O2 to see the difference.\n\nClarification: Exact enabled passes depend on compiler version and target. Current GCC documents loop and SLP vectorization at -O2 with a very-cheap cost model; -O3 uses a more permissive model. A flag enables an opportunity, not a guaranteed transformation. Inspect gcc -Q -O2 --help=optimizers. Reference: https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html",
+        "tableData": {
+          "headers": [
+            "Flag",
+            "Description"
+          ],
+          "rows": [
+            [
+              "-O0",
+              "No optimization; code is straightforward, with many stack accesses. Good for debugging."
+            ],
+            [
+              "-O1",
+              "Basic optimizations: constant folding, dead code elimination, some inlining."
+            ],
+            [
+              "-O2",
+              "More aggressive: instruction scheduling, loop unrolling, vectorization (with -ftree-vectorize enabled by default at -O2 for some targets?), but not always."
+            ],
+            [
+              "-O3",
+              "Aggressive: more inlining, loop unrolling, function cloning, and vectorization."
+            ],
+            [
+              "-Os",
+              "Optimize for size: similar to -O2 but avoids code bloat."
+            ],
+            [
+              "-Og",
+              "Optimize for debugging: enables optimizations that do not interfere with debug experience."
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-24-3-1",
+        "title": "24.3.1 Example: Simple Function at Different Optimization Levels",
+        "content": "C code:",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "24.3.1 Example: Simple Function at Different Optimization Levels — listing 1",
+            "code": "int add(int a, int b) {\n    return a + b;\n}",
+            "explanation": "Compile with -S -masm=intel to see assembly:\n\nAt -O0:"
+          },
+          {
+            "language": "text",
+            "title": "24.3.1 Example: Simple Function at Different Optimization Levels — listing 2 (illustrative compiler assembly)",
+            "code": "add:\n    push    rbp\n    mov     rbp, rsp\n    mov     DWORD PTR [rbp-4], edi\n    mov     DWORD PTR [rbp-8], esi\n    mov     edx, DWORD PTR [rbp-4]\n    mov     eax, DWORD PTR [rbp-8]\n    add     eax, edx\n    pop     rbp\n    ret",
+            "explanation": "At -O0, the compiler stores arguments to stack, reloads them, and uses eax for sum. No optimization.\n\nAt -O2:"
+          },
+          {
+            "language": "text",
+            "title": "24.3.1 Example: Simple Function at Different Optimization Levels — listing 3 (illustrative compiler assembly)",
+            "code": "add:\n    lea     eax, [rdi+rsi]\n    ret",
+            "explanation": "The function simply uses lea to compute sum and returns. No stack frame needed.\n\nThis shows how optimization removes redundant memory operations."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-3-2",
+        "title": "24.3.2 Impact on Function Prologue/Epilogue",
+        "content": "- At -O0, almost every function uses push rbp; mov rbp, rsp; ...; pop rbp; ret to establish a frame pointer, making stack accesses clear.\n- At -O2, many functions omit the frame pointer (-fomit-frame-pointer is default at -O1 and higher for x86-64), using rsp-relative addressing or not touching the stack at all if no locals."
+      },
+      {
+        "id": "sec-24-4",
+        "title": "24.4 Reading Compiler-Generated Assembly: Function Calls",
+        "content": "Understanding how compilers translate function calls is fundamental."
+      },
+      {
+        "id": "sec-24-4-1",
+        "title": "24.4.1 Calling a Simple Function",
+        "content": "C code:\n\nClarification: The shown out-of-line call is illustrative; the supplied tiny function is commonly inlined at -O2. Put foo in a separate translation unit and disable LTO to inspect the call reliably. Some compiler analyses also avoid unnecessary stack adjustments for known callees.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "24.4.1 Calling a Simple Function — listing 1",
+            "code": "int foo(int x) { return x * 2; }\nint bar(int a) {\n    int b = foo(a);\n    return b + 1;\n}",
+            "explanation": "Assembly at -O2 (Intel syntax):"
+          },
+          {
+            "language": "text",
+            "title": "24.4.1 Calling a Simple Function — listing 2 (illustrative compiler assembly)",
+            "code": "foo:\n    lea     eax, [rdi+rdi]      ; x*2\n    ret\n\nbar:\n    sub     rsp, 8              ; align stack? (actually to maintain alignment for call)\n    call    foo                 ; rdi still holds a\n    add     eax, 1\n    add     rsp, 8\n    ret",
+            "explanation": "Here foo is inlined? Not necessarily; -O2 may inline small functions, but if not inlined, the call is present. Observe:\n- rdi is passed unchanged to foo.\n- After call, result in eax, then add 1.\n- Note the sub rsp, 8 before call to keep stack 16-byte aligned (since at function entry, rsp is 8 mod 16, and call pushes 8 bytes, so after sub rsp,8, rsp is 0 mod 16 before call). Good."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-4-2",
+        "title": "24.4.2 Passing Arguments",
+        "content": "First six integer args in rdi, rsi, rdx, rcx, r8, r9. Additional args on stack.\n\nExample:\n\nClarification: These are System V AMD64 integer/pointer rules, not universal first-six rules. Read the seventh argument at RSP+8 only before stack changes; with push rbp / mov rbp,rsp it is at RBP+16.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "24.4.2 Passing Arguments — listing 1",
+            "code": "int many_args(int a, int b, int c, int d, int e, int f, int g) {\n    return a+b+c+d+e+f+g;\n}",
+            "explanation": "At -O2, g is on stack at [rsp+8] after prologue? Actually at function entry, 7th arg is at [rsp+8] (since return address at [rsp]). The compiler may use mov eax, [rsp+8] to load it."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-4-3",
+        "title": "24.4.3 Returning Values",
+        "content": "Integers/pointers returned in eax/rax. Floating-point in xmm0. Large structs may use hidden pointer."
+      },
+      {
+        "id": "sec-24-5",
+        "title": "24.5 Control Flow Patterns",
+        "content": ""
+      },
+      {
+        "id": "sec-24-5-1",
+        "title": "24.5.1 If-Else",
+        "content": "C:",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "24.5.1 If-Else — listing 1",
+            "code": "int max(int a, int b) {\n    if (a > b)\n        return a;\n    else\n        return b;\n}",
+            "explanation": "At -O2:"
+          },
+          {
+            "language": "text",
+            "title": "24.5.1 If-Else — listing 2 (illustrative compiler assembly)",
+            "code": "max:\n    cmp     edi, esi\n    jle     .L2\n    mov     eax, edi\n    ret\n.L2:\n    mov     eax, esi\n    ret",
+            "explanation": "Or using cmovg if profitable:"
+          },
+          {
+            "language": "text",
+            "title": "24.5.1 If-Else — listing 3 (illustrative compiler assembly)",
+            "code": "max:\n    cmp     edi, esi\n    mov     eax, esi\n    cmovg   eax, edi\n    ret",
+            "explanation": "The compiler may choose branchless version for unpredictable branches."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-5-2",
+        "title": "24.5.2 Loops",
+        "content": "C:\n\nClarification: Signed overflow in C is undefined. Use a bounded positive n for this demonstration; the original loop also overflows its induction variable at INT_MAX. The displayed instructions illustrate a possible pattern, not a promised gcc output.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "24.5.2 Loops — listing 1",
+            "code": "int sum(int n) {\n    int s = 0;\n    for (int i = 1; i <= n; i++)\n        s += i;\n    return s;\n}",
+            "explanation": "At -O2, the loop may be optimized into a closed-form formula (arithmetic progression) or kept as loop. If kept:"
+          },
+          {
+            "language": "text",
+            "title": "24.5.2 Loops — listing 2 (illustrative compiler assembly)",
+            "code": "sum:\n    xor     eax, eax\n    test    edi, edi\n    jle     .L2\n    mov     ecx, 1\n.L3:\n    add     eax, ecx\n    inc     ecx\n    cmp     ecx, edi\n    jle     .L3\n.L2:\n    ret",
+            "explanation": "Or with unrolling. Compilers often use induction variable optimization."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-5-3",
+        "title": "24.5.3 Switch Statements",
+        "content": "Switch statements can be compiled to:\n- Jump table (dense case values): a table of code addresses, indexed by the switch expression.\n- Decision tree (sparse values): a series of comparisons and jumps.\n\nExample jump table:\n\nClarification: The listing mixes compiler/GAS directives with explanatory semicolon comments; it is not a complete NASM program. PIC jump tables often contain signed 32-bit offsets added to a table base. Returning 10,20,30,40 may become arithmetic without any table.",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "24.5.3 Switch Statements — listing 1 (illustrative compiler assembly)",
+            "code": "    mov     eax, edi\n    cmp     eax, 3\n    ja      .Ldefault\n    lea     rdx, [.L4]\n    mov     rax, [rdx + rax*8]\n    jmp     rax\n.L4:\n    .quad   .Lcase0\n    .quad   .Lcase1\n    .quad   .Lcase2\n    .quad   .Lcase3"
+          }
+        ]
+      },
+      {
+        "id": "sec-24-6",
+        "title": "24.6 Data Structures and Access",
+        "content": ""
+      },
+      {
+        "id": "sec-24-6-1",
+        "title": "24.6.1 Arrays",
+        "content": "Array access uses scaled indexed addressing.\n\nC:",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "24.6.1 Arrays — listing 1",
+            "code": "int get(int *arr, int i) {\n    return arr[i];\n}",
+            "explanation": "At -O2:"
+          },
+          {
+            "language": "text",
+            "title": "24.6.1 Arrays — listing 2 (illustrative compiler assembly)",
+            "code": "get:\n    movsxd  rax, esi        ; sign-extend i\n    mov     eax, [rdi + rax*4]\n    ret",
+            "explanation": "Notice movsxd to sign-extend 32-bit int to 64-bit for address calculation."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-6-2",
+        "title": "24.6.2 Structures",
+        "content": "Structure members accessed via base+offset.\n\nC:",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "24.6.2 Structures — listing 1",
+            "code": "struct Point { int x; int y; };\nint get_x(struct Point *p) { return p->x; }",
+            "explanation": "At -O2:"
+          },
+          {
+            "language": "text",
+            "title": "24.6.2 Structures — listing 2 (illustrative compiler assembly)",
+            "code": "get_x:\n    mov     eax, [rdi]      ; offset 0\n    ret",
+            "explanation": "If get_y:"
+          },
+          {
+            "language": "text",
+            "title": "24.6.2 Structures — listing 3 (illustrative compiler assembly)",
+            "code": "get_y:\n    mov     eax, [rdi+4]\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-24-6-3",
+        "title": "24.6.3 Linked Lists / Pointer Chasing",
+        "content": "C:\n\nClarification: The source snippet omits the Node definition and uses an unnecessary int pointer cast. The typed example below supplies the layout. Both node and node->next must point to valid objects.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "24.6.3 Linked Lists / Pointer Chasing — listing 1",
+            "code": "int get_next_value(int *node) {\n    return ((struct Node*)node)->next->value;\n}",
+            "explanation": "Assembly involves multiple dereferences."
+          },
+          {
+            "language": "c",
+            "title": "Complete typed pointer-chasing example",
+            "code": "struct Node { int value; struct Node *next; };\nint get_next_value(struct Node *node) { return node->next->value; }",
+            "explanation": "On typical SysV x86-64, next is at offset 8 and value at offset 0. Inspect generated assembly rather than assuming this for every ABI."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-7",
+        "title": "24.7 Compiler Optimizations in Assembly",
+        "content": ""
+      },
+      {
+        "id": "sec-24-7-1",
+        "title": "24.7.1 Inlining",
+        "content": "Small functions may be inlined into callers, eliminating call overhead.\n\nBefore inlining:",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "24.7.1 Inlining — listing 1 (illustrative compiler assembly)",
+            "code": "call foo",
+            "explanation": "After inlining, the body of foo appears directly."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-7-2",
+        "title": "24.7.2 Tail Call Optimization",
+        "content": "If a function call is the last operation before return, the compiler may replace call/ret with jmp.\n\nC:",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "24.7.2 Tail Call Optimization — listing 1",
+            "code": "int f(int x) { return g(x); }",
+            "explanation": "At -O2:"
+          },
+          {
+            "language": "text",
+            "title": "24.7.2 Tail Call Optimization — listing 2 (illustrative compiler assembly)",
+            "code": "f:\n    jmp     g       ; tail call"
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 24.4",
+            "code": "int g(int x) { return x*2; }\nint f(int x) { return g(x); }",
+            "explanation": "Original source solution: g can be inlined, so -O2 does not guarantee jmp g. See the exercise for a separate-translation-unit experiment."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-7-3",
+        "title": "24.7.3 Loop Unrolling and Vectorization",
+        "content": "Compilers may unroll loops to reduce branch overhead or use SSE/AVX to process multiple elements.\n\nExample: sum of array may be vectorized to use addps or paddd.\n\nClarification: Floating-point reduction order affects rounding. Reassociation for vectorized floating sums may require relaxed math flags; packed integer sums have different constraints."
+      },
+      {
+        "id": "sec-24-7-4",
+        "title": "24.7.4 Strength Reduction",
+        "content": "Replace multiplication by constant with shifts/adds."
+      },
+      {
+        "id": "sec-24-7-5",
+        "title": "24.7.5 Constant Folding",
+        "content": "Expressions with constants are evaluated at compile time."
+      },
+      {
+        "id": "sec-24-8",
+        "title": "24.8 Reading Optimized vs Unoptimized Code",
+        "content": "Understanding optimization level helps set expectations.\n\nClarification: The comparison describes tendencies, not guarantees: -O0 need not preserve every call or always use RBP, and optimized code can grow through inlining and unrolling.",
+        "tableData": {
+          "headers": [
+            "Feature",
+            "-O0",
+            "-O2"
+          ],
+          "rows": [
+            [
+              "Stack frame",
+              "Always uses rbp",
+              "Often omits rbp"
+            ],
+            [
+              "Variable storage",
+              "Many stack spills",
+              "Mostly registers"
+            ],
+            [
+              "Branches",
+              "Direct translation",
+              "May use conditional moves"
+            ],
+            [
+              "Loops",
+              "Simple, unoptimized",
+              "Possibly unrolled/vectorized"
+            ],
+            [
+              "Function calls",
+              "Always call",
+              "May inline or tail-call"
+            ],
+            [
+              "Code size",
+              "Larger, simpler",
+              "Smaller/faster, harder to read"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-24-9",
+        "title": "24.9 Practical Examples",
+        "content": ""
+      },
+      {
+        "id": "sec-24-9-1",
+        "title": "24.9.1 Disassemble a Simple Program",
+        "content": "Create hello.c:\n\nClarification: GCC can replace printf with puts for this fixed string even at -O0. To preserve printf for this inspection, use -fno-builtin-printf. Use objdump -d -M intel --disassemble=main hello to isolate main.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "24.9.1 Disassemble a Simple Program — listing 1",
+            "code": "#include <stdio.h>\nint main() {\n    printf(\"Hello, World!\\n\");\n    return 0;\n}",
+            "explanation": "Compile with symbols and no optimization:"
+          },
+          {
+            "language": "bash",
+            "title": "24.9.1 Disassemble a Simple Program — listing 2",
+            "code": "gcc -O0 -g hello.c -o hello",
+            "explanation": "Disassemble:"
+          },
+          {
+            "language": "bash",
+            "title": "24.9.1 Disassemble a Simple Program — listing 3",
+            "code": "objdump -d -M intel hello | grep -A20 '<main>:'",
+            "explanation": "Observe prologue, call to printf via PLT, and epilogue."
+          }
+        ]
+      },
+      {
+        "id": "sec-24-9-2",
+        "title": "24.9.2 Analyze a Function with GDB",
+        "content": "Load binary in GDB, break at function, disassemble:\n\nClarification: Run gdb ./hello at the shell, then enter the remaining commands inside GDB. Use disassemble /s main for current source-mixed output.",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "24.9.2 Analyze a Function with GDB — listing 1",
+            "code": "gdb ./hello\nbreak main\nrun\ndisassemble /m\nstepi\ninfo registers"
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-24-1',
-        title: 'Exercise 24.1: Compare -O0 and -O2 for a Swap Function',
-        description: 'Observe how -O0 generates stack spills while -O2 performs register-only swaps.',
-        solution: 'gcc -O0 -S swap.c -> uses [rbp-8]; gcc -O2 -S swap.c -> uses only registers.',
-        solutionLanguage: 'bash'
+        "id": "ex-24-1",
+        "title": "Exercise 24.1: Disassemble and Identify",
+        "description": "Write a C function that swaps two integers using a temporary variable. Compile with -O0 and -O2, disassemble, and explain the differences.",
+        "solution": "void swap(int *a, int *b) {\n    int tmp = *a;\n    *a = *b;\n    *b = tmp;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "C code:\n\n-O0: uses stack for tmp, loads/stores.\n-O2: uses registers, no stack. Save this C listing as exercise.c; compile with gcc -O0 -g -c exercise.c -o exercise-O0.o and gcc -O2 -g -c exercise.c -o exercise-O2.o, then compare objdump -dr -M intel on both objects."
+      },
+      {
+        "id": "ex-24-2",
+        "title": "Exercise 24.2: Recognize Loop Pattern",
+        "description": "Write a C function that sums elements of an array of 100 ints. Compile with -O2. Identify loop induction variable, loop exit condition, and any vectorization.",
+        "solution": "int sum(int *arr, int n) {\n    int s = 0;\n    for (int i=0; i<n; i++) s += arr[i];\n    return s;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "C code:\n\n-O2 may use lea and add with pointer increments, or vectorized. Save this C listing as exercise.c; compile with gcc -O0 -g -c exercise.c -o exercise-O0.o and gcc -O2 -g -c exercise.c -o exercise-O2.o, then compare objdump -dr -M intel on both objects. Call sum with n=100 and a valid 100-element array. Test values 0..99, whose sum is 4950. Use -fopt-info-vec-all to inspect vectorization decisions; identify scalar cleanup as well as the main loop."
+      },
+      {
+        "id": "ex-24-3",
+        "title": "Exercise 24.3: Switch Statement",
+        "description": "Write a C function with a switch statement on an integer 0-3 returning different values. Compile with -O2. Determine if a jump table is used. Show the table entries.",
+        "solution": "int f(int x) {\n    switch(x) {\n        case 0: return 10;\n        case 1: return 20;\n        case 2: return 30;\n        case 3: return 40;\n    }\n    return -1;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "C code:\n\nCompile -O2, look for jump table. Save this C listing as exercise.c; compile with gcc -O0 -g -c exercise.c -o exercise-O0.o and gcc -O2 -g -c exercise.c -o exercise-O2.o, then compare objdump -dr -M intel on both objects. The linear return values usually become 10*(x+1), guarded by an unsigned range test, so there may be no table entries to show. Inspect objdump -s -j .rodata only if that section exists; a constants table is distinct from a control-flow jump table."
+      },
+      {
+        "id": "ex-24-4",
+        "title": "Exercise 24.4: Tail Call",
+        "description": "Write two C functions where one tail-calls the other. Compile with -O2 and verify that the call is replaced by a jump.",
+        "solution": "# Save and run as a shell script in an exercise directory.\ncat > g.c <<'C'\nint g(int x) { return x*2; }\nC\ncat > f.c <<'C'\nextern int g(int);\nint f(int x) { return g(x); }\nC\ngcc -O2 -fno-lto -c f.c -o f.o\ngcc -O2 -fno-lto -c g.c -o g.o\nobjdump -dr -M intel f.o\n# Compare with a build where sibling-call optimization is disabled:\ngcc -O2 -fno-lto -fno-optimize-sibling-calls -c f.c -o f-call.o\nobjdump -dr -M intel f-call.o",
+        "solutionLanguage": "bash",
+        "solutionExplanation": "-O2: f becomes jmp g. Save this C listing as exercise.c; compile with gcc -O0 -g -c exercise.c -o exercise-O0.o and gcc -O2 -g -c exercise.c -o exercise-O2.o, then compare objdump -dr -M intel on both objects. Run the shell commands above. An external g prevents local inlining without LTO; look for a tail jmp plus relocation in f.o and call/ret in f-call.o."
+      },
+      {
+        "id": "ex-24-5",
+        "title": "Exercise 24.5: Struct Access",
+        "description": "Define a struct with three fields, write a function that returns the third field. Disassemble and show the offset used.",
+        "solution": "struct S { int a; char b; long c; };\nlong get_c(struct S *s) { return s->c; }",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Offset for c likely 8 or 16 depending on alignment. Disassemble and observe [rdi+8] or [rdi+16]. Save this C listing as exercise.c; compile with gcc -O0 -g -c exercise.c -o exercise-O0.o and gcc -O2 -g -c exercise.c -o exercise-O2.o, then compare objdump -dr -M intel on both objects. Under the chapter’s SysV AMD64 LP64 ABI, c is at offset 8: int occupies 0–3, char occupies 4, padding occupies 5–7, long occupies 8–15. Check with offsetof(struct S,c); offset 16 is not the default for this definition."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'How do you spot an array access in disassembled code?',
-        answer: 'Look for scaled indexed addressing mode [base + index*scale] where scale is 2, 4, or 8 matching the element size, often preceded by sign-extension (movsxd).'
+        "question": "What is disassembly? How does it differ from decompilation?",
+        "answer": "Disassembly decodes machine instructions into mnemonics and operands. Decompilation infers higher-level constructs; neither generally recovers original variable names, comments or exact source without debug information."
+      },
+      {
+        "question": "Which tool would you use to disassemble an ELF binary with Intel syntax?",
+        "answer": "objdump -d -M intel program disassembles executable sections of an ELF binary. Add -S for available debug source mappings, or --disassemble=function to focus the output."
+      },
+      {
+        "question": "What are the typical prologue and epilogue instructions for a function with a frame pointer? How does -O2 change this?",
+        "answer": "Common setup is push rbp; mov rbp,rsp; sub rsp,N. Teardown is mov rsp,rbp; pop rbp; ret, often expressed as leave; ret. Optimization may omit the frame pointer or the whole frame."
+      },
+      {
+        "question": "How are function arguments passed according to the System V AMD64 ABI? Where are additional arguments beyond six passed?",
+        "answer": "For ordinary integer/pointer arguments, RDI, RSI, RDX, RCX, R8 and R9 are used; later arguments use the stack. At an unmodified entry, the seventh integer argument is at RSP+8. Floating arguments use XMM registers; aggregates follow ABI classification."
+      },
+      {
+        "question": "How can you identify a switch statement that uses a jump table in assembly? Show an example.",
+        "answer": "A bounds check precedes an indexed load and indirect jump, for example cmp edi,3; ja default; lea rdx,[rel table]; movsxd rax,dword [rdx+rdi*4]; add rax,rdx; jmp rax. This assumes EDI has been zero-extended. The entries here are signed relative code offsets. A table whose loaded value is returned directly is a value table, not a jump table."
+      },
+      {
+        "question": "What is tail call optimization? How does it appear in assembly?",
+        "answer": "A eligible final call can reuse the caller return address after restoring its frame, using jmp target. Inlining may eliminate the call entirely, so use separate translation units without LTO to observe a tail jump."
+      },
+      {
+        "question": "How does a compiler typically implement a loop? What are induction variables?",
+        "answer": "Look for initialization, a condition, a back edge, and an update. An induction variable changes predictably each iteration, such as an index incrementing by one or a pointer advancing by four bytes. Vector loops may advance by several elements."
+      },
+      {
+        "question": "In optimized code, why might a function not use a frame pointer? What are the trade-offs?",
+        "answer": "Omitting RBP saves setup/teardown instructions and makes another register available. Stack offsets may change with RSP, making manual analysis harder; unwind metadata can still support stack traces."
+      },
+      {
+        "question": "How can you tell if an array is being accessed? What addressing mode is used?",
+        "answer": "An address such as [rdi+rax*4] suggests four-byte elements, while [rdi+rax*8] suggests eight-byte elements. Track base and index origins: scaled addressing alone does not prove an array or its bounds."
+      },
+      {
+        "question": "Why is it important to know the optimization level when analyzing assembly?",
+        "answer": "Optimization can remove variables, fold arithmetic, reorder instructions, inline calls and transform loops. Knowing flags and compiler version helps avoid treating illustrative patterns as guaranteed instruction sequences."
       }
     ],
-    summary: ['Disassembly reveals exact machine execution.', 'Understanding compiler patterns enables effective reverse engineering.']
+    "summary": [
+      "Disassembly converts machine code to assembly; tools like objdump and GDB are essential.",
+      "Compiler-generated assembly varies with optimization level; -O0 is simple but verbose, -O2 is optimized and often uses registers, omits frame pointer, and may inline functions.",
+      "Recognize patterns: prologues/epilogues, function calls, loops, switches, array/struct access.",
+      "Tail calls become jumps; loops may be unrolled/vectorized.",
+      "Understanding ABI and optimization levels is crucial for reading compiler output.",
+      "Practice by compiling small snippets and analyzing.",
+      "In the next chapter, we’ll delve into stack frames, prologues, and epilogues in more detail."
+    ]
   },
   {
     id: 25,
