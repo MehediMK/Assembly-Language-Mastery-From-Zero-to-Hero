@@ -1358,87 +1358,523 @@ export const CHAPTERS_LEVEL_4: Chapter[] = [
     ]
   },
   {
-    id: 21,
-    slug: 'chapter-21-performance-optimization-techniques',
-    level: 4,
-    levelTitle: 'Advanced Assembly',
-    title: 'Chapter 21: Performance Optimization Techniques',
-    subtitle: 'Loop Unrolling, Strength Reduction, Cache Blocking, and SIMD Kernel',
-    learningObjectives: [
-      'Apply systematic profiling with perf stat and perf record.',
-      'Implement loop unrolling and loop fusion.',
-      'Optimize memory access with cache blocking (tiling) and prefetching.',
-      'Construct a highly optimized vector dot product kernel.'
+    "id": 21,
+    "slug": "chapter-21-performance-optimization-techniques",
+    "level": 4,
+    "levelTitle": "Advanced Assembly",
+    "title": "Chapter 21: Performance Optimization Techniques",
+    "subtitle": "Loop Unrolling, Strength Reduction, Cache Blocking, and SIMD Kernel",
+    "learningObjectives": [
+      "Understand the systematic process of optimizing assembly code: profiling, identifying hotspots, and iteratively improving.",
+      "Master loop optimization techniques: unrolling, fusion, distribution, invariant code motion, and strength reduction.",
+      "Learn how to reduce dependency chains and increase instruction-level parallelism (ILP).",
+      "Optimize memory access patterns: cache blocking, prefetching, data alignment, and avoiding false sharing.",
+      "Minimize branch misprediction penalties using branchless code, predictable branches, and jump tables.",
+      "Select optimal instructions and schedule them to avoid stalls and improve throughput.",
+      "Leverage SIMD instructions for data-parallel operations.",
+      "Reduce function call overhead and understand when to inline or use leaf functions.",
+      "Use profiling tools like perf to measure and guide optimization efforts.",
+      "Apply a case study to integrate multiple techniques into a highly optimized routine."
     ],
-    prerequisites: ['Chapters 1–20'],
-    keyConcepts: [
-      'Always profile first: optimize hotspots, not cold code.',
-      'Loop unrolling reduces loop branch overhead and increases ILP.',
-      'Cache blocking keeps active matrices within L1/L2 cache.'
+    "prerequisites": [
+      "Solid understanding of x86-64 assembly, registers, and addressing modes (Chapters 1–13).",
+      "Knowledge of CPU microarchitecture: pipelines, caches, branch prediction (Chapter 18).",
+      "Familiarity with ABI and register allocation (Chapter 19).",
+      "Experience with inline assembly or mixing C and assembly (Chapter 20).",
+      "Basic proficiency with Linux development tools: GDB, NASM, GCC, perf."
     ],
-    diagramType: 'optimization_techniques',
-    sections: [
+    "keyConcepts": [
+      "Optimization is the process of improving code performance without changing its behavior.",
+      "Profiling identifies which parts of the code consume the most time; optimize hotspots, not cold code.",
+      "Loop unrolling reduces loop overhead and increases ILP by processing multiple iterations per branch.",
+      "Dependency chains limit parallelism; break them with multiple accumulators or reordering.",
+      "Cache blocking (tiling) improves data locality for large data sets.",
+      "Prefetching hides memory latency by loading data into cache before it is needed.",
+      "Branchless code uses conditional moves or arithmetic to avoid branch mispredictions.",
+      "Instruction selection matters: some instructions (e.g., lea, xor) are faster or smaller than alternatives.",
+      "SIMD processes multiple data elements per instruction, greatly accelerating vectorizable code.",
+      "Function inlining eliminates call overhead, but increases code size; leaf functions can use the red zone.",
+      "Strength reduction replaces expensive operations with cheaper ones (e.g., multiplication by constant using shifts/adds)."
+    ],
+    "diagramType": "optimization_techniques",
+    "sections": [
       {
-        id: 'sec-21-1',
-        title: '21.1 High-Performance Dot Product Kernel',
-        content: `An unrolled 4x kernel with 4 independent SIMD accumulators and prefetching:`,
-        codeSnippets: [
+        "id": "sec-21-1",
+        "title": "21.1 Introduction to Performance Optimization",
+        "content": "Writing functionally correct assembly is the first step; making it fast is often the goal in performance-critical applications. Optimization is an iterative process: measure, identify bottlenecks, apply transformations, and re-measure. Without profiling, you may waste time optimizing code that rarely runs. The golden rule: measure first, optimize later.\n\nPerformance optimization in assembly gives you fine-grained control over every instruction. However, modern CPUs are complex; what looks faster may not be due to pipelining, out-of-order execution, and cache effects. Therefore, a deep understanding of the microarchitecture (Chapter 18) is essential.\n\nThis chapter presents a collection of techniques, from high-level loop transformations to low-level instruction scheduling. Always verify improvements with measurement tools like perf or cycle counters."
+      },
+      {
+        "id": "sec-21-2",
+        "title": "21.2 Profiling and Identifying Hotspots",
+        "content": "Before optimizing, determine where the program spends its time. Use profiling tools:\n\n- perf stat: Provides overall statistics: cycles, instructions, cache misses, branch mispredictions.\n- perf record / perf report: Samples the program to identify hot functions and instructions.\n- valgrind --tool=callgrind: Simulates cache and branch prediction, showing detailed call graphs and miss rates.\n- GDB with timing: Insert rdtsc around code sections (as in Chapter 20) to measure cycle counts.\n\nExample: Profiling a simple sum loop\n\nClarification: The counter output is illustrative. Hardware counters are restricted in this environment, so examples are correctness-tested without claiming measured speedups. RDTSC measures TSC ticks, not necessarily core cycles; use ordering and a retained workload as in Chapter 20.",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'dot_product_opt.asm',
-            code: `dot_product_opt:
-    xorps xmm0, xmm0     ; acc0
-    xorps xmm1, xmm1     ; acc1
-    xorps xmm2, xmm2     ; acc2
-    xorps xmm3, xmm3     ; acc3
-    mov ecx, edx
-    shr ecx, 4           ; 16 floats per iteration
-    test ecx, ecx
-    jz .done
-.loop:
-    prefetcht0 [rdi + 256]
-    prefetcht0 [rsi + 256]
-    movaps xmm4, [rdi]
-    mulps xmm4, [rsi]
-    addps xmm0, xmm4
-    movaps xmm5, [rdi+16]
-    mulps xmm5, [rsi+16]
-    addps xmm1, xmm5
-    movaps xmm6, [rdi+32]
-    mulps xmm6, [rsi+32]
-    addps xmm2, xmm6
-    movaps xmm7, [rdi+48]
-    mulps xmm7, [rsi+48]
-    addps xmm3, xmm7
-    add rdi, 64
-    add rsi, 64
-    dec ecx
-    jnz .loop
-    addps xmm0, xmm1
-    addps xmm2, xmm3
-    addps xmm0, xmm2
-.done:
-    ret`
+            "language": "bash",
+            "title": "21.2 Profiling and Identifying Hotspots — listing 1",
+            "code": "perf stat ./sum_program",
+            "explanation": "Output includes:"
+          },
+          {
+            "language": "text",
+            "title": "21.2 Profiling and Identifying Hotspots — listing 2",
+            "code": "        1,234,567      cycles\n        5,000,000      instructions        # 4.05 insn per cycle\n          50,000      branches\n           1,200      branch-misses       # 2.4% of all branches\n          12,000      cache-misses",
+            "explanation": "High cache misses or branch mispredictions indicate areas for improvement."
+          }
+        ]
+      },
+      {
+        "id": "sec-21-3",
+        "title": "21.3 General Optimization Principles",
+        "content": ""
+      },
+      {
+        "id": "sec-21-3-1",
+        "title": "21.3.1 Optimize Only Hot Code",
+        "content": "The 80/20 rule: 80% of execution time is spent in 20% of code. Focus on inner loops and frequently called functions."
+      },
+      {
+        "id": "sec-21-3-2",
+        "title": "21.3.2 Keep It Simple",
+        "content": "First write clear, correct code; then optimize only if necessary. Overly clever code can be hard to maintain and may not be faster."
+      },
+      {
+        "id": "sec-21-3-3",
+        "title": "21.3.3 Use the Right Algorithm",
+        "content": "A better algorithm (e.g., O(n log n) vs O(n²)) often yields far greater speedups than micro-optimizations."
+      },
+      {
+        "id": "sec-21-3-4",
+        "title": "21.3.4 Exploit Locality",
+        "content": "Access memory sequentially to maximize cache hits."
+      },
+      {
+        "id": "sec-21-3-5",
+        "title": "21.3.5 Reduce Work",
+        "content": "Eliminate redundant calculations, move loop-invariant code out of loops, and avoid unnecessary memory accesses."
+      },
+      {
+        "id": "sec-21-3-6",
+        "title": "21.3.6 Increase Parallelism",
+        "content": "Modern CPUs can execute multiple instructions per cycle if they are independent. Break dependency chains to expose ILP."
+      },
+      {
+        "id": "sec-21-4",
+        "title": "21.4 Loop Optimizations",
+        "content": "Loops are prime candidates for optimization because they repeat many times."
+      },
+      {
+        "id": "sec-21-4-1",
+        "title": "21.4.1 Loop Unrolling",
+        "content": "Motivation: Reduce loop overhead (increment, compare, branch) and enable better instruction scheduling.\n\nExample: Sum array of qwords (original)\n\nClarification: Guard empty loops and handle remainders. The source instruction count already includes the conditional branch, so do not add it a second time. Best unroll factors depend on workload and CPU, not a fixed universal range.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "21.4.1 Loop Unrolling — listing 1",
+            "code": "    xor rax, rax\n    mov rcx, len\n.loop:\n    add rax, [rsi]\n    add rsi, 8\n    dec rcx\n    jnz .loop",
+            "explanation": "Each iteration does 4 instructions (add, add, dec, jnz). If len=1,000,000, that's 4 million instructions plus branch overhead.\n\nUnrolled 4x:"
+          },
+          {
+            "language": "nasm",
+            "title": "21.4.1 Loop Unrolling — listing 2",
+            "code": "    xor rax, rax\n    xor rbx, rbx          ; second accumulator\n    mov rcx, len / 4\n.loop:\n    add rax, [rsi]\n    add rbx, [rsi+8]\n    add rax, [rsi+16]\n    add rbx, [rsi+24]\n    add rsi, 32\n    dec rcx\n    jnz .loop\n    add rax, rbx          ; combine accumulators",
+            "explanation": "Now one branch per 4 elements, reducing overhead. Two accumulators break dependency chains, allowing parallel execution. The final addition combines results.\n\nConsiderations: Too much unrolling increases code size, possibly causing instruction cache misses. Find the sweet spot (usually 2–8)."
+          }
+        ]
+      },
+      {
+        "id": "sec-21-4-2",
+        "title": "21.4.2 Loop Fusion",
+        "content": "Combine two loops that iterate over the same range into one, improving cache reuse and reducing overhead.\n\nBefore:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "loop 1: sum array",
+            "code": "; loop 1: sum array\n; loop 2: product array",
+            "explanation": "After: compute both in one loop."
+          }
+        ]
+      },
+      {
+        "id": "sec-21-4-3",
+        "title": "21.4.3 Loop Distribution",
+        "content": "The opposite: split a loop with independent operations to improve cache locality or enable vectorization. Typically done by compilers, but manual can help."
+      },
+      {
+        "id": "sec-21-4-4",
+        "title": "21.4.4 Loop Invariant Code Motion",
+        "content": "Move calculations that do not change within the loop outside.\n\nExample:\n\nClarification: Hoisting a load is valid only when no intervening write, alias, atomic/volatile requirement, or concurrent synchronization requires rereading it. Optimization must preserve observable behavior.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "inside loop: mov rdx, [global_const] each iteration -> hoist outside",
+            "code": "; inside loop: mov rdx, [global_const] each iteration -> hoist outside"
+          }
+        ]
+      },
+      {
+        "id": "sec-21-4-5",
+        "title": "21.4.5 Strength Reduction",
+        "content": "Replace expensive operations with cheaper ones, especially array index computations.\n\nExample: Replace imul for array indexing with pointer increments.\n\nClarification: The indexed memory operand shown does not contain an IMUL instruction: x86 can scale an index by four in addressing. A pointer increment is an alternative, not automatically a strength-reduction win.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Using index:",
+            "code": "; Using index:\nmov eax, [array + rcx*4]\n; Using pointer:\nmov eax, [rsi]\nadd rsi, 4"
+          }
+        ]
+      },
+      {
+        "id": "sec-21-5",
+        "title": "21.5 Reducing Dependency Chains",
+        "content": "A dependency chain occurs when each instruction depends on the result of the previous one, limiting ILP. The CPU must wait for the chain to complete sequentially.\n\nExample: Long chain\n\nClarification: The two displayed loops start from different sums (1 versus 0), so they are not equivalent as written. Match initialization and work before benchmarking. Two accumulators expose parallelism but do not guarantee a doubling of throughput.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "21.5 Reducing Dependency Chains — listing 1",
+            "code": "    mov rax, 1\n.loop:\n    add rax, 1    ; depends on previous rax\n    add rax, 1\n    add rax, 1\n    add rax, 1\n    dec rcx\n    jnz .loop",
+            "explanation": "Each add waits for the previous, so the loop runs at the latency of add (1 cycle), even though the CPU could do multiple adds per cycle.\n\nBreak the chain:"
+          },
+          {
+            "language": "nasm",
+            "title": "21.5 Reducing Dependency Chains — listing 2",
+            "code": "    mov rax, 0\n    mov rbx, 0\n.loop:\n    add rax, 1\n    add rbx, 1    ; independent of rax\n    add rax, 1\n    add rbx, 1\n    dec rcx\n    jnz .loop\n    add rax, rbx",
+            "explanation": "Now two independent chains run in parallel, effectively doubling throughput.\n\nUse multiple accumulators as shown earlier. Also, reorder instructions so that independent ones are grouped."
+          }
+        ]
+      },
+      {
+        "id": "sec-21-6",
+        "title": "21.6 Memory Access Optimization",
+        "content": "Memory is often the bottleneck. Optimize by maximizing cache hits and minimizing stalls."
+      },
+      {
+        "id": "sec-21-6-1",
+        "title": "21.6.1 Cache Blocking (Tiling)",
+        "content": "For large data sets that don't fit in cache, process data in blocks that fit.\n\nExample: Matrix multiplication\nInstead of iterating over entire rows/columns, process submatrices that fit in L1/L2 cache. This increases temporal locality."
+      },
+      {
+        "id": "sec-21-6-2",
+        "title": "21.6.2 Prefetching",
+        "content": "Insert prefetcht0, prefetcht1, or prefetchnta instructions before data is needed.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "21.6.2 Prefetching — listing 1",
+            "code": "    lea rsi, [array]\n    mov rcx, len\n.loop:\n    prefetcht0 [rsi + 64]   ; prefetch next cache line\n    add rax, [rsi]\n    add rsi, 8\n    dec rcx\n    jnz .loop",
+            "explanation": "Prefetching hides memory latency but consumes issue slots; use judiciously."
+          }
+        ]
+      },
+      {
+        "id": "sec-21-6-3",
+        "title": "21.6.3 Data Alignment",
+        "content": "Align data to 16 or 64 bytes to avoid split cache line accesses and enable aligned SIMD loads/stores.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "21.6.3 Data Alignment — listing 1",
+            "code": "section .data\n    align 64\n    buffer times 1024 dq 0"
+          }
+        ]
+      },
+      {
+        "id": "sec-21-6-4",
+        "title": "21.6.4 Avoiding False Sharing",
+        "content": "In multithreaded programs, separate variables that are written by different threads should be on different cache lines. Use align 64 and padding."
+      },
+      {
+        "id": "sec-21-6-5",
+        "title": "21.6.5 Minimize Memory Access",
+        "content": "Keep frequently used variables in registers. Use movzx/movsx to avoid partial loads. Use lea for address calculations instead of loading from memory."
+      },
+      {
+        "id": "sec-21-7",
+        "title": "21.7 Branch Optimization",
+        "content": "Branches can stall the pipeline if mispredicted. Aim to make branches predictable or eliminate them."
+      },
+      {
+        "id": "sec-21-7-1",
+        "title": "21.7.1 Predictable Branches",
+        "content": "Loops with fixed trip counts are usually predicted well. Branches that go the same direction most of the time are predictable. If a branch is truly random (e.g., checking if a random number is odd), misprediction will be high."
+      },
+      {
+        "id": "sec-21-7-2",
+        "title": "21.7.2 Branchless Code",
+        "content": "Replace conditional jumps with conditional moves (cmovcc) or arithmetic.\n\nExample: Max of two integers\n\nClarification: The absolute-value CMOVS snippet tests flags from NEG, which is incorrect. Insert TEST EAX,EAX after NEG to select based on the original sign. INT32_MIN cannot be represented as a positive signed int. The max snippets are signed comparisons.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Branch version",
+            "code": "; Branch version\n    cmp eax, ebx\n    jg  .greater\n    mov eax, ebx\n.greater:\n    ; eax = max\n\n; Branchless with cmov\n    cmp eax, ebx\n    cmovl eax, ebx   ; if eax < ebx (signed), eax = ebx",
+            "explanation": "For absolute value:"
+          },
+          {
+            "language": "nasm",
+            "title": "21.7.2 Branchless Code — listing 2",
+            "code": "    mov ebx, eax\n    neg ebx\n    cmovs eax, ebx   ; if sign set, use negated",
+            "explanation": "Bit trick for absolute value (no branches):"
+          },
+          {
+            "language": "nasm",
+            "title": "21.7.2 Branchless Code — listing 3",
+            "code": "    mov ebx, eax\n    sar ebx, 31      ; sign mask\n    xor eax, ebx\n    sub eax, ebx"
+          }
+        ]
+      },
+      {
+        "id": "sec-21-7-3",
+        "title": "21.7.3 Jump Tables",
+        "content": "For multi-way branches (switch statements), use a jump table to avoid long if-else chains.\n\nClarification: Indirect jump targets can also be mispredicted. Bounds-check the index before reading the table and use a valid default target. A pointer table in position-independent code needs appropriate relocations or relative entries.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "21.7.3 Jump Tables — listing 1",
+            "code": "    ; rcx = index 0..3\n    lea rax, [jt]\n    mov rax, [rax + rcx*8]\n    jmp rax\njt:\n    dq case0, case1, case2, case3",
+            "explanation": "This is efficient and predictable because the jump target is data-dependent but the indirect jump is resolved quickly."
+          }
+        ]
+      },
+      {
+        "id": "sec-21-8",
+        "title": "21.8 Instruction Selection and Scheduling",
+        "content": "Choosing the right instructions can reduce execution time and code size."
+      },
+      {
+        "id": "sec-21-8-1",
+        "title": "21.8.1 Zeroing Registers",
+        "content": "Use xor reg, reg instead of mov reg, 0. xor is shorter, breaks false dependencies, and is equally fast.\n\nClarification: Both XOR reg,reg and MOV reg,0 are independent of the old full-register value. XOR is often a compact recognized zero idiom, but changes flags; MOV preserves them."
+      },
+      {
+        "id": "sec-21-8-2",
+        "title": "21.8.2 Using lea for Arithmetic",
+        "content": "lea can perform address arithmetic without modifying flags and often in one cycle. Use it for multiplications by constants and adding small offsets.\n\nExample: lea rax, [rbx + rcx*4 + 8] computes rbx + rcx*4 + 8 in one instruction."
+      },
+      {
+        "id": "sec-21-8-3",
+        "title": "21.8.3 Avoiding Slow Instructions",
+        "content": "- loop instruction is slow on many CPUs; use dec rcx / jnz instead.\n- enter and leave are slower than explicit push rbp; mov rbp,rsp and mov rsp,rbp; pop rbp on some older CPUs, though modern CPUs may be fine.\n- div/idiv are very slow (20–90 cycles); replace with shifts for powers of two, or multiply by reciprocal when possible.\n\nClarification: Instruction costs vary by microarchitecture. A shift is not a drop-in replacement for signed division of negative values: rounding toward minus infinity differs from IDIV truncation toward zero. Reciprocal multiplication requires a proven algorithm and full-width arithmetic."
+      },
+      {
+        "id": "sec-21-8-4",
+        "title": "21.8.4 Avoiding Partial Register Stalls",
+        "content": "Writing to a 8-bit or 16-bit register (e.g., al, ax) may cause a partial register stall because the CPU must merge with the upper bits. Use movzx/movsx to extend to full register, or write to the full 32-bit register (which zeroes upper 32 bits) when possible.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "21.8.4 Avoiding Partial Register Stalls — listing 1",
+            "code": "mov al, 5        ; can cause stall if later use eax\n; Better:\nmov eax, 5      ; zeroes upper bits"
+          }
+        ]
+      },
+      {
+        "id": "sec-21-8-5",
+        "title": "21.8.5 Instruction Scheduling",
+        "content": "Reorder instructions to hide latency. Modern CPUs do dynamic scheduling, but explicit ordering can help.\n\nExample: Interleave independent loads and computations",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "21.8.5 Instruction Scheduling — listing 1",
+            "code": "mov rax, [mem1]\nmov rbx, [mem2]   ; start second load while first is in flight\nadd rax, 1\nadd rbx, 2"
+          }
+        ]
+      },
+      {
+        "id": "sec-21-9",
+        "title": "21.9 SIMD Vectorization",
+        "content": "When processing large arrays of data, use SSE/AVX instructions to operate on multiple elements simultaneously. This can yield 2–16x speedups.\n\nExample: Vector addition of two float arrays\n\nClarification: Vector width does not translate directly into end-to-end speedup. Check zero counts, tails, address alignment and all accessed bytes. MOVUPS may be just as fast for aligned data; MOVAPS requires alignment for correctness.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "21.9 SIMD Vectorization — listing 1",
+            "code": "    ; assuming 4 floats per iteration, aligned\n.loop:\n    movaps xmm0, [rsi]\n    movaps xmm1, [rdi]\n    addps xmm0, xmm1\n    movaps [rdx], xmm0\n    add rsi, 16\n    add rdi, 16\n    add rdx, 16\n    dec rcx\n    jnz .loop",
+            "explanation": "Use aligned loads (movaps) for speed; for unaligned data use movups. Additionally, unroll the loop to increase ILP."
+          }
+        ]
+      },
+      {
+        "id": "sec-21-10",
+        "title": "21.10 Function Call Optimization",
+        "content": "Function calls have overhead: pushing arguments, call/ret, prologue/epilogue. For small frequently called functions, consider inlining."
+      },
+      {
+        "id": "sec-21-10-1",
+        "title": "21.10.1 Inlining",
+        "content": "Replace a function call with the function body. In assembly, you can manually inline by writing the code directly. In C/C++, use inline keyword or compiler optimization flags.\n\nTrade-off: Inlining increases code size, which may hurt instruction cache. Inline only small, hot functions."
+      },
+      {
+        "id": "sec-21-10-2",
+        "title": "21.10.2 Leaf Functions and Red Zone",
+        "content": "Leaf functions (those that do not call other functions) can use the 128-byte red zone below rsp for locals without adjusting rsp, eliminating prologue/epilogue overhead.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "21.10.2 Leaf Functions and Red Zone — listing 1",
+            "code": "my_leaf:\n    mov [rsp-8], rdi   ; store local in red zone\n    ; ...\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-21-10-3",
+        "title": "21.10.3 Minimize Parameter Passing Overhead",
+        "content": "For functions called in a loop, pass data via pointers or use registers efficiently. Avoid pushing many stack arguments if possible."
+      },
+      {
+        "id": "sec-21-10-4",
+        "title": "21.10.4 Use call/ret Only When Needed",
+        "content": "For tail calls, replace call/ret with jmp to avoid stack growth.\n\nClarification: Restore the frame and callee-saved registers before a tail jump. A target must receive arguments and stack layout according to its ABI; replacing arbitrary CALL/RET pairs mechanically is unsafe."
+      },
+      {
+        "id": "sec-21-11",
+        "title": "21.11 Case Study: Optimizing a Dot Product",
+        "content": "We'll optimize a dot product of two float arrays of length 1000.\n\nBaseline scalar version:\n\nClarification: For length 1000, the original 16-element loop processes only 992 values and omits the final eight; lengths below 16 return zero. The corrected version below reuses the complete SIMD-and-tail routine from Chapter 19. It prioritizes correctness and must be benchmarked before claiming improvement.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "21.11 Case Study: Optimizing a Dot Product — listing 1",
+            "code": "dot_product:\n    xorps xmm0, xmm0\n    xor eax, eax\n.loop:\n    cmp eax, edx\n    je .done\n    movss xmm1, [rdi + rax*4]\n    mulss xmm1, [rsi + rax*4]\n    addss xmm0, xmm1\n    inc rax\n    jmp .loop\n.done:\n    ret",
+            "explanation": "Optimizations applied:\n\n1. Use SIMD packed operations: Process 4 floats per iteration with mulps and addps.\n2. Unroll the loop by 2 or 4 to reduce branch overhead and increase ILP.\n3. Use multiple accumulators to break dependency chains.\n4. Align data for movaps.\n5. Prefetch upcoming cache lines.\n6. Hoist loop-invariant computations.\n\nOptimized version (unrolled 4x, 4 accumulators, prefetch):"
+          },
+          {
+            "language": "nasm",
+            "title": "21.11 Case Study: Optimizing a Dot Product — listing 2",
+            "code": "dot_product_opt:\n    xorps xmm0, xmm0   ; acc0\n    xorps xmm1, xmm1   ; acc1\n    xorps xmm2, xmm2   ; acc2\n    xorps xmm3, xmm3   ; acc3\n    mov ecx, edx\n    shr ecx, 4         ; number of 16-element blocks (4 unroll * 4 floats)\n    test ecx, ecx\n    jz .remainder\n.loop:\n    prefetcht0 [rdi + 256]\n    prefetcht0 [rsi + 256]\n    movaps xmm4, [rdi]\n    mulps xmm4, [rsi]\n    addps xmm0, xmm4\n    movaps xmm5, [rdi+16]\n    mulps xmm5, [rsi+16]\n    addps xmm1, xmm5\n    movaps xmm6, [rdi+32]\n    mulps xmm6, [rsi+32]\n    addps xmm2, xmm6\n    movaps xmm7, [rdi+48]\n    mulps xmm7, [rsi+48]\n    addps xmm3, xmm7\n    add rdi, 64\n    add rsi, 64\n    dec ecx\n    jnz .loop\n    addps xmm0, xmm1\n    addps xmm2, xmm3\n    addps xmm0, xmm2\n    ; horizontal sum\n    movaps xmm1, xmm0\n    shufps xmm1, xmm1, 0x4E\n    addps xmm0, xmm1\n    movaps xmm1, xmm0\n    shufps xmm1, xmm1, 0xB1\n    addps xmm0, xmm1\n    ret\n.remainder:\n    ; handle remaining elements (not shown)\n    ret",
+            "explanation": "This version processes 16 floats per loop iteration, uses four accumulators, and prefetches 256 bytes ahead. It should be significantly faster than the scalar baseline."
+          },
+          {
+            "language": "nasm",
+            "title": "Complete SIMD dot product with tail",
+            "code": "dot_product:\n    xorps xmm0, xmm0\n    mov rcx, rdx\n    shr rcx, 2\n    jz .reduce\n.loop:\n    movups xmm1, [rdi]\n    movups xmm2, [rsi]\n    mulps xmm1, xmm2\n    addps xmm0, xmm1\n    add rdi, 16\n    add rsi, 16\n    dec rcx\n    jnz .loop\n.reduce:\n    movaps xmm1, xmm0\n    shufps xmm1, xmm1, 0x4e\n    addps xmm0, xmm1\n    movaps xmm1, xmm0\n    shufps xmm1, xmm1, 0xb1\n    addss xmm0, xmm1\n    and edx, 3\n    jz .done\n.tail:\n    movss xmm1, [rdi]\n    mulss xmm1, [rsi]\n    addss xmm0, xmm1\n    add rdi, 4\n    add rsi, 4\n    dec edx\n    jnz .tail\n.done:\n    ret",
+            "explanation": "Supports count zero, unaligned arrays and all remainder lengths. RDI/RSI point to float arrays; RDX is count. XMM0.low returns the result. Floating-point reassociation can change rounding."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 21.1",
+            "code": "    xor rax, rax\n    mov rcx, len\n.loop:\n    add rax, [rsi]\n    add rsi, 8\n    dec rcx\n    jnz .loop\n\n    xor rax, rax\n    xor rbx, rbx\n    mov rcx, len/2\n.loop:\n    add rax, [rsi]\n    add rbx, [rsi+8]\n    add rsi, 16\n    dec rcx\n    jnz .loop\n    add rax, rbx\n\n    xor rax, rax\n    xor rbx, rbx\n    xor rcx, rcx\n    xor rdx, rdx\n    mov r8, len/4\n.loop:\n    add rax, [rsi]\n    add rbx, [rsi+8]\n    add rcx, [rsi+16]\n    add rdx, [rsi+24]\n    add rsi, 32\n    dec r8\n    jnz .loop\n    add rax, rbx\n    add rcx, rdx\n    add rax, rcx",
+            "explanation": "Original exercise fragment retained; the completed harness below supplies missing setup and verifies the result."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 21.2",
+            "code": "max_branch:\n    cmp edi, esi\n    jg .done\n    mov edi, esi\n.done:\n    mov eax, edi\n    ret\n\nmax_branchless:\n    mov eax, edi\n    cmp esi, eax\n    cmovg eax, esi\n    ret",
+            "explanation": "Original exercise fragment retained; the completed harness below supplies missing setup and verifies the result."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 21.3",
+            "code": "for (i=0;i<N;i++)\n  for (j=0;j<N;j++)\n    for (k=0;k<N;k++)\n      C[i][j] += A[i][k]*B[k][j];\n\nfor (i0=0;i0<N;i0+=B)\n  for (j0=0;j0<N;j0+=B)\n    for (k0=0;k0<N;k0+=B)\n      for (i=i0;i<min(i0+B,N);i++)\n        for (j=j0;j<min(j0+B,N);j++)\n          for (k=k0;k<min(k0+B,N);k++)\n            C[i][j] += A[i][k]*B[k][j];",
+            "explanation": "Original exercise fragment retained; the completed harness below supplies missing setup and verifies the result."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 21.4",
+            "code": "; rax = rbx * 10\nlea rax, [rbx + rbx*4]   ; 5*rbx\nlea rax, [rax + rax]     ; 10*rbx",
+            "explanation": "Original exercise fragment retained; the completed harness below supplies missing setup and verifies the result."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 21.5",
+            "code": "    xor rax, rax\n    mov rcx, len\n.loop:\n    prefetcht0 [rsi + 64]   ; try 128, 256\n    add rax, [rsi]\n    add rsi, 8\n    dec rcx\n    jnz .loop",
+            "explanation": "Original exercise fragment retained; the completed harness below supplies missing setup and verifies the result."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-21-1',
-        title: 'Exercise 21.1: Strength Reduction for Multiply by 10',
-        description: 'Replace imul rax, 10 with lea instructions.',
-        solution: `lea rax, [rax + rax*4]   ; rax = 5 * rax\nlea rax, [rax + rax]     ; rax = 10 * rax`,
-        solutionLanguage: 'nasm'
+        "id": "ex-21-1",
+        "title": "Exercise 21.1: Loop Unrolling",
+        "description": "Take a simple loop that sums an array of 1,000,000 qwords. Write three versions: no unroll, 2x unroll, 4x unroll. Measure performance with perf stat. Compare cycles and instructions per cycle.",
+        "solution": "#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#ifndef UNROLL\n#define UNROLL 4\n#endif\n#if UNROLL != 1 && UNROLL != 2 && UNROLL != 4\n#error UNROLL must be 1, 2, or 4\n#endif\n#define N 1000000\nstatic uint64_t data[N];\nint main(void) {\n    for(unsigned i=0;i<N;i++) data[i]=1;\n    uint64_t lanes[UNROLL]={0}, sum=0;\n    unsigned i=0;\n    for(;i+UNROLL<=N;i+=UNROLL)\n        for(unsigned j=0;j<UNROLL;j++) lanes[j]+=data[i+j];\n    for(unsigned j=0;j<UNROLL;j++) sum+=lanes[j];\n    for(;i<N;i++) sum+=data[i];\n    printf(\"%llu\\n\",(unsigned long long)sum);\n    return sum==N ? 0 : 1;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "No unroll:\n\n2x unroll:\n\n4x unroll:\n\nRun perf stat on each. The unrolled versions should show fewer instructions per element and better IPC.\n\nBuild bench.c with gcc -O2 -fno-tree-vectorize -DUNROLL=1 (then 2 and 4), and compare perf stat -r 5 runs. All must print 1000000. Inspect assembly; compiler transformations can change the source loop shape."
+      },
+      {
+        "id": "ex-21-2",
+        "title": "Exercise 21.2: Branchless Max",
+        "description": "Write a function that returns the maximum of two signed integers using both branch and branchless (cmov) approaches. Benchmark both in a loop with random inputs (e.g., using rdrand or a pseudo-random sequence). Measure branch mispredictions.",
+        "solution": "; File: max.asm\nsection .text\nglobal max_branch, max_branchless\nmax_branch:\n    cmp edi, esi\n    jg .done\n    mov edi, esi\n.done:\n    mov eax, edi\n    ret\nmax_branchless:\n    mov eax, edi\n    cmp esi, eax\n    cmovg eax, esi\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits\n\n; File: main.c\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\nextern int max_branch(int,int),max_branchless(int,int);\nint main(int argc,char **argv){\n    int (*f)(int,int)=(argc>1 && atoi(argv[1]))?max_branchless:max_branch;\n    uint32_t state=7; int64_t sum=0;\n    for(unsigned i=0;i<1000000;i++){\n        state=state*1664525u+1013904223u; int a=(int)(state%2001)-1000;\n        state=state*1664525u+1013904223u; int b=(int)(state%2001)-1000;\n        int r=f(a,b); if(r!=(a>b?a:b)) return 1; sum+=r;\n    }\n    printf(\"%lld\\n\",(long long)sum); return 0;\n}",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Branch version:\n\nBranchless:\n\nBenchmark by calling in a loop with random inputs. Use perf stat to observe branch misses (branch version will have many).\n\nSave the two File blocks separately; nasm -f elf64 max.asm -o max.o; gcc -O2 main.c max.o -o maxbench. Compare ./maxbench 0 and ./maxbench 1: checksums must match. Measure counters on a permitted host; random input does not guarantee a fixed misprediction rate."
+      },
+      {
+        "id": "ex-21-3",
+        "title": "Exercise 21.3: Cache Blocking",
+        "description": "Implement matrix multiplication for 100x100 matrices of doubles. First, a naive triple loop. Then, apply cache blocking with block size 20x20. Compare performance.",
+        "solution": "#include <stdio.h>\n#define N 100\n#define BLOCK 20\nstatic double A[N][N], B[N][N], C[N][N], D[N][N];\nstatic int min(int a,int b){return a<b?a:b;}\nint main(void){\n    for(int i=0;i<N;i++)for(int j=0;j<N;j++){A[i][j]=(i+j)%7;B[i][j]=(i*3+j)%5;}\n    for(int i=0;i<N;i++)for(int j=0;j<N;j++)for(int k=0;k<N;k++)C[i][j]+=A[i][k]*B[k][j];\n    for(int i0=0;i0<N;i0+=BLOCK)for(int j0=0;j0<N;j0+=BLOCK)for(int k0=0;k0<N;k0+=BLOCK)\n      for(int i=i0;i<min(i0+BLOCK,N);i++)for(int j=j0;j<min(j0+BLOCK,N);j++)\n        for(int k=k0;k<min(k0+BLOCK,N);k++)D[i][j]+=A[i][k]*B[k][j];\n    for(int i=0;i<N;i++)for(int j=0;j<N;j++)if(C[i][j]!=D[i][j])return 1;\n    puts(\"All 10000 results match\");return 0;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Naive matrix multiplication (C code for brevity):\n\nBlocked version:\n\nImplement in assembly using loops; measure cycles.\n\nSave as matrix.c; gcc -O2 matrix.c -o matrix; ./matrix checks every result. B is the matrix, BLOCK is the tile size, avoiding the source name collision. For timing, measure each kernel separately with reset output arrays and the same initial cache policy."
+      },
+      {
+        "id": "ex-21-4",
+        "title": "Exercise 21.4: Strength Reduction",
+        "description": "Replace multiplication by a constant in a loop with shifts and adds (e.g., multiply by 10 using lea). Show the code and explain the speedup.",
+        "solution": "section .text\nglobal _start\n_start:\n    mov rbx, 7\n    lea rax, [rbx+rbx*4]\n    lea rax, [rax+rax]\n    imul rcx, rbx, 10\n    cmp rax, rcx\n    jne .fail\n    mov rdi, rax\n    mov eax, 60\n    syscall\n.fail:\n    mov edi, 1\n    mov eax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Multiply by 10 using lea:\n\nThis uses two lea instructions instead of imul rbx, 10, which is slower.\n\nExpected exit 70. Two LEAs are not universally faster than one IMUL; compare actual target latency, throughput and surrounding dependencies. This program checks equivalence, not a speedup."
+      },
+      {
+        "id": "ex-21-5",
+        "title": "Exercise 21.5: Prefetching",
+        "description": "Write a memory-bound loop that reads a large array. Add software prefetching at various distances (e.g., 64, 128, 256 bytes ahead). Measure the effect on cache misses and total time.",
+        "solution": "#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#define N 1048576\n#ifndef DISTANCE\n#define DISTANCE 64\n#endif\nstatic uint64_t data[N];\nint main(int argc,char **argv) {\n    int prefetch=argc>1 && atoi(argv[1]);\n    for(unsigned i=0;i<N;i++) data[i]=1;\n    uint64_t sum=0;\n    for(unsigned i=0;i<N;i++) {\n        if(prefetch && i+DISTANCE/8<N) __builtin_prefetch(&data[i+DISTANCE/8],0,3);\n        sum+=data[i];\n    }\n    printf(\"%llu\\n\",(unsigned long long)sum);\n    return sum==N ? 0 : 1;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Memory-bound loop:\n\nMeasure with perf stat for cache misses and runtime.\n\nBuild with -DDISTANCE=64, 128 and 256; run with 0 for no prefetch and 1 for prefetch. The bounds check keeps the C prefetch pointer inside the array. Repeat a sufficiently long measured region; sequential hardware prefetch may make software hints redundant."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why is prefetcht0 beneficial in memory-bound loops?',
-        answer: 'prefetcht0 informs the CPU memory controller to proactively fetch upcoming cache lines into L1 cache before the program actually accesses them, hiding memory bus latency.'
+        "question": "What is the first step in optimizing a program? Why is it crucial?",
+        "answer": "Measure a representative workload and verify correctness first. Identify hot code and bottlenecks so changes target meaningful costs."
+      },
+      {
+        "question": "How does loop unrolling improve performance? What are the drawbacks?",
+        "answer": "Unrolling reduces loop control and can expose independent work, but increases code size, register pressure and tail complexity. Measure the chosen factor."
+      },
+      {
+        "question": "Explain what a dependency chain is and how you can break it.",
+        "answer": "A dependency chain makes each operation wait for a previous result. Multiple independent accumulators split a reduction, then combine results; floating-point reassociation changes rounding."
+      },
+      {
+        "question": "What is cache blocking? When is it beneficial?",
+        "answer": "Blocking processes submatrices or tiles that can be reused in cache. It helps when repeated working sets otherwise exceed cache, but tile size and loop order need measurement."
+      },
+      {
+        "question": "How does software prefetching work? What are the risks?",
+        "answer": "Prefetch issues hints before data is needed. It can waste bandwidth/cache capacity and instructions, arrive too late, or duplicate hardware prefetch. Tune only with evidence."
+      },
+      {
+        "question": "When would you use branchless code instead of conditional jumps?",
+        "answer": "Use branchless selection when unpredictable branches dominate and the added work/dependencies are cheaper. Predictable branches and expensive unused work can favor branching."
+      },
+      {
+        "question": "Compare xor reg, reg with mov reg, 0. Why is xor often preferred?",
+        "answer": "XOR is compact and often a recognized zero idiom, but changes flags. MOV immediate zero also has no old-destination dependency and preserves flags."
+      },
+      {
+        "question": "What is strength reduction? Provide an example.",
+        "answer": "Strength reduction substitutes a proven cheaper expression, such as maintaining a pointer instead of repeatedly multiplying by a nontrivial stride. Two LEAs can compute 10*x, but may not beat IMUL on the target."
+      },
+      {
+        "question": "How do SIMD instructions accelerate array processing?",
+        "answer": "SIMD applies arithmetic to several lanes per instruction. Loads, stores, reductions, tails, memory bandwidth and instruction support constrain realized speedup."
+      },
+      {
+        "question": "What is the red zone, and how can it reduce function call overhead?",
+        "answer": "The System V user-space red zone is 128 bytes below RSP available for temporary data not live across calls. Leaf functions can avoid allocation instructions; it does not eliminate the CALL itself."
       }
     ],
-    summary: ['Unrolling and multiple accumulators boost instructions per cycle.', 'Prefetching and alignment eliminate memory bottlenecks.']
+    "summary": [
+      "Optimization is iterative: profile first, then optimize hotspots.",
+      "Loop unrolling reduces overhead and enables ILP; use multiple accumulators to break dependency chains.",
+      "Cache blocking improves data locality for large working sets.",
+      "Prefetching hides memory latency.",
+      "Branchless code eliminates misprediction penalties.",
+      "Instruction selection (e.g., lea, xor, avoiding slow instructions) matters.",
+      "SIMD provides large speedups for data-parallel tasks.",
+      "Function call overhead can be reduced via inlining and leaf functions.",
+      "Always measure with tools like perf to validate improvements.",
+      "In the next chapter, we'll explore atomic operations, multithreading, and concurrency, building on these performance foundations."
+    ]
   },
   {
     id: 22,
