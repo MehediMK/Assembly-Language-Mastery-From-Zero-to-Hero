@@ -1467,70 +1467,465 @@ export const CHAPTERS_LEVEL_3: Chapter[] = [
     ]
   },
   {
-    id: 15,
-    slug: 'chapter-15-macros-modular-programming',
-    level: 3,
-    levelTitle: 'Intermediate Assembly',
-    title: 'Chapter 15: Macros and Modular Programming',
-    subtitle: 'Preprocessor Directives, Multi-Line Macros, Local Labels, and Include Headers',
-    learningObjectives: [
-      'Use single-line (%define) and multi-line (%macro/%endmacro) macros.',
-      'Avoid duplicate label collisions using macro local labels (%%label).',
-      'Implement conditional assembly (%ifdef, %ifndef, %if).',
-      'Organize projects into reusable modules with .inc header files.'
+    "id": 15,
+    "slug": "chapter-15-macros-modular-programming",
+    "level": 3,
+    "levelTitle": "Intermediate Assembly",
+    "title": "Chapter 15: Macros and Modular Programming",
+    "subtitle": "Preprocessor Directives, Multi-Line Macros, Local Labels, and Include Headers",
+    "learningObjectives": [
+      "Understand the purpose and benefits of macros in assembly language.",
+      "Master single-line macros with %define and multi-line macros with %macro/%endmacro.",
+      "Use macro parameters, default values, and local labels to avoid conflicts.",
+      "Implement conditional assembly with %if, %ifdef, %ifndef, and related directives.",
+      "Organize assembly projects into multiple source files and use include files for shared constants and macros.",
+      "Link multiple object files into a single executable using ld or gcc.",
+      "Apply modular programming principles to create maintainable and reusable assembly code."
     ],
-    prerequisites: ['Chapters 1–14'],
-    keyConcepts: [
-      'Macros expand at assembly time, eliminating runtime function call overhead.',
-      '%%label creates unique symbol names per expansion.',
-      'Header files (.inc) share constants and extern prototypes across files.'
+    "prerequisites": [
+      "Solid understanding of procedures, calling conventions, and the stack (Chapter 10).",
+      "Familiarity with data movement, arithmetic, and control flow (Chapters 5–8).",
+      "Knowledge of the build process, assembler, and linker (Chapter 4).",
+      "Basic experience with arrays, structures, and memory operations (Chapters 9, 13)."
     ],
-    diagramType: 'macros_modular',
-    sections: [
+    "keyConcepts": [
+      "Macros are preprocessor directives that perform text substitution before assembly. They can reduce code duplication and improve readability.",
+      "Single-line macros (%define) are simple text replacements, similar to C #define.",
+      "Multi-line macros (%macro/%endmacro) allow parameterized blocks of code with local labels.",
+      "Conditional assembly (%if, %ifdef, %ifndef, %elif, %else, %endif) includes or excludes code based on symbols or expressions.",
+      "Include files (%include) enable sharing constants, macros, and declarations across multiple source files.",
+      "Modular programming involves splitting code into separate object files, each with a specific responsibility, and linking them together. Symbols are exported with global and imported with extern.",
+      "Header files in assembly often contain constant definitions, structure definitions, and function declarations."
+    ],
+    "diagramType": "macros_modular",
+    "sections": [
       {
-        id: 'sec-15-1',
-        title: '15.1 Multi-Line Macro with Local Labels',
-        content: `Creating a reusable loop macro that avoids symbol collision:`,
-        codeSnippets: [
+        "id": "sec-15-1",
+        "title": "15.1 Introduction to Macros",
+        "content": "Macros are a powerful tool in assembly programming. They allow you to define a piece of code that can be reused multiple times with different parameters. Unlike procedures (which are called at runtime), macros are expanded at assembly time: the assembler replaces each macro invocation with the macro body, substituting parameters. This eliminates call overhead but can increase code size if used excessively.\n\nWhen to use macros:\n- To generate repetitive instruction sequences (e.g., saving/restoring multiple registers).\n- To define custom “instructions” that improve readability.\n- To conditionally include code based on build options.\n- To avoid magic numbers and centralize constants.\n\nWhen to use procedures instead:\n- When the code is large and reused many times (to save memory).\n- When recursion or runtime indirection is needed.\n- When code size is a concern.\n\nNASM provides two main macro mechanisms:\n- Single-line macros: %define, %assign, %undef\n- Multi-line macros: %macro / %endmacro\n\nThere are also conditional assembly directives (%if, %ifdef, etc.) and include directives (%include).\n\nClarification: Macro expansion happens during preprocessing; the generated instructions still execute at runtime. Macros do not automatically preserve registers, flags, or stack alignment. Inspect expansion with nasm -E program.asm and document inputs, outputs, clobbers, and allowed operand forms."
+      },
+      {
+        "id": "sec-15-2",
+        "title": "15.2 Single-Line Macros (%define)",
+        "content": "%define creates a text substitution. Whenever the macro name appears, NASM replaces it with the macro's value before assembling.\n\nSyntax:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'macro_example.asm',
-            code: `%macro sum_to_n 1   ; %1 = register containing n
-    xor rax, rax
-%%loop:
-    add rax, %1
-    dec %1
-    jnz %%loop
-%endmacro
-
-section .text
-    global _start
-_start:
-    mov rcx, 10
-    sum_to_n rcx        ; expands with unique %%loop label, rax = 55
-    mov rdi, rax
-    mov rax, 60
-    syscall`
+            "language": "nasm",
+            "title": "15.2 Single-Line Macros (%define) — listing 1",
+            "code": "%define name value",
+            "explanation": "Examples:"
+          },
+          {
+            "language": "nasm",
+            "title": "15.2 Single-Line Macros (%define) — listing 2",
+            "code": "%define NULL 0\n%define SYS_EXIT 60\n%define STDOUT 1\n\nsection .text\nglobal _start\n_start:\n    mov rax, SYS_EXIT\n    mov rdi, NULL\n    syscall",
+            "explanation": "This replaces SYS_EXIT with 60 and NULL with 0 before assembly."
+          }
+        ]
+      },
+      {
+        "id": "sec-15-2-1",
+        "title": "15.2.1 Parameterized Single-Line Macros",
+        "content": "%define can also take parameters, similar to functions in the preprocessor:\n\nClarification: The macro expands to SHL and therefore changes arithmetic flags and modifies its operand. Parameters are text, not typed function arguments; only operand forms accepted by the resulting instructions are valid.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "15.2.1 Parameterized Single-Line Macros — listing 1",
+            "code": "%define mul_by_2(x)  shl x, 1\n\nsection .text\nglobal _start\n_start:\n    mov rax, 5\n    mul_by_2(rax)     ; expands to: shl rax, 1\n    ; rax = 10\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "Parameters are substituted textually. Note that because it's simple text substitution, you must be careful with spaces and operator precedence. In this example, shl rax, 1 is fine."
+          }
+        ]
+      },
+      {
+        "id": "sec-15-2-2",
+        "title": "15.2.2 %assign and %undef",
+        "content": "- %assign is like %define but evaluates the value as an arithmetic expression and stores it as a number.\n- %undef removes a macro definition.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "15.2.2 %assign and %undef — listing 1",
+            "code": "%assign counter 10\n%assign counter counter+5   ; counter = 15\n%undef counter",
+            "explanation": "%assign is useful for compile-time calculations."
+          }
+        ]
+      },
+      {
+        "id": "sec-15-3",
+        "title": "15.3 Multi-Line Macros (%macro / %endmacro)",
+        "content": "Multi-line macros allow you to define a block of code that can span several lines and take parameters.\n\nSyntax:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "15.3 Multi-Line Macros (%macro / %endmacro) — listing 1",
+            "code": "%macro name num_params\n    ; macro body\n%endmacro",
+            "explanation": "Where num_params is the number of parameters (0 or more). Inside the macro body, parameters are referenced as %1, %2, etc., with %0 giving the number of arguments."
+          }
+        ]
+      },
+      {
+        "id": "sec-15-3-1",
+        "title": "15.3.1 Basic Example: Prologue/Epilogue",
+        "content": "Define a macro to set up and tear down a stack frame:\n\nClarification: The prologue aligns RSP after a normal ABI call. Allocate locals in suitable multiples of 16 and account for any additional pushes before nested calls. The epilogue restores RBP but does not restore other saved registers automatically.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "15.3.1 Basic Example: Prologue/Epilogue — listing 1",
+            "code": "%macro prologue 0\n    push rbp\n    mov rbp, rsp\n%endmacro\n\n%macro epilogue 0\n    mov rsp, rbp\n    pop rbp\n    ret\n%endmacro\n\n; Usage\nmy_func:\n    prologue\n    ; function body\n    epilogue"
+          }
+        ]
+      },
+      {
+        "id": "sec-15-3-2",
+        "title": "15.3.2 Macro with Parameters",
+        "content": "Define a macro to save multiple registers:\n\nClarification: The first macro declaration accepts two to four arguments, but its body unconditionally uses four: absent operands produce invalid PUSH instructions. Guard optional operands or iterate over the actual argument count. Restore pushed registers in reverse order and count all pushes when aligning a call.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source: optional arguments used unconditionally",
+            "code": "%macro push_regs 2-4\n    push %1\n    push %2\n    push %3\n    push %4\n%endmacro",
+            "explanation": "But this expects exactly 4 parameters; we can specify a range (minimum to maximum). For example, %macro push_regs 1-4 allows 1 to 4 arguments. Inside the macro, %0 contains the number of arguments actually passed. To handle variable arguments, you can use %rep loops within the macro.\n\nBetter: Use a macro to push a variable number of registers using %rep and %rotate or %rep with %0.\n\nExample: pushing any number of registers:"
+          },
+          {
+            "language": "nasm",
+            "title": "15.3.2 Macro with Parameters — listing 2",
+            "code": "%macro push_regs 1-*\n    %rep %0\n        push %1\n        %rotate 1\n    %endrep\n%endmacro",
+            "explanation": "This works but is advanced. For simplicity, we'll stick with fixed-arity macros."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected two-to-four register macro",
+            "code": "%macro push_regs_checked 2-4\n    push %1\n    push %2\n    %if %0 >= 3\n        push %3\n    %endif\n    %if %0 >= 4\n        push %4\n    %endif\n%endmacro",
+            "explanation": "Accepts two, three, or four 64-bit registers. The caller must pop the same registers in reverse order; do not use RSP as an ordinary save-list operand."
+          },
+          {
+            "language": "nasm",
+            "title": "Default macro parameter example",
+            "code": "%macro add_amount 1-2 1\n    add %1, %2\n%endmacro\nsection .text\nglobal _start\n_start:\n    mov rax, 5\n    add_amount rax       ; default increment = 1\n    add_amount rax, 4    ; explicit increment\n    mov rdi, rax\n    mov eax, 60\n    syscall",
+            "explanation": "One required operand and one optional operand defaulting to 1. Expected exit status: 10. ADD changes flags; the operands must form a valid ADD instruction."
+          }
+        ]
+      },
+      {
+        "id": "sec-15-3-3",
+        "title": "15.3.3 Local Labels in Macros",
+        "content": "If a macro contains labels (e.g., for loops), using the same macro multiple times would cause duplicate label errors. NASM provides local labels within macros: labels starting with %% are local to the macro expansion. Each invocation gets a unique prefix.\n\nExample:\n\nClarification: The original countdown enters its loop even for count zero, then wraps to a huge unsigned count. Check for zero before the body. %% labels prevent duplicate definitions but do not fix termination or preserve registers.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "15.3.3 Local Labels in Macros — listing 1",
+            "code": "%macro print_loop 1   ; %1 = count\n    mov rcx, %1\n%%loop:\n    ; do something\n    dec rcx\n    jnz %%loop\n%endmacro",
+            "explanation": "Each expansion of print_loop will generate a unique label for %%loop, avoiding conflicts."
+          },
+          {
+            "language": "nasm",
+            "title": "Zero-safe macro-local loop",
+            "code": "%macro count_steps 1\n    mov rcx, %1\n    test rcx, rcx\n    jz %%done\n%%loop:\n    inc rax\n    dec rcx\n    jnz %%loop\n%%done:\n%endmacro",
+            "explanation": "Accepts a nonnegative count, increments RAX once per step, and clobbers RCX and flags. Multiple invocations have distinct loop and done labels."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 15.2 (zero-count and alias issues)",
+            "code": "%macro sum_to_n 1   ; %1 = register containing n\n    xor rax, rax      ; sum\n%%loop:\n    add rax, %1\n    dec %1\n    jnz %%loop\n%endmacro\n\nsection .text\nglobal _start\n_start:\n    mov rcx, 10\n    sum_to_n rcx       ; rax = 55\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "Original retained. Count zero underflows, and passing RAX aliases the output. The corrected macro copies the input before clearing RAX and uses an independent counter."
+          }
+        ]
+      },
+      {
+        "id": "sec-15-4",
+        "title": "15.4 Conditional Assembly",
+        "content": "NASM supports conditional assembly directives that allow you to include or exclude code based on certain conditions. This is useful for debug builds, platform-specific code, or feature toggles."
+      },
+      {
+        "id": "sec-15-4-1",
+        "title": "15.4.1 %if and %ifdef",
+        "content": "- %ifdef symbol – true if symbol is defined (via %define or -D command line).\n- %ifndef symbol – true if symbol is not defined.\n- %if expression – true if expression evaluates to non-zero.\n\nThese can be combined with %elif, %else, and %endif.\n\nExample: Debug output\n\nClarification: %ifdef checks existence, not numeric truth: -DDEBUG=0 still enables its block. For a numeric switch, define a default then use %if DEBUG. The source defines DEBUG inside the file, so its debug block is always included unless that line is removed. Exercise 15.3 leaves the choice to the command line.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "15.4.1 %if and %ifdef — listing 1",
+            "code": "%define DEBUG 1\n\nsection .text\nglobal _start\n_start:\n    ; ... code ...\n%ifdef DEBUG\n    ; print debug message\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, debug_msg\n    mov rdx, debug_len\n    syscall\n%endif\n    ; rest of program\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\nsection .data\n%ifdef DEBUG\n    debug_msg db 'Debug: here', 0xA\n    debug_len equ $ - debug_msg\n%endif"
+          }
+        ]
+      },
+      {
+        "id": "sec-15-4-2",
+        "title": "15.4.2 Passing Symbols via Command Line",
+        "content": "You can define symbols at assembly time using the -D option:",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "15.4.2 Passing Symbols via Command Line — listing 1",
+            "code": "nasm -f elf64 -DDEBUG program.asm -o program.o",
+            "explanation": "This defines DEBUG before assembly."
+          }
+        ]
+      },
+      {
+        "id": "sec-15-4-3",
+        "title": "15.4.3 %if with Expressions",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "15.4.3 %if with Expressions — listing 1",
+            "code": "%assign VERSION 2\n\n%if VERSION >= 2\n    ; new code\n%else\n    ; old code\n%endif"
+          }
+        ]
+      },
+      {
+        "id": "sec-15-5",
+        "title": "15.5 Include Files",
+        "content": "Large projects benefit from organizing code into multiple files. NASM's %include directive allows you to insert the contents of another file at the point of inclusion. This is commonly used for:\n- Shared constants (%define, equ)\n- Structure definitions\n- Macro definitions\n- Function declarations (extern)\n\nExample: defs.inc\n\nClarification: Use include guards around shared structure/macro definitions to prevent duplicate definitions when a header is included more than once. Include paths are build inputs: run from the project directory or pass -I/path/to/includes/ explicitly. An include is text insertion, not a separately linked module.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "defs.inc",
+            "code": "%define NULL 0\n%define SYS_EXIT 60\n%define SYS_WRITE 1\n%define STDOUT 1\n\nstruc Point\n    .x: resd 1\n    .y: resd 1\nendstruc\n\n%macro push_regs 2\n    push %1\n    push %2\n%endmacro",
+            "explanation": "Usage in main file:"
+          },
+          {
+            "language": "nasm",
+            "title": "main.asm",
+            "code": "%include \"defs.inc\"\n\nsection .text\nglobal _start\n_start:\n    push_regs rax, rbx   ; use macro\n    ; ...\n    mov rax, SYS_EXIT\n    mov rdi, NULL\n    syscall",
+            "explanation": "When assembling, NASM looks for the included file in the current directory or specified include paths (-I option)."
+          },
+          {
+            "language": "nasm",
+            "title": "Guarded shared definitions",
+            "code": "%ifndef PROJECT_DEFS_INC\n%define PROJECT_DEFS_INC 1\n%define SYS_EXIT 60\nstruc SharedPoint\n    .x: resd 1\n    .y: resd 1\nendstruc\n%endif",
+            "explanation": "Save as guarded_defs.inc. Including this file twice still defines SharedPoint exactly once."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Exercise 15.4 — utils.inc",
+            "code": "%define STDOUT 1\n%define SYS_WRITE 1\n\n%macro write_string 2\n    mov rax, SYS_WRITE\n    mov rdi, STDOUT\n    mov rsi, %1\n    mov rdx, %2\n    syscall\n%endmacro",
+            "explanation": "Save each named file separately. Build commands run in the directory containing those files."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Exercise 15.4 — main.asm",
+            "code": "%include \"utils.inc\"\n\nsection .data\n    msg db 'Hello, include!', 0xA\n    len equ $ - msg\n\nsection .text\nglobal _start\n_start:\n    write_string msg, len\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+            "explanation": "Save each named file separately. Build commands run in the directory containing those files."
+          }
+        ]
+      },
+      {
+        "id": "sec-15-6",
+        "title": "15.6 Modular Programming with Multiple Object Files",
+        "content": "To manage complexity, split code into separate .asm files, each containing related functions. Assemble them separately into object files, then link together."
+      },
+      {
+        "id": "sec-15-6-1",
+        "title": "15.6.1 Sharing Symbols: global and extern",
+        "content": "- global label makes a symbol visible to other object files.\n- extern label declares that a symbol is defined in another object file.\n\nExample:\n- math.asm defines add_numbers and subtract_numbers.\n- main.asm uses them.\n\nmath.asm\n\nClarification: Assemble each source separately, then link the objects together. GLOBAL exports a definition; EXTERN declares a definition supplied elsewhere. Use consistent calling conventions and unique exported names. Undefined-symbol and duplicate-definition errors arise at link time; headers alone do not supply procedure code.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "math.asm",
+            "code": "section .text\nglobal add_numbers\nadd_numbers:\n    mov rax, rdi\n    add rax, rsi\n    ret\n\nglobal subtract_numbers\nsubtract_numbers:\n    mov rax, rdi\n    sub rax, rsi\n    ret",
+            "explanation": "main.asm"
+          },
+          {
+            "language": "nasm",
+            "title": "main.asm",
+            "code": "section .text\nglobal _start\nextern add_numbers, subtract_numbers\n\n_start:\n    mov rdi, 10\n    mov rsi, 5\n    call add_numbers       ; rax = 15\n    ; use result\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "Build:"
+          },
+          {
+            "language": "bash",
+            "title": "Build commands",
+            "code": "nasm -f elf64 math.asm -o math.o\nnasm -f elf64 main.asm -o main.o\nld main.o math.o -o program"
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Exercise 15.5 — string.inc",
+            "code": "extern string_length",
+            "explanation": "Save each named file separately. Build commands run in the directory containing those files."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Exercise 15.5 — string.asm",
+            "code": "section .text\nglobal string_length\n\n; rdi = pointer to null-terminated string\n; returns length in rax\nstring_length:\n    xor rax, rax\n.loop:\n    cmp byte [rdi + rax], 0\n    je .done\n    inc rax\n    jmp .loop\n.done:\n    ret",
+            "explanation": "Save each named file separately. Build commands run in the directory containing those files."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Exercise 15.5 — main.asm",
+            "code": "%include \"string.inc\"\n\nsection .data\n    str db 'Hello, World!', 0\n\nsection .text\nglobal _start\n_start:\n    lea rdi, [str]\n    call string_length   ; rax = 13\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "Save each named file separately. Build commands run in the directory containing those files."
+          },
+          {
+            "language": "bash",
+            "title": "Original source: Exercise 15.5 — Build commands",
+            "code": "nasm -f elf64 string.asm -o string.o\nnasm -f elf64 main.asm -o main.o\nld main.o string.o -o test\n./test\necho $?   # 13",
+            "explanation": "Save each named file separately. Build commands run in the directory containing those files."
+          }
+        ]
+      },
+      {
+        "id": "sec-15-6-2",
+        "title": "15.6.2 Organizing Code with a Shared Header",
+        "content": "Create a header file (functions.inc) containing extern declarations and constants.\n\nfunctions.inc\n\nClarification: This header example declares functions but its main does not actually call them; the earlier two-file example demonstrates the call. Keep declarations in consumers and definitions in their owning source files.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "functions.inc",
+            "code": "extern add_numbers, subtract_numbers\n%define SYS_EXIT 60",
+            "explanation": "Then include it in main.asm:"
+          },
+          {
+            "language": "nasm",
+            "title": "main.asm",
+            "code": "%include \"functions.inc\"\nsection .text\nglobal _start\n_start:\n    ; use add_numbers\n    mov rax, SYS_EXIT\n    xor rdi, rdi\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-15-6-3",
+        "title": "15.6.3 Linking with C Runtime",
+        "content": "If you want to use C library functions (like printf), declare them extern and link with gcc. But note the ABI requirements for variadic functions: al must hold the number of vector registers used.\n\nExample using printf:\n\nClarification: GCC supplies C runtime startup and calls main; do not also define _start in this example. Its non-PIE link matches the absolute fmt address. The prologue and 16-byte local allocation keep the printf call aligned, and AL=0 is correct for this integer-only variadic call. %d consumes an int; use ESI for clarity. A .note.GNU-stack section can mark an assembly object as not requiring an executable stack.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "15.6.3 Linking with C Runtime — listing 1",
+            "code": "section .data\n    fmt db 'Result: %d', 0xA, 0\nsection .text\nglobal main\nextern printf\n\nmain:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16\n    mov rdi, fmt\n    mov rsi, 42\n    xor eax, eax         ; no vector registers\n    call printf\n    xor eax, eax\n    leave\n    ret",
+            "explanation": "Build: nasm -f elf64 print.asm -o print.o && gcc print.o -o print -no-pie"
+          }
+        ]
+      },
+      {
+        "id": "sec-15-7",
+        "title": "15.7 Practical Example: Modular Calculator",
+        "content": "We'll build a small modular project with separate files for arithmetic operations, I/O, and main logic. We'll use macros for common operations and an include file for constants.\n\nFile: constants.inc\n\nClarification: The supplied project has math and main modules plus headers; it exits with 30 and does not yet implement a separate I/O module or interactive calculator. To use subtract or multiply, change the call in main and rebuild that object. Changing a shared header requires reassembling every source that includes it.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "constants.inc",
+            "code": "%define SYS_WRITE 1\n%define SYS_EXIT 60\n%define STDOUT 1\n%define NULL 0",
+            "explanation": "File: math.asm"
+          },
+          {
+            "language": "nasm",
+            "title": "math.asm",
+            "code": "section .text\nglobal add\nadd:\n    mov rax, rdi\n    add rax, rsi\n    ret\n\nglobal subtract\nsubtract:\n    mov rax, rdi\n    sub rax, rsi\n    ret\n\nglobal multiply\nmultiply:\n    mov rax, rdi\n    imul rax, rsi\n    ret",
+            "explanation": "File: main.asm"
+          },
+          {
+            "language": "nasm",
+            "title": "main.asm",
+            "code": "%include \"constants.inc\"\n%include \"math.inc\"   ; contains extern declarations\n\nsection .text\nglobal _start\n\n_start:\n    mov rdi, 20\n    mov rsi, 10\n    call add            ; rax = 30\n    ; exit with result\n    mov rdi, rax\n    mov rax, SYS_EXIT\n    syscall",
+            "explanation": "File: math.inc"
+          },
+          {
+            "language": "nasm",
+            "title": "math.inc",
+            "code": "extern add, subtract, multiply",
+            "explanation": "Build:"
+          },
+          {
+            "language": "bash",
+            "title": "Build commands",
+            "code": "nasm -f elf64 main.asm -o main.o\nnasm -f elf64 math.asm -o math.o\nld main.o math.o -o calculator\n./calculator\necho $?   # 30",
+            "explanation": "This modular structure makes it easy to extend (add division, etc.) without modifying the main file."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-15-1',
-        title: 'Exercise 15.1: Write a String Syscall Macro',
-        description: 'Define write_string str, len macro that sets rax=1, rdi=1, rsi=str, rdx=len, and executes syscall.',
-        solution: `%macro write_string 2\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, %1\n    mov rdx, %2\n    syscall\n%endmacro`,
-        solutionLanguage: 'nasm'
+        "id": "ex-15-1",
+        "title": "Exercise 15.1: Simple Macros",
+        "description": "Define a macro print_rax that prints the value of rax as a decimal string using write syscall. For simplicity, assume rax is a single digit (0–9). Use the macro in a program.",
+        "solution": "%macro print_rax 0\n    ; rax contains digit 0-9\n    push rax            ; save\n    add al, '0'\n    mov [digit], al\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, digit\n    mov rdx, 1\n    syscall\n    pop rax\n%endmacro\n\nsection .bss\n    digit resb 1\n\nsection .text\nglobal _start\n_start:\n    mov rax, 5\n    print_rax\n    ; newline\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, newline\n    mov rdx, 1\n    syscall\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\nsection .data\n    newline db 0xA",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected output: 5 followed by a newline, exit status 0. print_rax preserves RAX via PUSH/POP, but changes RDI, RSI, RDX, RCX, R11 and arithmetic flags. It requires a digit 0–9 and the writable digit label. The syscall can fail or write fewer bytes; this introductory macro does not report that error. The shared byte buffer is not suitable for concurrent calls."
+      },
+      {
+        "id": "ex-15-2",
+        "title": "Exercise 15.2: Multi-line Macro with Local Labels",
+        "description": "Write a macro sum_to_n that computes the sum from 1 to n (passed as a register) and stores result in rax. Use a local label for the loop. Invoke it with rcx = 10.",
+        "solution": "%macro sum_to_n 1   ; %1 = register containing n\n    mov r10, %1      ; snapshot input before clearing output\n    xor rax, rax\n    test r10, r10\n    jz %%done\n%%loop:\n    add rax, r10\n    dec r10\n    jnz %%loop\n%%done:\n%endmacro\n\nsection .text\nglobal _start\n_start:\n    mov rcx, 10\n    sum_to_n rcx       ; rax = 55\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected exit status: 55. The corrected macro accepts nonnegative counts in a 64-bit general register, including RAX, and copies the input to R10 before clearing the sum. It handles zero and repeated invocations, clobbers RAX/R10/flags, and otherwise leaves the input register unchanged. Avoid RSP as an input because it is not a useful count. Very large counts take linear time and sums can overflow."
+      },
+      {
+        "id": "ex-15-3",
+        "title": "Exercise 15.3: Conditional Assembly",
+        "description": "Create a program that uses %ifdef DEBUG to print \"Debug mode\" before exiting. Assemble with and without -DDEBUG to see the difference.",
+        "solution": "section .data\n    msg db 'Debug mode', 0xA\n    len equ $ - msg\nsection .text\nglobal _start\n_start:\n%ifdef DEBUG\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, msg\n    mov rdx, len\n    syscall\n%endif\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Assemble normally: nasm -f elf64 test.asm -o test.o && ld test.o -o test && ./test (no output).\nAssemble with debug: nasm -f elf64 -DDEBUG test.asm -o test.o && ld test.o -o test && ./test (prints \"Debug mode\").\n\nWithout DEBUG: no output, exit 0. With -DDEBUG: Debug mode followed by a newline, exit 0. With -DDEBUG=0 the output still appears because the test is %ifdef. The message remains in .data even when its printing code is excluded."
+      },
+      {
+        "id": "ex-15-4",
+        "title": "Exercise 15.4: Include File",
+        "description": "Create a file utils.inc containing:\n- Constant STDOUT = 1\n- Constant SYS_WRITE = 1\n- Macro write_string str, len that performs a write syscall.\nUse this include file in a program to print \"Hello, include!\".",
+        "solution": "; File: utils.inc\n%ifndef EX15_UTILS_INC\n%define EX15_UTILS_INC 1\n%define STDOUT 1\n%define SYS_WRITE 1\n\n%macro write_string 2\n    mov rax, SYS_WRITE\n    mov rdi, STDOUT\n    mov rsi, %1\n    mov rdx, %2\n    syscall\n%endmacro\n%endif\n\n; File: main.asm\n%include \"utils.inc\"\n\nsection .data\n    msg db 'Hello, include!', 0xA\n    len equ $ - msg\n\nsection .text\nglobal _start\n_start:\n    write_string msg, len\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "utils.inc\n\n\nmain.asm\n\nSave each File block to its named file; do not assemble the combined display as one source.\nnasm -f elf64 main.asm -o main.o\nld main.o -o include_demo\n./include_demo\n\nExpected output: Hello, include! followed by a newline. Header guards allow repeated inclusion. The macro takes a label/immediate address and a length in this example and clobbers RAX, RDI, RSI, RDX, RCX and R11. Arbitrary register arguments can alias registers overwritten by earlier MOVs; document supported forms before generalizing. These absolute addresses target the shown ld non-PIE build."
+      },
+      {
+        "id": "ex-15-5",
+        "title": "Exercise 15.5: Modular Project",
+        "description": "Create two source files: string.asm (defines string_length function) and main.asm (uses it). Use a header file string.inc with extern string_length. Build and test. The function should return length of a null-terminated string in rax.",
+        "solution": "; File: string.inc\n%ifndef EX15_STRING_INC\n%define EX15_STRING_INC 1\nextern string_length\n%endif\n\n; File: string.asm\nsection .text\nglobal string_length\n\n; rdi = pointer to null-terminated string\n; returns length in rax\nstring_length:\n    xor rax, rax\n.loop:\n    cmp byte [rdi + rax], 0\n    je .done\n    inc rax\n    jmp .loop\n.done:\n    ret\n\n; File: main.asm\n%include \"string.inc\"\n\nsection .data\n    str: db 'Hello, World!', 0\n\nsection .text\nglobal _start\n_start:\n    lea rdi, [str]\n    call string_length   ; rax = 13\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "string.inc\n\n\nstring.asm\n\n\nmain.asm\n\n\nBuild:\n\nSave each File block to its named file; do not assemble the combined display as one source.\nnasm -f elf64 string.asm -o string.o\nnasm -f elf64 main.asm -o main.o\nld main.o string.o -o test\n./test\necho $?   # 13\n\nExpected exit status: 13. The corrected main uses str: with a colon so NASM recognizes the label rather than the STR mnemonic. string_length returns 0 for an empty string and assumes a valid accessible null terminator. It uses only caller-saved RAX and preserves RDI; no bounds checking is performed."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'When should you use a macro versus a procedure?',
-        answer: 'Use macros for small, repetitive instruction patterns or where avoiding call/ret overhead is critical. Use procedures when the routine is large or reused frequently to minimize executable binary size.'
+        "question": "What is the difference between a macro and a procedure? When would you use each?",
+        "answer": "A macro expands source text during assembly and creates instructions at each use. A procedure has one code body called at runtime. Use short macros for repetitive instruction patterns or build-time choices; procedures suit larger reusable work and runtime dispatch. Macros can expand to procedure calls too."
+      },
+      {
+        "question": "How do you define a multi-line macro in NASM? How are parameters referenced?",
+        "answer": "%macro name 2 begins a two-argument macro and %endmacro ends it. Reference operands as %1 and %2; %0 reports the argument count. Example: %macro add_pair 2 followed by add %1, %2 and %endmacro on separate lines. Argument forms must be valid for the generated instructions."
+      },
+      {
+        "question": "Why are local labels important in macros? How do you create them?",
+        "answer": "Ordinary labels would be defined multiple times when a macro is expanded repeatedly. Use %%loop or %%done inside a multiline macro; NASM generates distinct names for each invocation. This is separate from ordinary dot-prefixed local labels scoped to a surrounding label."
+      },
+      {
+        "question": "Explain the purpose of %ifdef and how you can pass a symbol at assembly time.",
+        "answer": "%ifdef DEBUG includes its block when DEBUG exists. Assemble with nasm -f elf64 -DDEBUG main.asm -o main.o. -DDEBUG=0 still defines it; use %if DEBUG for numeric on/off behavior after defining a default value."
+      },
+      {
+        "question": "How do you share constants and function declarations across multiple assembly files?",
+        "answer": "Place shared constants, structure definitions, macros and EXTERN declarations in guarded .inc files and use %include \"functions.inc\". Compile implementations separately and link their object files; inclusion does not link a function definition."
+      },
+      {
+        "question": "What is the difference between global and extern? When would you use them?",
+        "answer": "GLOBAL exports a symbol defined in the current module. EXTERN declares a symbol that another object or library supplies. Use global string_length in string.asm and extern string_length in its caller; link both objects."
+      },
+      {
+        "question": "Describe the steps to build a project consisting of three .asm files. What commands would you use?",
+        "answer": "nasm -f elf64 main.asm -o main.o\nnasm -f elf64 math.asm -o math.o\nnasm -f elf64 io.asm -o io.o\nld main.o math.o io.o -o program\n./program\nFor a program defining main and using libc, link through GCC with suitable PIE/addressing options instead."
+      },
+      {
+        "question": "Can macros be recursive? If so, what are the risks?",
+        "answer": "Macro expansion is not runtime recursion. NASM prevents ordinary recursive macro expansion; do not assume a self-invoking %macro behaves like a function. Use bounded %rep and %rotate for repetition. Large expansions can consume assembly resources and inflate machine code. Consult the installed NASM manual for advanced preprocessor facilities."
+      },
+      {
+        "question": "How does %include work? What is the search path for included files?",
+        "answer": "%include inserts the file text at that point during preprocessing. NASM searches the working directory and configured -I include paths; do not assume the source file directory is automatically searched. Use an explicit path or -Iinclude/ from a known working directory and include guards for repeatable builds."
+      },
+      {
+        "question": "Write a simple macro that swaps two registers using xchg and has a local label. Show its usage.",
+        "answer": "%macro swap_regs 2\n%%swap:\n    xchg %1, %2\n%endmacro\n\nmov rax, 10\nmov rbx, 20\nswap_regs rax, rbx\n; RAX=20, RBX=10.\nswap_regs rax, rbx\n; RAX=10, RBX=20; each %%swap label is distinct.\nUse same-width general registers. The label demonstrates scope but is not needed for a single XCHG; XCHG does not change flags."
       }
     ],
-    summary: ['Macros provide code reuse without runtime call overhead.', 'Conditional assembly enables build configurations and debug toggles.']
+    "summary": [
+      "Macros are assembly-time text substitutions that reduce code duplication and improve readability.",
+      "%define creates single-line macros; %macro/%endmacro define multi-line macros with parameters.",
+      "Local labels (%%label) prevent duplicate label errors in expanded macros.",
+      "Conditional assembly (%ifdef, %if, etc.) includes/excludes code based on build-time symbols.",
+      "Include files (%include) share constants, macros, and declarations across source files.",
+      "Modular programming separates code into multiple object files, linked together. Use global to export symbols and extern to import them.",
+      "Header files (.inc) often contain extern declarations and shared constants.",
+      "Building modular projects uses multiple nasm commands and a final ld link.",
+      "In the next chapter, we'll explore system calls and interaction with the operating system in depth, building on the modular foundations."
+    ]
   },
   {
     id: 16,
