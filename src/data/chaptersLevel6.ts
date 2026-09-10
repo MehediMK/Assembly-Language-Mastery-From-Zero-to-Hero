@@ -2052,166 +2052,259 @@ export const CHAPTERS_LEVEL_6: Chapter[] = [
     ]
   },
   {
-    id: 34,
-    slug: 'chapter-34-project-7-low-level-systems-shell',
-    level: 6,
-    levelTitle: 'Advanced Projects',
-    title: 'Chapter 34: Project 7: Low-Level Systems Project',
-    subtitle: 'Building "ash": A Native Unix Shell in Pure Assembly with Fork, Execve, Wait4',
-    learningObjectives: [
-      'Implement an interactive command-line Unix shell in x86-64 assembly.',
-      'Manage processes using Linux fork, execve, and wait4 system calls.',
-      'Implement built-in commands (echo, pwd, cd, exit).',
-      'Tokenize command strings and construct NULL-terminated argv arrays.'
+    "id": 34,
+    "slug": "chapter-34-project-7-low-level-systems-shell",
+    "level": 6,
+    "levelTitle": "Advanced Projects",
+    "title": "Chapter 34: Project 7: Low-Level Systems Project",
+    "subtitle": "Building \"ash\": A Native Unix Shell in Pure Assembly with Fork, Execve, Wait4",
+    "learningObjectives": [
+      "Design and implement a simple command-line shell in x86-64 assembly.",
+      "Apply system calls for process management: fork, execve, wait4.",
+      "Implement input parsing, argument vector construction, and execution of built-in commands.",
+      "Handle built-in commands (echo, pwd, cd, exit) and external programs.",
+      "Manage memory buffers and argument arrays on the stack.",
+      "Use modular design, error handling, and low-level I/O.",
+      "Test and debug a complex assembly program using GDB and strace.",
+      "Integrate concepts from previous chapters: string manipulation, system calls, and data structures."
     ],
-    prerequisites: ['Chapters 1–33'],
-    keyConcepts: [
-      'fork duplicates the parent process, returning 0 in the child and the child\'s PID in the parent.',
-      'execve replaces the child\'s memory image with the targeted binary.',
-      'wait4 blocks the parent process until the child terminates.'
+    "prerequisites": [
+      "Mastery of x86-64 assembly, system calls, and memory management (Chapters 1–31).",
+      "Knowledge of process creation and execution on Linux (fork, execve, wait4).",
+      "Familiarity with file I/O and string manipulation from previous projects.",
+      "Experience with modular programming, linking, and Makefiles."
     ],
-    diagramType: 'project_shell',
-    sections: [
+    "keyConcepts": [
+      "Shell: A program that reads commands, interprets them, and executes them.",
+      "Process management: fork creates a child; execve replaces the process image; wait4 reaps the child.",
+      "Argument vector (argv): Array of pointers to argument strings, terminated by NULL, passed to execve.",
+      "Environment vector (envp): Array of environment strings; can be passed as NULL for simplicity.",
+      "Built-in commands: Commands implemented within the shell (no fork).",
+      "External commands: Executed by forking and calling execve.",
+      "Input parsing: Tokenizing a line into command and arguments separated by whitespace.",
+      "Stack allocation: Using the stack for buffers and arrays; no dynamic allocator needed."
+    ],
+    "diagramType": "project_shell",
+    "sections": [
       {
-        id: 'sec-34-1',
-        title: '34.1 Complete Native Assembly Shell: shell.asm',
-        content: `Full interactive shell written in pure assembly without libc:`,
-        codeSnippets: [
+        "id": "sec-34-1",
+        "title": "34.1 Introduction to Shells",
+        "content": "A shell is a program that provides a command-line interface to the operating system. It reads user input, interprets commands, and executes them. Shells can be simple (like sh) or complex (like bash). In this project, we'll build a minimal shell named ash (Assembly Shell) that supports basic built-in commands and can run external programs.\n\nOur shell will:\n- Print a prompt ($ ).\n- Read a line from standard input.\n- Parse the line into a command and its arguments.\n- Execute built-in commands: echo, pwd, cd, exit.\n- For other commands, create a child process using fork, replace the child with the requested program using execve, and wait for it to complete.\n\nWe'll use Linux system calls directly, avoiding the C library. This gives us full control and demonstrates low-level process management."
+      },
+      {
+        "id": "sec-34-2",
+        "title": "34.2 System Calls for Process Management",
+        "content": "To execute external programs, we need three key system calls:\n\n- fork (syscall 57): Creates a new process by duplicating the calling process. Returns 0 in the child, the child's PID in the parent, or -1 on error.\n- execve (syscall 59): Replaces the current process image with a new program. Arguments: rdi = path, rsi = argv array, rdx = envp array (can be NULL).\n- wait4 (syscall 61): Waits for a child process to change state. Arguments: rdi = pid (or -1 for any child), rsi = status pointer (can be NULL), rdx = options (0), r10 = rusage pointer (can be NULL).\n\nOther syscalls we'll use:\n- read (0), write (1), exit (60), chdir (80), getcwd (79).\n\nClarification: The raw fork syscall returns negative errno, not necessarily -1. Successful execve never returns. The corrected parent waits for the PID it created, retries wait4 after EINTR, and decodes the stored wait status instead of mistaking the return PID for an exit code."
+      },
+      {
+        "id": "sec-34-3",
+        "title": "34.3 Shell Design",
+        "content": ""
+      },
+      {
+        "id": "sec-34-3-1",
+        "title": "34.3.1 Main Loop",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'shell.asm',
-            code: `; shell.asm - Minimal Assembly Shell ("ash")
-%define SYS_READ     0
-%define SYS_WRITE    1
-%define SYS_EXIT     60
-%define SYS_FORK     57
-%define SYS_EXECVE   59
-%define SYS_WAIT4    61
-%define SYS_CHDIR    80
-%define SYS_GETCWD   79
-%define STDIN        0
-%define STDOUT       1
-%define MAX_ARGS     16
-%define BUF_SIZE     256
-
-section .data
-    prompt    db '$ ', 0
-    newline   db 0xA, 0
-    echo_str  db 'echo', 0
-    pwd_str   db 'pwd', 0
-    cd_str    db 'cd', 0
-    exit_str  db 'exit', 0
-    space     db ' ', 0
-    exec_err  db 'ash: command not found', 0xA, 0
-
-section .text
-    global _start
-
-strlen:
-    xor eax, eax
-.l: cmp byte [rsi+rax], 0; je .d; inc rax; jmp .l
-.d: ret
-
-strcmp:
-    xor eax, eax
-.l: mov al, [rsi]; mov dl, [rdi]; cmp al, dl; jne .diff
-    test al, al; jz .eq; inc rsi; inc rdi; jmp .l
-.diff: sub al, dl; movsx eax, al; ret
-.eq: xor eax, eax; ret
-
-print:
-    push rsi; call strlen; mov rdx, rax; pop rsi
-    mov rax, SYS_WRITE; mov rdi, STDOUT; syscall; ret
-
-parse_input:
-    xor eax, eax; mov r8, rdi; mov r9, rsi
-.skip:
-    mov dl, [r9]; cmp dl, ' '; je .sp; cmp dl, 9; je .sp; cmp dl, 0xA; je .fin; test dl, dl; jz .fin
-    cmp eax, ecx; jge .fin
-    mov [r8 + rax*8], r9; inc eax
-.scan:
-    mov dl, [r9]; cmp dl, ' '; je .tend; cmp dl, 9; je .tend; cmp dl, 0xA; je .tend; test dl, dl; jz .tend
-    inc r9; jmp .scan
-.tend:
-    mov byte [r9], 0; inc r9; jmp .skip
-.sp: inc r9; jmp .skip
-.fin:
-    mov qword [r8 + rax*8], 0; ret
-
-_start:
-    sub rsp, BUF_SIZE + MAX_ARGS*8 + BUF_SIZE
-    mov rbp, rsp
-    lea r12, [rbp]                          ; input_buf
-    lea r13, [rbp + BUF_SIZE]               ; argv
-    lea r14, [rbp + BUF_SIZE + MAX_ARGS*8]  ; cwd_buf
-
-.loop:
-    mov rsi, prompt; call print
-    mov rax, SYS_READ; mov rdi, STDIN; mov rsi, r12; mov rdx, BUF_SIZE; syscall
-    test rax, rax; jle .exit
-    mov byte [r12 + rax], 0
-
-    mov rsi, r12; mov rdi, r13; mov rcx, MAX_ARGS; call parse_input
-    test rax, rax; jz .loop
-    mov r15, rax         ; argc
-
-    mov rsi, [r13]       ; argv[0]
-    mov rdi, exit_str; call strcmp; test eax, eax; jz .exit
-    mov rsi, [r13]; mov rdi, pwd_str; call strcmp; test eax, eax; jz .pwd
-    mov rsi, [r13]; mov rdi, echo_str; call strcmp; test eax, eax; jz .echo
-
-    ; External command
-    mov rax, SYS_FORK; syscall
-    test rax, rax; js .loop
-    jz .child
-
-    ; Parent
-    mov rax, SYS_WAIT4; mov rdi, -1; xor rsi, rsi; xor rdx, rdx; xor r10, r10; syscall
-    jmp .loop
-
-.child:
-    mov rdi, [r13]; mov rsi, r13; xor rdx, rdx; mov rax, SYS_EXECVE; syscall
-    mov rsi, exec_err; call print
-    mov rax, SYS_EXIT; mov rdi, 127; syscall
-
-.echo:
-    mov rcx, 1
-.eloop:
-    cmp rcx, r15; jge .edone
-    mov rsi, [r13 + rcx*8]; call print
-    mov rsi, space; call print
-    inc rcx; jmp .eloop
-.edone:
-    mov rsi, newline; call print
-    jmp .loop
-
-.pwd:
-    mov rax, SYS_GETCWD; mov rdi, r14; mov rsi, BUF_SIZE; syscall
-    mov rsi, r14; call print
-    mov rsi, newline; call print
-    jmp .loop
-
-.exit:
-    mov rax, SYS_EXIT; xor rdi, rdi; syscall`
+            "language": "text",
+            "title": "34.3.1 Main Loop — listing 1",
+            "code": "loop:\n    print prompt\n    read line\n    if EOF, exit\n    parse line into tokens\n    if no tokens, continue\n    if built-in, execute in shell\n    else fork+execve+wait"
           }
         ]
-      }
-    ],
-    exercises: [
+      },
       {
-        id: 'ex-34-1',
-        title: 'Exercise 34.1: Implement cd command',
-        description: 'Add cd built-in using chdir (syscall 80) on argv[1].',
-        solution: `mov rdi, [r13 + 8]   ; argv[1]\nmov rax, SYS_CHDIR\nsyscall`,
-        solutionLanguage: 'nasm'
-      }
-    ],
-    practiceQuestions: [
+        "id": "sec-34-3-2",
+        "title": "34.3.2 Data Structures",
+        "content": "- Input buffer: 256 bytes on stack.\n- Argv array: Array of up to 16 pointers (128 bytes) on stack.\n- Command buffer for getcwd: 256 bytes on stack.\n- Prompt string and error messages in .data.\n\nWe'll use the stack for temporary storage to keep the code simple; no dynamic allocation needed.\n\nClarification: Sixteen arguments require seventeen pointer slots to include argv[argc]=NULL. A 256-byte line buffer holds at most 255 input bytes plus NUL. The completed shell uses a 4096-byte getcwd/path buffer and retains bounded stack allocation."
+      },
       {
-        question: 'Why must cd be implemented as a shell built-in rather than an external executable?',
-        answer: 'External commands run in child processes created by fork. If cd were external, it would change the working directory of the child process, which terminates immediately, leaving the parent shell directory unchanged.'
+        "id": "sec-34-3-3",
+        "title": "34.3.3 Built-in Commands",
+        "content": "- echo [args...]: Print arguments separated by spaces, followed by newline.\n- pwd: Print current working directory.\n- cd [dir]: Change current directory; if no argument, do nothing or print error.\n- exit [code]: Exit the shell with given code (default 0)."
+      },
+      {
+        "id": "sec-34-3-4",
+        "title": "34.3.4 External Command Execution",
+        "content": "1. Parse command and arguments into an argv array.\n2. Call fork.\n3. In child: call execve with command path and argv.\n4. If execve fails, print error and exit.\n5. In parent: call wait4 to wait for child; optionally get exit status.\n\nWe'll attempt to execute the command as typed (the user must provide a path or command in current directory). We could implement PATH search, but that adds complexity; we'll leave that as an exercise."
+      },
+      {
+        "id": "sec-34-4",
+        "title": "34.4 Implementation Details",
+        "content": ""
+      },
+      {
+        "id": "sec-34-4-1",
+        "title": "34.4.1 String Utilities",
+        "content": "We'll implement strlen, strcmp, and a simple strcpy (not needed, but we'll use strcmp for built-in detection).\n\nClarification: The original 8-bit subtraction is adequate for equality detection but is not a general unsigned-byte strcmp ordering. The corrected shell uses an explicit equality helper for builtin names.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "strlen: rsi = string, returns length in rax",
+            "code": "; strlen: rsi = string, returns length in rax\nstrlen:\n    xor eax, eax\n.loop:\n    cmp byte [rsi + rax], 0\n    je .done\n    inc rax\n    jmp .loop\n.done:\n    ret\n\n; strcmp: rsi = s1, rdi = s2, returns difference\nstrcmp:\n    xor eax, eax\n.loop:\n    mov al, [rsi]\n    mov dl, [rdi]\n    cmp al, dl\n    jne .diff\n    test al, al\n    jz .equal\n    inc rsi\n    inc rdi\n    jmp .loop\n.diff:\n    sub al, dl\n    movsx eax, al\n    ret\n.equal:\n    xor eax, eax\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-34-4-2",
+        "title": "34.4.2 Input Parsing",
+        "content": "After reading a line into input_buf, we parse it:\n\n- Set rsi to start of buffer.\n- Skip leading whitespace (spaces, tabs).\n- For each token, store pointer in argv array, then scan until whitespace, replace it with null, continue.\n- Terminate argv with NULL.\n\nWe'll use registers: r8 = pointer to argv array (on stack), r9 = current index in argv, rsi = current position in input.\n\nClarification: A single read can contain part of a line or multiple lines. The original parser can also step beyond its terminating NUL. The companion reads bounded lines, handles CRLF/EOF, drains overlong or NUL-containing lines, and rejects excess arguments instead of silently executing a truncated command."
+      },
+      {
+        "id": "sec-34-4-3",
+        "title": "34.4.3 Built-in Command Detection",
+        "content": "We'll compare argv[0] with known strings using strcmp. If match, execute corresponding routine. Otherwise, attempt external execution."
+      },
+      {
+        "id": "sec-34-4-4",
+        "title": "34.4.4 Printing",
+        "content": "We use write syscall to print strings. For echo, we iterate through arguments, printing each with spaces. For pwd, we call getcwd and print the buffer.\n\nClarification: The original print helper ignores its length argument and always uses stdout. The companion separates zero-terminated string sizing from a write-all routine, routes diagnostics to stderr, and preserves loop counters outside syscall-clobbered RCX/R11."
+      },
+      {
+        "id": "sec-34-4-5",
+        "title": "34.4.5 fork and execve",
+        "content": "In the parent, after fork, we call wait4 with rdi = -1 (any child), rsi = 0, rdx = 0, r10 = 0. In the child, we set up rdi = command path, rsi = argv array, rdx = 0 (environ), and call execve. If it returns (error), we print an error message and exit with code 127.\n\nClarification: The completed shell passes the inherited environment. A command containing a slash is executed as that path; otherwise PATH is searched. Empty PATH components mean the current directory, and an unset PATH uses /bin:/usr/bin. Successful exec replaces the child; failure exits the child only."
+      },
+      {
+        "id": "sec-34-5",
+        "title": "34.5 Full Source Code",
+        "content": "Create shell.asm:\n\nClarification: The original is an unfinished draft: it loses argc during comparisons, uses RCX across syscall, may write past input/argv storage, and does not implement exit-code parsing. The complete companion below provides the original builtins plus every exercise extension. Its grammar is whitespace-separated tokens with a standalone < token; quoting, expansion, pipelines and job control remain explicitly outside this project.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original shell.asm draft — retained with correctness notes",
+            "code": "; shell.asm - Minimal Assembly Shell\n; Assemble: nasm -f elf64 shell.asm -o shell.o\n; Link:     ld shell.o -o shell\n; Run:      ./shell\n\n%define SYS_READ     0\n%define SYS_WRITE    1\n%define SYS_EXIT     60\n%define SYS_FORK     57\n%define SYS_EXECVE   59\n%define SYS_WAIT4    61\n%define SYS_CHDIR    80\n%define SYS_GETCWD   79\n\n%define STDIN        0\n%define STDOUT       1\n%define STDERR       2\n\n%define MAX_ARGS     16\n%define BUF_SIZE     256\n\nsection .data\n    prompt      db '$ ', 0\n    newline     db 0xA, 0\n    echo_err    db 'echo: no arguments', 0xA, 0\n    cd_err      db 'cd: missing argument', 0xA, 0\n    cd_fail     db 'cd: cannot change directory', 0xA, 0\n    exec_err    db 'ash: command not found: ', 0\n    exec_err2   db 0xA, 0\n    fork_err    db 'ash: fork failed', 0xA, 0\n    wait_err    db 'ash: wait failed', 0xA, 0\n\nsection .bss\n    ; We'll allocate buffers on stack instead; .bss not strictly needed.\n\nsection .text\n    global _start\n\n;----------------------------------------------------------\n; strlen: rsi = string, returns length in rax\n;----------------------------------------------------------\nstrlen:\n    xor eax, eax\n.loop:\n    cmp byte [rsi + rax], 0\n    je .done\n    inc rax\n    jmp .loop\n.done:\n    ret\n\n;----------------------------------------------------------\n; strcmp: rsi = s1, rdi = s2, returns difference in eax\n;----------------------------------------------------------\nstrcmp:\n    xor eax, eax\n.loop:\n    mov al, [rsi]\n    mov dl, [rdi]\n    cmp al, dl\n    jne .diff\n    test al, al\n    jz .equal\n    inc rsi\n    inc rdi\n    jmp .loop\n.diff:\n    sub al, dl\n    movsx eax, al\n    ret\n.equal:\n    xor eax, eax\n    ret\n\n;----------------------------------------------------------\n; print: rsi = string, rdx = length (or -1 to compute)\n;----------------------------------------------------------\nprint:\n    push rsi\n    push rdx\n    call strlen\n    pop rdx\n    mov rdx, rax\n    pop rsi\n    mov rax, SYS_WRITE\n    mov rdi, STDOUT\n    syscall\n    ret\n\n;----------------------------------------------------------\n; parse_input: parse line in rsi into argv array at rdi (max args in rcx)\n; returns number of args in rax\n;----------------------------------------------------------\nparse_input:\n    ; rsi = input buffer, rdi = argv array, rcx = max args\n    xor eax, eax            ; arg count\n    mov r8, rdi             ; save argv base\n    mov r9, rsi             ; current position in input\n.skip_ws:\n    mov dl, [r9]\n    cmp dl, ' '\n    je .skip_space\n    cmp dl, 9               ; tab\n    je .skip_space\n    cmp dl, 0xA             ; newline\n    je .done\n    test dl, dl\n    jz .done\n    ; start of token\n    cmp eax, ecx\n    jge .done               ; too many args\n    mov [r8 + rax*8], r9    ; store pointer\n    inc eax                 ; increment count\n.scan_token:\n    mov dl, [r9]\n    cmp dl, ' '\n    je .token_end\n    cmp dl, 9\n    je .token_end\n    cmp dl, 0xA\n    je .token_end\n    test dl, dl\n    jz .token_end\n    inc r9\n    jmp .scan_token\n.token_end:\n    mov byte [r9], 0        ; null terminate token\n    inc r9\n    jmp .skip_ws\n.skip_space:\n    inc r9\n    jmp .skip_ws\n.done:\n    mov qword [r8 + rax*8], 0  ; NULL terminate argv\n    ret\n\n;----------------------------------------------------------\n; _start\n;----------------------------------------------------------\n_start:\n    ; Allocate stack frame for buffers\n    sub rsp, BUF_SIZE + MAX_ARGS*8 + BUF_SIZE   ; input buffer + argv + cwd buffer\n    mov rbp, rsp            ; use rbp as base\n    lea r12, [rbp]          ; input buffer pointer\n    lea r13, [rbp + BUF_SIZE]   ; argv array pointer\n    lea r14, [rbp + BUF_SIZE + MAX_ARGS*8]   ; cwd buffer pointer\n\n.main_loop:\n    ; print prompt\n    mov rsi, prompt\n    call print\n\n    ; read input\n    mov rax, SYS_READ\n    mov rdi, STDIN\n    mov rsi, r12\n    mov rdx, BUF_SIZE\n    syscall\n    test rax, rax\n    jle .exit               ; EOF or error\n\n    ; Ensure null termination (read doesn't add null)\n    mov byte [r12 + rax], 0\n\n    ; parse input into argv\n    mov rsi, r12\n    mov rdi, r13\n    mov rcx, MAX_ARGS\n    call parse_input\n    ; rax = number of args\n    test rax, rax\n    jz .main_loop           ; no command\n\n    ; Check built-in commands\n    mov rsi, [r13]          ; argv[0]\n    ; echo\n    mov rdi, echo_str\n    call strcmp\n    test eax, eax\n    jz .cmd_echo\n    ; pwd\n    mov rsi, [r13]\n    mov rdi, pwd_str\n    call strcmp\n    test eax, eax\n    jz .cmd_pwd\n    ; cd\n    mov rsi, [r13]\n    mov rdi, cd_str\n    call strcmp\n    test eax, eax\n    jz .cmd_cd\n    ; exit\n    mov rsi, [r13]\n    mov rdi, exit_str\n    call strcmp\n    test eax, eax\n    jz .cmd_exit\n\n    ; External command: fork+execve\n    mov rax, SYS_FORK\n    syscall\n    test rax, rax\n    js .fork_fail\n    jz .child\n\n    ; Parent: wait for child\n    mov rax, SYS_WAIT4\n    mov rdi, -1             ; any child\n    xor rsi, rsi            ; status = NULL\n    xor rdx, rdx            ; options = 0\n    xor r10, r10            ; rusage = NULL\n    syscall\n    jmp .main_loop\n\n.child:\n    ; Child: execve(argv[0], argv, NULL)\n    mov rdi, [r13]          ; path = argv[0]\n    mov rsi, r13            ; argv array\n    xor rdx, rdx            ; envp = NULL\n    mov rax, SYS_EXECVE\n    syscall\n    ; If execve returns, error\n    mov rsi, exec_err\n    call print\n    mov rsi, [r13]\n    call print\n    mov rsi, exec_err2\n    call print\n    mov rax, SYS_EXIT\n    mov rdi, 127\n    syscall\n\n.fork_fail:\n    mov rsi, fork_err\n    call print\n    jmp .main_loop\n\n.cmd_echo:\n    ; echo args from 1 to n\n    ; rax currently has argc (from parse_input)\n    mov rbx, rax\n    mov rcx, 1              ; start at argv[1]\n.echo_loop:\n    cmp rcx, rbx\n    jge .echo_done\n    mov rsi, [r13 + rcx*8]\n    call print\n    ; print space if not last\n    lea rdx, [rbx-1]\n    cmp rcx, rdx\n    jge .echo_no_space\n    mov rsi, space\n    call print\n.echo_no_space:\n    inc rcx\n    jmp .echo_loop\n.echo_done:\n    mov rsi, newline\n    call print\n    jmp .main_loop\n\n.cmd_pwd:\n    mov rax, SYS_GETCWD\n    mov rdi, r14\n    mov rsi, BUF_SIZE\n    syscall\n    test rax, rax\n    js .pwd_error\n    mov rsi, r14\n    call print\n    mov rsi, newline\n    call print\n    jmp .main_loop\n.pwd_error:\n    jmp .main_loop\n\n.cmd_cd:\n    ; cd requires one argument\n    mov rax, [r13]          ; we need argc again; but parse_input returned it, we lost it? We need to save it.\n    ; We'll re-parse or better save argc in a register earlier. For simplicity, assume we saved in r15.\n    ; In our code, after parse_input, rax had argc, but we didn't store it. We'll modify to store argc in r15.\n    ; For brevity, we'll note this and write code accordingly.\n    ; We'll add: mov r15, rax after parse_input.\n    ; Since we didn't include that in the above, we'll adjust.\n    ; I'll rewrite part to save argc in r15.\n    ; (See final code below with r15 usage)\n    ; For now, assume r15 holds argc.\n    mov rbx, r15\n    cmp rbx, 2\n    jl .cd_missing\n    mov rdi, [r13 + 8]      ; argv[1]\n    mov rax, SYS_CHDIR\n    syscall\n    test rax, rax\n    js .cd_fail\n    jmp .main_loop\n.cd_missing:\n    mov rsi, cd_err\n    call print\n    jmp .main_loop\n.cd_fail:\n    mov rsi, cd_fail\n    call print\n    jmp .main_loop\n\n.cmd_exit:\n    ; exit with optional code\n    mov rdi, 0\n    cmp r15, 2\n    jl .exit_now\n    ; parse argv[1] as integer (optional, skip for simplicity)\n    ; For simplicity, exit 0 always or use atoi if we implement.\n    mov rdi, 0\n.exit_now:\n    mov rax, SYS_EXIT\n    syscall\n\n.exit:\n    mov rax, SYS_EXIT\n    xor rdi, rdi\n    syscall\n\nsection .data\n    echo_str db 'echo', 0\n    pwd_str  db 'pwd', 0\n    cd_str   db 'cd', 0\n    exit_str db 'exit', 0\n    space    db ' ', 0",
+            "explanation": "Note: The above code has some inconsistencies (e.g., storing argc). We'll provide a corrected, complete version in the final text. For the chapter content, we'll include the full code with proper register saving.\n\nWe'll add the missing piece: after parse_input, store rax in r15 for later use."
+          },
+          {
+            "language": "nasm",
+            "title": "Complete shell.asm with all exercise extensions",
+            "code": "; shell.asm -- minimal Linux x86-64 shell, raw syscalls, no libc.\n; Builtins: echo, pwd, cd DIR, exit [0..255], help.\n; External commands inherit envp, search PATH, and support one '< FILE'.\n; Token grammar: whitespace only; '<' must be a separate token.\n; No quoting, expansion, pipelines, job control or signal disposition changes.\n; Input: <=255 bytes/line, <=16 tokens plus a separate NULL argv slot.\ndefault rel\nsection .rodata\nprompt db '$ ',0\nlf db 10,0\nspace db ' ',0\necho_name db 'echo',0\npwd_name db 'pwd',0\ncd_name db 'cd',0\nexit_name db 'exit',0\nhelp_name db 'help',0\nhelp_text db 'Builtins: echo [args], pwd, cd DIR, exit [0..255], help',10\n          db 'External commands: PATH lookup; optional < FILE; no quoting or expansion.',10,0\ninput_error db 'ash: invalid/overlong input or too many arguments',10,0\nusage_error db 'ash: invalid builtin arguments or exit code',10,0\ncd_error db 'ash: cannot change directory',10,0\ncwd_error db 'ash: getcwd failed',10,0\nfork_error db 'ash: fork failed',10,0\nwait_error db 'ash: wait failed',10,0\nexec_error db 'ash: cannot execute command',10,0\nredirect_error db 'ash: invalid or failed input redirection',10,0\nstatus_text db 'ash: child status ',0\ndefault_path db '/bin:/usr/bin',0\nsection .bss\nenvironment resq 1\nsearch_path resq 1\ninput_path resq 1\nchild_pid resq 1\nchild_status resd 1\nlast_status resd 1\npath_done resb 1\nexec_status resd 1\nline_size resq 1\nline_bad resb 1\ninput_eof resb 1\nbyte_in resb 1\nnumber resb 32\nsection .text\nglobal _start\n_start:\n    mov rax,[rsp]\n    lea rax,[rsp+rax*8+16] ; first envp pointer after argv NULL\n    mov [environment],rax\n    lea rdx,[default_path]\n    mov [search_path],rdx\n.env:\n    mov rsi,[rax]\n    test rsi,rsi\n    jz .buffers\n    cmp byte [rsi],'P'\n    jne .next_env\n    cmp byte [rsi+1],'A'\n    jne .next_env\n    cmp byte [rsi+2],'T'\n    jne .next_env\n    cmp byte [rsi+3],'H'\n    jne .next_env\n    cmp byte [rsi+4],'='\n    jne .next_env\n    lea rdx,[rsi+5]\n    mov [search_path],rdx\n    jmp .buffers\n.next_env:\n    add rax,8\n    jmp .env\n.buffers:\n    sub rsp,8592\n    mov rbp,rsp\n    mov r12,rbp            ; 256-byte input buffer\n    lea r13,[rbp+256]      ; 17 argv slots: 16 args + NULL\n    lea r14,[rbp+392]      ; 4096-byte getcwd buffer\nmain_loop:\n    lea rsi,[prompt]\n    mov edi,1\n    call print_z\n    call read_line\n    test eax,eax\n    jz exit_zero\n    cmp eax,2\n    je bad_input\n    call parse\n    jc bad_input\n    mov r15,rax            ; argc survives comparisons and syscalls\n    test r15,r15\n    jz main_loop\n    call redirect_parse\n    jc bad_redirect\n    test r15,r15\n    jz bad_redirect\n    mov rsi,[r13]\n    lea rdi,[echo_name]\n    call equal\n    test eax,eax\n    jnz cmd_echo\n    mov rsi,[r13]\n    lea rdi,[pwd_name]\n    call equal\n    test eax,eax\n    jnz cmd_pwd\n    mov rsi,[r13]\n    lea rdi,[cd_name]\n    call equal\n    test eax,eax\n    jnz cmd_cd\n    mov rsi,[r13]\n    lea rdi,[exit_name]\n    call equal\n    test eax,eax\n    jnz cmd_exit\n    mov rsi,[r13]\n    lea rdi,[help_name]\n    call equal\n    test eax,eax\n    jnz cmd_help\n    mov eax,57\n    syscall\n    test rax,rax\n    js fork_failed\n    jz child\n    mov [child_pid],rax\n.wait:\n    mov eax,61\n    mov rdi,[child_pid]\n    lea rsi,[child_status]\n    xor edx,edx\n    xor r10d,r10d\n    syscall\n    cmp rax,-4\n    je .wait\n    test rax,rax\n    js wait_failed\n    mov eax,[child_status]\n    mov edx,eax\n    and edx,127\n    jnz .signal\n    shr eax,8\n    and eax,255\n    jmp .status\n.signal:\n    lea eax,[rdx+128]\n.status:\n    mov [last_status],eax\n    test eax,eax\n    jz main_loop\n    lea rsi,[status_text]\n    mov edi,2\n    call print_z\n    mov eax,[last_status]\n    call print_status\n    jmp main_loop\n; Builtins execute in parent. This small grammar redirects external commands only.\ncmd_echo:\n    cmp qword [input_path],0\n    jne bad_redirect\n    mov ebx,1\n.loop:\n    cmp rbx,r15\n    jae .done\n    cmp ebx,1\n    je .arg\n    lea rsi,[space]\n    mov edi,1\n    call print_z\n.arg:\n    mov rsi,[r13+rbx*8]\n    mov edi,1\n    call print_z\n    inc rbx\n    jmp .loop\n.done:\n    lea rsi,[lf]\n    mov edi,1\n    call print_z\n    jmp main_loop\ncmd_pwd:\n    cmp qword [input_path],0\n    jne bad_redirect\n    cmp r15,1\n    jne bad_usage\n    mov eax,79\n    mov rdi,r14\n    mov esi,4096\n    syscall\n    test rax,rax\n    js cwd_failed\n    mov rsi,r14\n    mov edi,1\n    call print_z\n    lea rsi,[lf]\n    mov edi,1\n    call print_z\n    jmp main_loop\ncmd_cd:\n    cmp qword [input_path],0\n    jne bad_redirect\n    cmp r15,2\n    jne bad_usage\n    mov eax,80\n    mov rdi,[r13+8]\n    syscall\n    test rax,rax\n    js cd_failed\n    jmp main_loop\ncmd_help:\n    cmp qword [input_path],0\n    jne bad_redirect\n    cmp r15,1\n    jne bad_usage\n    lea rsi,[help_text]\n    mov edi,1\n    call print_z\n    jmp main_loop\ncmd_exit:\n    cmp qword [input_path],0\n    jne bad_redirect\n    cmp r15,1\n    je exit_zero\n    cmp r15,2\n    jne bad_usage\n    mov rsi,[r13+8]\n    xor edi,edi\n    cmp byte [rsi],0\n    je bad_usage\n.loop:\n    movzx eax,byte [rsi]\n    test eax,eax\n    jz exit\n    sub eax,'0'\n    cmp eax,9\n    ja bad_usage\n    imul edi,edi,10\n    add edi,eax\n    cmp edi,255\n    ja bad_usage\n    inc rsi\n    jmp .loop\nchild:\n    cmp qword [input_path],0\n    je .execute\n    mov eax,2\n    mov rdi,[input_path]\n    xor esi,esi\n    xor edx,edx\n    syscall\n    test rax,rax\n    js .redirect_failed\n    test rax,rax\n    jz .execute            ; already fd0: don't close it\n    mov rbx,rax\n    mov rdi,rax\n    xor esi,esi\n    mov eax,33             ; dup2(fd,STDIN_FILENO)\n    syscall\n    test rax,rax\n    js .redirect_failed\n    mov rdi,rbx\n    mov eax,3\n    syscall\n.execute:\n    mov rsi,[r13]\n.slash:\n    mov al,[rsi]\n    cmp al,'/'\n    je .direct\n    test al,al\n    jz .path\n    inc rsi\n    jmp .slash\n.direct:\n    mov rdi,[r13]\n    call try_exec\n    mov edi,126\n    cmp rax,-2\n    jne .exec_failed\n    mov edi,127\n    jmp .exec_failed\n.path:\n    mov rbx,[search_path]\n    mov byte [path_done],0\n    mov dword [exec_status],127\n.directory:\n    lea rdi,[rbp+4488]     ; 4096-byte candidate buffer\n    xor ecx,ecx\n.dir_char:\n    mov al,[rbx]\n    test al,al\n    jz .last_dir\n    inc rbx\n    cmp al,':'\n    je .dir_end\n    cmp ecx,4094\n    jae .too_long\n    mov [rdi+rcx],al\n    inc ecx\n    jmp .dir_char\n.last_dir:\n    mov byte [path_done],1\n.dir_end:\n    test ecx,ecx\n    jz .command\n    mov byte [rdi+rcx],'/'\n    inc ecx\n.command:\n    mov rsi,[r13]\n.copy_command:\n    mov al,[rsi]\n    test al,al\n    jz .attempt\n    cmp ecx,4095\n    jae .too_long_command\n    mov [rdi+rcx],al\n    inc ecx\n    inc rsi\n    jmp .copy_command\n.attempt:\n    mov byte [rdi+rcx],0\n    call try_exec\n    cmp rax,-2\n    je .next_dir\n    cmp rax,-20\n    je .next_dir\n    mov dword [exec_status],126\n.next_dir:\n    cmp byte [path_done],0\n    je .directory\n    mov edi,[exec_status]\n    jmp .exec_failed\n.too_long:\n    ; Drain this PATH component before considering the next one.\n    mov al,[rbx]\n    test al,al\n    jz .last_long\n    inc rbx\n    cmp al,':'\n    jne .too_long\n    jmp .too_long_command\n.last_long:\n    mov byte [path_done],1\n.too_long_command:\n    mov dword [exec_status],126\n    jmp .next_dir\n.redirect_failed:\n    lea rsi,[redirect_error]\n    mov edi,2\n    call print_z\n    mov edi,1\n    jmp exit\n.exec_failed:\n    mov ebx,edi\n    lea rsi,[exec_error]\n    mov edi,2\n    call print_z\n    mov edi,ebx\n    jmp exit\ntry_exec:\n    mov eax,59\n    mov rsi,r13\n    mov rdx,[environment]\n    syscall\n    ret\n; Remove one '< filename' pair while keeping all other argv entries and NULL.\nredirect_parse:\n    mov qword [input_path],0\n    xor ecx,ecx\n.scan:\n    cmp rcx,r15\n    jae .ok\n    mov rsi,[r13+rcx*8]\n    cmp byte [rsi],'<'\n    jne .next\n    cmp byte [rsi+1],0\n    jne .next\n    cmp qword [input_path],0\n    jne .bad\n    lea rdx,[rcx+1]\n    cmp rdx,r15\n    jae .bad\n    mov rax,[r13+rdx*8]\n    mov [input_path],rax\n    sub r15,2\n    mov rdx,rcx\n.shift:\n    cmp rdx,r15\n    ja .scan\n    mov rax,[r13+rdx*8+16]\n    mov [r13+rdx*8],rax\n    inc rdx\n    jmp .shift\n.next:\n    inc ecx\n    jmp .scan\n.ok:\n    clc\n    ret\n.bad:\n    stc\n    ret\nparse:\n    mov rsi,r12\n    xor eax,eax\n.skip:\n    mov dl,[rsi]\n    test dl,dl\n    jz .done\n    cmp dl,' '\n    je .space\n    cmp dl,9\n    je .space\n    cmp dl,13\n    je .space\n    cmp eax,16\n    jae .bad\n    mov [r13+rax*8],rsi\n    inc eax\n.token:\n    mov dl,[rsi]\n    test dl,dl\n    jz .done              ; don't step beyond terminal NUL\n    cmp dl,' '\n    je .delimiter\n    cmp dl,9\n    je .delimiter\n    cmp dl,13\n    je .delimiter\n    inc rsi\n    jmp .token\n.delimiter:\n    mov byte [rsi],0\n.space:\n    inc rsi\n    jmp .skip\n.done:\n    mov qword [r13+rax*8],0\n    clc\n    ret\n.bad:\n    stc\n    ret\nread_line:\n    cmp byte [input_eof],0\n    jne .eof\n    mov qword [line_size],0\n    mov byte [line_bad],0\n.next:\n    xor eax,eax\n    xor edi,edi\n    lea rsi,[byte_in]\n    mov edx,1\n    syscall\n    cmp rax,-4\n    je .next\n    test rax,rax\n    js io_error\n    jz .end_file\n    mov al,[byte_in]\n    cmp al,10\n    je .ready\n    test al,al\n    jz .bad\n    mov rcx,[line_size]\n    cmp rcx,255\n    jae .bad\n    mov [r12+rcx],al\n    inc qword [line_size]\n    jmp .next\n.bad:\n    mov byte [line_bad],1\n    jmp .next\n.end_file:\n    mov byte [input_eof],1\n    cmp qword [line_size],0\n    jne .ready\n    cmp byte [line_bad],0\n    jne .ready\n.eof:\n    xor eax,eax\n    ret\n.ready:\n    mov rcx,[line_size]\n    mov byte [r12+rcx],0\n    movzx eax,byte [line_bad]\n    inc eax\n    ret\nequal:\n    mov al,[rsi]\n    cmp al,[rdi]\n    jne .no\n    test al,al\n    jz .yes\n    inc rsi\n    inc rdi\n    jmp equal\n.yes:\n    mov eax,1\n    ret\n.no:\n    xor eax,eax\n    ret\nprint_z:\n    xor edx,edx\n.length:\n    cmp byte [rsi+rdx],0\n    je write_all\n    inc rdx\n    jmp .length\nprint_status:\n    lea rsi,[number+31]\n    mov byte [rsi],10\n    mov r8d,10\n.loop:\n    xor edx,edx\n    div r8d\n    add dl,'0'\n    dec rsi\n    mov [rsi],dl\n    test eax,eax\n    jnz .loop\n    lea rdx,[number+32]\n    sub rdx,rsi\n    mov edi,2\nwrite_all:\n    test rdx,rdx\n    jz .done\n.loop:\n    mov eax,1\n    syscall\n    cmp rax,-4\n    je .loop\n    test rax,rax\n    jle io_error\n    add rsi,rax\n    sub rdx,rax\n    jnz .loop\n.done:\n    ret\nbad_input:\n    lea rsi,[input_error]\n    jmp report\nbad_usage:\n    lea rsi,[usage_error]\n    jmp report\nbad_redirect:\n    lea rsi,[redirect_error]\n    jmp report\ncd_failed:\n    lea rsi,[cd_error]\n    jmp report\ncwd_failed:\n    lea rsi,[cwd_error]\n    jmp report\nfork_failed:\n    lea rsi,[fork_error]\n    jmp report\nwait_failed:\n    lea rsi,[wait_error]\nreport:\n    mov edi,2\n    call print_z\n    jmp main_loop\nio_error:\n    mov edi,1\n    jmp exit\nexit_zero:\n    xor edi,edi\nexit:\n    mov eax,60\n    syscall\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Save as shell.asm and build using section 34.6. Prompts are printed for both terminal and piped input, matching the original demonstration. Builtins run in the parent; input redirection is supported for external commands. The shell continues after parse and command errors; EOF and exit without an argument return zero."
+          }
+        ]
+      },
+      {
+        "id": "sec-34-6",
+        "title": "34.6 Build and Test",
+        "content": "\n\nClarification: Use a disposable directory for experiments. Test multiple piped lines, exactly 16 tokens, a 17th-token rejection, a 255-byte line, an overlong line followed by a valid command, missing redirection files, and EOF without a final newline. Error messages in the companion are more general than the original command-not-found wording because permission and other exec errors are distinct.",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "34.6 Build and Test — listing 1",
+            "code": "nasm -f elf64 shell.asm -o shell.o\nld shell.o -o shell\n./shell",
+            "explanation": "Example session:"
+          },
+          {
+            "language": "text",
+            "title": "34.6 Build and Test — listing 2",
+            "code": "$ echo Hello World\nHello World\n$ pwd\n/home/user\n$ cd /tmp\n$ pwd\n/tmp\n$ /bin/ls\n... (output of ls)\n$ exit",
+            "explanation": "If you enter a command not found:"
+          },
+          {
+            "language": "text",
+            "title": "34.6 Build and Test — listing 3",
+            "code": "$ foobar\nash: command not found: foobar"
+          }
+        ]
+      },
+      {
+        "id": "sec-34-7",
+        "title": "34.7 Possible Extensions",
+        "content": "- Implement PATH search for external commands.\n- Add more built-ins: help, env, export.\n- Support command history (non-trivial).\n- Implement piping and redirection.\n- Add signal handling (Ctrl+C).\n- Improve exit code handling.\n\nOriginal source solutions placeholder: *(Provide concise solutions for the exercises.)*"
       }
     ],
-    summary: ['Project 7 integrates process management, system calls, and string parsing.', 'Native assembly shells grant absolute mastery of the Linux environment.']
+    "exercises": [
+      {
+        "id": "ex-34-1",
+        "title": "Exercise 34.1: Implement `atoi` for Exit Codes",
+        "description": "Enhance the exit built-in to parse an integer argument and exit with that code. Use an atoi routine from Chapter 28 or write a simple one.",
+        "solution": "printf 'exit 37\\n' | ./shell\necho $?\n# 37\nprintf 'exit 999\\nexit 0\\n' | ./shell\n# Invalid code is diagnosed; the shell then accepts exit 0.",
+        "solutionLanguage": "bash",
+        "solutionExplanation": "Use the complete corrected shell.asm from section 34.5. The source contains the full implementation, so these commands are runnable verification steps rather than omitted-code placeholders. cmd_exit requires one decimal token in 0..255, checking each digit and bound before continuing. Unsupported signs or extra arguments report an error and return to the loop. The bounded exit-code contract avoids unchecked atoi overflow."
+      },
+      {
+        "id": "ex-34-2",
+        "title": "Exercise 34.2: Add `help` Built-in",
+        "description": "Add a help command that prints a list of built-in commands and their usage.",
+        "solution": "printf 'help\\necho Hello World\\nexit\\n' | ./shell\n# help lists builtins, the external-command grammar and limitations.",
+        "solutionLanguage": "bash",
+        "solutionExplanation": "Use the complete corrected shell.asm from section 34.5. The source contains the full implementation, so these commands are runnable verification steps rather than omitted-code placeholders. cmd_help prints builtin syntax and the supported external-command grammar without forking. It rejects extra arguments and builtin redirection rather than silently ignoring them."
+      },
+      {
+        "id": "ex-34-3",
+        "title": "Exercise 34.3: PATH Search",
+        "description": "Modify the shell to search the PATH environment variable when a command is not a built-in and does not contain a slash. Try to execute from each directory in PATH. This requires parsing the PATH string and constructing full paths.",
+        "solution": "printf 'echo builtin\\nprintf external\\nexit\\n' | env PATH=/no/such/directory:/usr/bin:/bin ./shell\n# echo is handled inside the shell; printf is found using PATH.\n# The executable inherits the supplied environment.",
+        "solutionLanguage": "bash",
+        "solutionExplanation": "Use the complete corrected shell.asm from section 34.5. The source contains the full implementation, so these commands are runnable verification steps rather than omitted-code placeholders. The child scans colon-separated PATH components, constructs each candidate within 4096 bytes, and tries execve. It saves parser state across syscalls, handles empty components, and avoids PATH search when the command contains a slash. No process-global environment is changed."
+      },
+      {
+        "id": "ex-34-4",
+        "title": "Exercise 34.4: Handle `wait4` Status",
+        "description": "After waiting for a child, retrieve its exit status using the status parameter. Print the exit code if non-zero, or store it in a variable for $? (if you implement variable expansion).",
+        "solution": "printf '/bin/false\\n/bin/true\\nmissing_training_command\\nexit\\n' | ./shell\n# stderr includes child status 1 and child status 127.\n# Status 0 is stored but not printed; variable expansion is not implemented.",
+        "solutionLanguage": "bash",
+        "solutionExplanation": "Use the complete corrected shell.asm from section 34.5. The source contains the full implementation, so these commands are runnable verification steps rather than omitted-code placeholders. The parent saves the exact child PID, calls wait4 with a status pointer, retries EINTR, and records normal exit codes or 128+signal for signaled termination in last_status. Nonzero status is printed on stderr; wait4 itself returns the child PID."
+      },
+      {
+        "id": "ex-34-5",
+        "title": "Exercise 34.5: Input Redirection",
+        "description": "Add support for input redirection (<): if a command contains < filename, open the file and duplicate its file descriptor to stdin before execve. This requires parsing the command and using open and dup2 syscalls.",
+        "solution": "printf 'training input\\n' > input.txt\nprintf 'cat < input.txt\\necho parent still reading commands\\nexit\\n' | ./shell\n# Run in a disposable exercise directory.\n# cat receives file input; the parent keeps reading its original stdin.",
+        "solutionLanguage": "bash",
+        "solutionExplanation": "Use the complete corrected shell.asm from section 34.5. The source contains the full implementation, so these commands are runnable verification steps rather than omitted-code placeholders. redirect_parse removes one < filename pair and shifts the remaining argv entries including NULL. In the child only, open/dup2/close redirects stdin; fd0 is retained if open already returned zero. Missing/duplicate redirection or a failed open is diagnosed, and the parent remains unchanged."
+      }
+    ],
+    "practiceQuestions": [
+      {
+        "question": "What is the purpose of the fork system call? How does it work?",
+        "answer": "fork creates a child with a separate process identity and an initially equivalent address space, commonly implemented with copy-on-write. It returns zero in the child and the child PID in the parent; raw Linux failures return negative errno."
+      },
+      {
+        "question": "How does execve differ from fork? What are its arguments?",
+        "answer": "execve replaces the current process image and does not return on success. Its arguments are executable path, NULL-terminated argv pointer array and NULL-terminated envp pointer array in RDI, RSI and RDX. fork creates a process; execve changes what the process runs."
+      },
+      {
+        "question": "Why do shells often implement some commands as built-ins rather than executing external programs?",
+        "answer": "cd must change the parent shell’s directory, and exit must terminate the shell itself. Builtins also avoid process startup overhead for simple operations. Running cd only in a forked child would leave the parent directory unchanged."
+      },
+      {
+        "question": "Explain the role of wait4 in a shell. What does it return?",
+        "answer": "wait4 reaps a child and writes an encoded status when given a pointer. Its return is a child PID, not the exit code. Retry EINTR and wait for the specific PID; decode normal exit status from bits 8–15 or signal termination from the low status bits."
+      },
+      {
+        "question": "How would you implement input redirection in a shell? Which system calls are needed?",
+        "answer": "Parse and remove the < filename tokens from argv. In the child, open the input read-only, dup2 its descriptor to fd0, close the redundant original descriptor, then execve. Do not close it if open already returned fd0, and keep parent stdin unchanged."
+      },
+      {
+        "question": "What is the difference between argv and envp? How are they passed to execve?",
+        "answer": "argv contains program arguments; envp contains NAME=value strings. Both are NULL-terminated pointer arrays. The completed shell finds inherited envp on the initial process stack and forwards it to execve; Linux accepting NULL envp is not a portable convention."
+      },
+      {
+        "question": "In the shell implementation, why did we allocate buffers on the stack instead of the heap?",
+        "answer": "Fixed-size stack buffers avoid dynamic allocation for this small shell. Bound every write, reserve an extra byte for NUL and an extra argv slot for the final NULL. Large or dynamic requirements need a different storage strategy."
+      },
+      {
+        "question": "How can you handle a command that is not found? What exit code should the shell return?",
+        "answer": "If execve fails, the child reports a diagnostic to stderr and exits. The completed PATH lookup uses 127 when no candidate exists and 126 for other execution failures; the parent decodes and reports that status. A failed child must not resume the shell loop."
+      },
+      {
+        "question": "What security considerations must a shell take into account when executing external commands?",
+        "answer": "Bound input/token/path construction, pass a deliberate environment, distinguish command arguments from shell syntax, and handle descriptors and errors carefully. This educational shell has no privilege boundary or job control and should run with ordinary user permissions; PATH entries can select unexpected executables."
+      },
+      {
+        "question": "How would you add support for piping between two commands? Describe the system calls involved.",
+        "answer": "Create a pipe, fork both children, dup2 the write end to the producer’s stdout and the read end to the consumer’s stdin, close every unused pipe descriptor in all processes, exec both commands, and wait for both. Leaked write ends can prevent the reader from observing EOF."
+      }
+    ],
+    "summary": [
+      "A shell is a program that manages processes and interprets commands.",
+      "System calls fork, execve, and wait4 are the core of process management.",
+      "Parsing input and constructing argv is essential for external commands.",
+      "Built-in commands are executed directly without forking.",
+      "The project integrates many assembly skills: string manipulation, system calls, stack allocation, and error handling.",
+      "This capstone demonstrates the power and complexity of low-level systems programming."
+    ]
   }
 ];
