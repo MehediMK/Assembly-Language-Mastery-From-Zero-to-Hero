@@ -425,61 +425,451 @@ export const CHAPTERS_LEVEL_4: Chapter[] = [
     ]
   },
   {
-    id: 19,
-    slug: 'chapter-19-abi-details-register-allocation',
-    level: 4,
-    levelTitle: 'Advanced Assembly',
-    title: 'Chapter 19: ABI Details and Register Allocation',
-    subtitle: 'Red Zone Semantics, Frame Pointer Omission, Live Ranges, and Spilling',
-    learningObjectives: [
-      'Master System V AMD64 ABI register assignments and caller/callee preservation.',
-      'Utilize the 128-byte red zone in leaf functions without adjusting rsp.',
-      'Understand register allocation, live ranges, and memory spilling.',
-      'Read compiler register allocation in gcc -S -fverbose-asm.'
+    "id": 19,
+    "slug": "chapter-19-abi-details-register-allocation",
+    "level": 4,
+    "levelTitle": "Advanced Assembly",
+    "title": "Chapter 19: ABI Details and Register Allocation",
+    "subtitle": "Red Zone Semantics, Frame Pointer Omission, Live Ranges, and Spilling",
+    "learningObjectives": [
+      "Understand the Application Binary Interface (ABI) and its role in low-level programming.",
+      "Master the System V AMD64 ABI specifics: data types, register usage, stack layout, and calling conventions.",
+      "Learn about the red zone and its implications for leaf functions.",
+      "Grasp register allocation concepts: register pressure, live ranges, spilling, and register classes.",
+      "Apply manual register allocation techniques to write efficient assembly.",
+      "Recognize how compilers perform register allocation and how to read compiler-generated assembly with this knowledge.",
+      "Write assembly functions that correctly interoperate with C code, respecting ABI constraints."
     ],
-    prerequisites: ['Chapters 1–18'],
-    keyConcepts: [
-      'The red zone (128 bytes below rsp) can be used by leaf functions without sub rsp.',
-      'Register pressure forces live variables into stack memory slots (spilling).',
-      'Frame pointer omission (FPO) frees rbp for general computation.'
+    "prerequisites": [
+      "Solid understanding of assembly instructions, registers, and stack frames (Chapters 3, 6, 10).",
+      "Familiarity with procedures, calling conventions, and the stack (Chapter 10).",
+      "Basic knowledge of C programming and compilation (optional but helpful).",
+      "Understanding of data types and memory layout (Chapters 2, 13)."
     ],
-    diagramType: 'abi_register_alloc',
-    sections: [
+    "keyConcepts": [
+      "ABI defines the binary-level interface between program components: data representation, calling conventions, register usage, and stack layout.",
+      "System V AMD64 ABI is the standard for 64-bit Linux and other Unix-like systems.",
+      "Caller-saved registers: rax, rcx, rdx, rsi, rdi, r8–r11. The caller must preserve them if needed.",
+      "Callee-saved registers: rbx, rbp, r12–r15. The callee must preserve them.",
+      "Red zone: 128 bytes below rsp that can be used by leaf functions without adjusting the stack pointer.",
+      "Stack alignment: The stack pointer must be 16-byte aligned before a call instruction.",
+      "Register allocation is the process of assigning program variables to CPU registers; the goal is to minimize memory spills.",
+      "Register pressure occurs when there are more live variables than available registers, forcing spills to memory.",
+      "Spilling moves a variable from a register to memory (stack) because all registers are in use.",
+      "Live range is the portion of code where a variable holds a value that will be used later."
+    ],
+    "diagramType": "abi_register_alloc",
+    "sections": [
       {
-        id: 'sec-19-1',
-        title: '19.1 Leaf Function Red Zone Usage',
-        content: `A leaf function that does not call any other functions can use the red zone directly:`,
-        codeSnippets: [
+        "id": "sec-19-1",
+        "title": "19.1 Introduction to ABI",
+        "content": "The Application Binary Interface (ABI) is a set of rules that govern how binary code interacts at the machine level. Unlike an API (Application Programming Interface), which is source-level, the ABI defines everything needed for separately compiled object files to link and run together: data type sizes, register usage, stack frame layout, calling conventions, and system call interface.\n\nWhy does ABI matter for assembly programmers?\n- When writing assembly functions that are called from C (or vice versa), you must follow the ABI to ensure correct parameter passing and return values.\n- The ABI dictates which registers you can safely use without saving, and which you must preserve.\n- Understanding the ABI helps you read compiler-generated assembly and debug issues.\n- For hand-optimized assembly, the ABI provides the framework for register usage.\n\nOn 64-bit Linux, the standard ABI is the System V AMD64 ABI. Microsoft Windows uses a different ABI (Microsoft x64), so code is not directly portable."
+      },
+      {
+        "id": "sec-19-2",
+        "title": "19.2 System V AMD64 ABI in Depth",
+        "content": "Let's examine the key components of the System V AMD64 ABI that affect assembly programming."
+      },
+      {
+        "id": "sec-19-2-1",
+        "title": "19.2.1 Data Types and Sizes",
+        "content": "When defining structures in assembly that must match C, use these alignment rules. Remember that the structure's total size is padded to the alignment of its most aligned member.",
+        "tableData": {
+          "headers": [
+            "C Type",
+            "Size (bytes)",
+            "Alignment (bytes)",
+            "Notes"
+          ],
+          "rows": [
+            [
+              "char",
+              "1",
+              "1",
+              ""
+            ],
+            [
+              "short",
+              "2",
+              "2",
+              ""
+            ],
+            [
+              "int",
+              "4",
+              "4",
+              ""
+            ],
+            [
+              "long",
+              "8",
+              "8",
+              ""
+            ],
+            [
+              "long long",
+              "8",
+              "8",
+              ""
+            ],
+            [
+              "float",
+              "4",
+              "4",
+              "IEEE 754 single"
+            ],
+            [
+              "double",
+              "8",
+              "8",
+              "IEEE 754 double"
+            ],
+            [
+              "pointer",
+              "8",
+              "8",
+              ""
+            ],
+            [
+              "long double",
+              "16",
+              "16",
+              "80-bit extended, padded to 16"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-19-2-2",
+        "title": "19.2.2 Register Usage",
+        "content": "The ABI classifies registers into two categories:\n\nCaller-saved (volatile): These registers may be freely modified by the called function. If the caller needs their values after the call, it must save them before the call. They are:\n- rax (return value, also used as accumulator)\n- rcx (4th argument, but also used for loop and rep count)\n- rdx (3rd argument, also high half of 128-bit return)\n- rsi (2nd argument)\n- rdi (1st argument)\n- r8 (5th argument)\n- r9 (6th argument)\n- r10 (temporary, also 4th argument for syscalls)\n- r11 (temporary, clobbered by syscall)\n\nCallee-saved (non-volatile): The called function must preserve the original values of these registers. If it wants to use them, it must save them (typically on the stack) in the prologue and restore them in the epilogue. They are:\n- rbx\n- rbp (often used as frame pointer, but can be used as general-purpose if frame pointer omitted)\n- r12\n- r13\n- r14\n- r15\n- rsp (stack pointer, must be restored to original value before return)\n\nSpecial-purpose:\n- rip – instruction pointer, not directly accessible as a general register.\n- rflags – flags register.\n\nFloating-point/SIMD registers (xmm0–xmm15):\n- xmm0–xmm7 are caller-saved and used for passing floating-point arguments and returning values.\n- xmm8–xmm15 are callee-saved in the SysV ABI (unlike Microsoft x64 where all XMM are caller-saved). So if you use xmm8–xmm15 in a function, you must preserve them.\n\nClarification: The source reverses the XMM preservation rules. All XMM0–XMM15 are caller-saved in System V AMD64. Microsoft x64 preserves the low 128 bits of XMM6–XMM15. General-register callee saves remain RBX, RBP, R12–R15, with RSP restored. See the target ABI before crossing platform boundaries."
+      },
+      {
+        "id": "sec-19-2-3",
+        "title": "19.2.3 Calling Convention",
+        "content": "Integer/pointer arguments:\n- First six: rdi, rsi, rdx, rcx, r8, r9.\n- Additional arguments are passed on the stack, in reverse order (so the 7th argument is at the lowest address of the stack arguments).\n\nFloating-point arguments:\n- First eight: xmm0–xmm7.\n- Additional floating-point arguments are passed on the stack.\n- If a function has both integer and floating-point arguments, they are numbered separately: integer arguments use the integer register sequence, and floating-point arguments use the XMM sequence. The registers are assigned based on the order of arguments in the function signature.\n\nReturn value:\n- Integer/pointer: rax.\n- Floating-point: xmm0.\n- If the return value is a structure, the rules are more complex: if the struct is small (<= 16 bytes) and contains only integer or pointer fields, it may be returned in rax and rdx. Larger structs are returned via a hidden pointer passed as the first argument (rdi).\n\nStack alignment:\n- Before a call instruction, rsp must be 16-byte aligned.\n- At function entry, rsp is 8 mod 16 (because the return address was pushed). The callee's prologue typically subtracts a multiple of 16 (or multiple of 16 + 8) to maintain alignment for nested calls.\n\nRed zone:\n- The 128 bytes below rsp are reserved for use by leaf functions (functions that do not call other functions) without adjusting rsp. This allows small local variables to be stored in the red zone without the overhead of sub rsp/add rsp. However, if the function calls another function, the red zone may be clobbered by the callee, so it cannot be used safely across calls.\n\nClarification: For ordinary scalar calls, entry RSP is 8 modulo 16. A frameless nonleaf can subtract 8 plus a multiple of 16; after PUSH RBP, subtract a multiple of 16. Aggregate return classification depends on field classes and alignment, not only size; a hidden return pointer also shifts integer arguments."
+      },
+      {
+        "id": "sec-19-2-4",
+        "title": "19.2.4 Stack Frame Layout",
+        "content": "A typical stack frame with a frame pointer:\n\nClarification: [RBP+8] contains the return address, not a spilled sixth argument. The sixth integer argument arrives in R9; if saved, its local slot must be allocated separately. After a standard frame-pointer prologue the seventh qword stack argument is [RBP+16].",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'leaf_red_zone.asm',
-            code: `; my_leaf: stores locals in 128-byte red zone without sub rsp
-my_leaf:
-    mov [rsp-8], rdi     ; store local 1 in red zone
-    mov [rsp-16], rsi    ; store local 2 in red zone
-    mov rax, [rsp-8]
-    add rax, [rsp-16]
-    ret                  ; zero prologue/epilogue overhead`
+            "language": "text",
+            "title": "19.2.4 Stack Frame Layout — listing 1",
+            "code": "        +------------------------+  Higher addresses\n        |       ...              |\n        | 7th argument (if any)  |  [rbp+16]\n        | 6th argument           |  [rbp+8]  (if spilled)\n        | Return Address         |  [rbp+8]\n        | Saved RBP              |  [rbp]   <-- rbp points here\n        | Local variable 1       |  [rbp-8]\n        | Local variable 2       |  [rbp-16]\n        | ...                    |\n        | Saved callee-saved regs|  [rbp-...]\n        +------------------------+  Lower addresses (rsp after allocation)",
+            "explanation": "If the function does not use a frame pointer, it uses rsp-relative addressing, and the offsets shift if rsp changes due to pushes/pops."
+          }
+        ]
+      },
+      {
+        "id": "sec-19-3",
+        "title": "19.3 Register Allocation Concepts",
+        "content": "Register allocation is the process of assigning program variables to CPU registers. Since registers are the fastest storage, we want to keep frequently used variables in registers and avoid spilling to memory."
+      },
+      {
+        "id": "sec-19-3-1",
+        "title": "19.3.1 Register Pressure",
+        "content": "Register pressure is the demand for registers at a given point in the program. When the number of live variables exceeds the number of available registers, some variables must be spilled (stored in memory). High register pressure leads to frequent spills and fills, reducing performance.\n\nExample:\nConsider a function that needs to keep 10 variables alive simultaneously, but only 6 callee-saved registers are available (after preserving some). Two variables must be spilled to the stack.\n\nClarification: Ten simultaneous values and six available registers leave four values without registers, not two. Live caller-saved values may be spilled around calls or recomputed; one need not restrict all variables to callee-saved registers throughout a function."
+      },
+      {
+        "id": "sec-19-3-2",
+        "title": "19.3.2 Live Ranges and Interference",
+        "content": "A variable's live range is the set of instructions from its definition to its last use. Two variables interfere if their live ranges overlap; they cannot share the same register. Register allocation can be viewed as graph coloring: each variable is a node, edges represent interference, and registers are colors. The compiler (or programmer) tries to color the graph with the available registers."
+      },
+      {
+        "id": "sec-19-3-3",
+        "title": "19.3.3 Spilling and Filling",
+        "content": "When a variable is spilled, it is stored in memory (usually on the stack). Before each use, it must be loaded back into a register (fill). This adds memory access overhead. The goal is to minimize spills by choosing variables with long live ranges or low usage frequency for spilling.\n\nClarification: A spilled operand may sometimes be consumed directly by a memory-form instruction rather than explicitly loaded first. Allocation decisions weigh use frequency, loop nesting, rematerialization and instruction constraints."
+      },
+      {
+        "id": "sec-19-3-4",
+        "title": "19.3.4 Register Classes",
+        "content": "The x86-64 architecture has different register classes:\n- General-purpose registers (rax, rbx, etc.) for integers and pointers.\n- Floating-point/SIMD registers (xmm0–xmm15) for floats, doubles, and packed data.\n- Special registers (rsp, rbp, rip, rflags) not used for general variables.\n\nThe choice of register class depends on the variable's type and usage."
+      },
+      {
+        "id": "sec-19-4",
+        "title": "19.4 Manual Register Allocation in Assembly",
+        "content": "When writing assembly by hand, you act as the register allocator. Here are some guidelines:"
+      },
+      {
+        "id": "sec-19-4-1",
+        "title": "19.4.1 Choose Registers Based on Usage Frequency",
+        "content": "- Keep the most frequently used variables in registers.\n- Use callee-saved registers (rbx, r12–r15) for variables that must survive function calls, because they are preserved across calls. But you must save/restore them if you use them.\n- Use caller-saved registers for temporary values that do not need to survive calls.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 19.1",
+            "code": "my_func:\n    push rbx\n    push r12\n    push r13\n    ; ... use rbx, r12, r13 ...\n    pop r13\n    pop r12\n    pop rbx\n    ret",
+            "explanation": "Original exercise fragment retained; the completed solution below supplies a runnable caller and observable result."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 19.2",
+            "code": "leaf_func:\n    mov [rsp-8], rdi\n    mov [rsp-16], rsi\n    mov [rsp-24], rdx\n    ; ... use these locals ...\n    ret",
+            "explanation": "Original exercise fragment retained; the completed solution below supplies a runnable caller and observable result."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 19.3",
+            "code": "my_func:\n    push rbx\n    push r12\n    push r13\n    push r14\n    push r15\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16          ; two spill slots: [rbp-8], [rbp-16]\n    ; assign variables:\n    ; v1 -> rbx\n    ; v2 -> r12\n    ; v3 -> r13\n    ; v4 -> r14\n    ; v5 -> r15\n    ; v6 -> rbp? but we used rbp as frame pointer; instead use rbp as general if we omit frame pointer, but we'll keep frame pointer and spill v6 and v7 to stack.\n    ; For simplicity, we'll spill two variables to [rbp-8] and [rbp-16].\n    ; ...\n    mov rsp, rbp\n    pop rbp\n    pop r15\n    pop r14\n    pop r13\n    pop r12\n    pop rbx\n    ret",
+            "explanation": "Original exercise fragment retained; the completed solution below supplies a runnable caller and observable result."
+          }
+        ]
+      },
+      {
+        "id": "sec-19-4-2",
+        "title": "19.4.2 Minimize Spills by Reordering Code",
+        "content": "If you need more registers than available, try to reorder operations so that some variables are no longer needed, freeing their registers.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original: need rbx, rcx, rdx simultaneously, but only two free registers",
+            "code": "; Original: need rbx, rcx, rdx simultaneously, but only two free registers\nmov rbx, 10      ; variable A\nmov rcx, 20      ; variable B\nmov rdx, 30      ; variable C\nadd rax, rbx\nadd rax, rcx\nadd rax, rdx\n\n; Reordered: compute partial sums to reduce live variables\nmov rbx, 10\nmov rcx, 20\nadd rax, rbx\nadd rax, rcx      ; now rbx and rcx dead, can reuse\nmov rbx, 30\nadd rax, rbx",
+            "explanation": "This second version only needs two registers for the three constants."
+          }
+        ]
+      },
+      {
+        "id": "sec-19-4-3",
+        "title": "19.4.3 Use the Red Zone for Leaf Functions",
+        "content": "If a function does not call any other functions (leaf function), you can use the 128-byte red zone below rsp for temporary storage without adjusting rsp. This avoids prologue/epilogue overhead.\n\nClarification: The user-space System V red zone is protected from signal-handler use, but does not survive ordinary nested calls. Kernel/interrupt code has different rules and commonly disables red-zone use. Windows x64 has no System V red zone.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "19.4.3 Use the Red Zone for Leaf Functions — listing 1",
+            "code": "my_leaf:\n    ; use [rsp-8], [rsp-16] etc. for locals, no sub rsp needed\n    mov [rsp-8], rdi\n    ; ...\n    ret",
+            "explanation": "Be careful: if any interrupt or signal handler runs, it may use the stack and clobber the red zone? Actually, the ABI guarantees that the red zone is not modified by signal handlers, so it's safe."
+          }
+        ]
+      },
+      {
+        "id": "sec-19-4-4",
+        "title": "19.4.4 Use Frame Pointer Omission (FPO) to Free rbp",
+        "content": "The frame pointer rbp is often used to access locals and arguments. However, if you use rsp-relative addressing and do not push/pop inside the function (except at prologue/epilogue), you can omit the frame pointer and use rbp as a general-purpose register. This increases available registers by one.\n\nExample:\n\nClarification: Omitting a frame pointer does not make RBP caller-saved: preserve it if modified. SUB RSP,16 alone leaves a normal callee misaligned for nested calls, though it is fine for this leaf fragment.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Without frame pointer",
+            "code": "; Without frame pointer\nmy_func:\n    sub rsp, 16          ; allocate locals\n    mov [rsp], rdi       ; local1\n    mov [rsp+8], rsi     ; local2\n    ; ... access via rsp offsets\n    add rsp, 16\n    ret",
+            "explanation": "Now rbp is free for other uses."
+          }
+        ]
+      },
+      {
+        "id": "sec-19-4-5",
+        "title": "19.4.5 Example: Register Allocation for a Simple Function",
+        "content": "Let's write a function that computes the sum of an array of integers and returns the result. The function receives a pointer to the array in rdi and the length in rsi. We need to allocate registers for the accumulator, loop counter, and array pointer.\n\nClarification: The source sum_and_product mixes qword loads, dword arithmetic and four-byte pointer increments. The corrected version below consistently processes qwords and returns low-64-bit sum/product in RAX/RDX using a documented two-register contract.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "sum_array: sum qword array",
+            "code": "; sum_array: sum qword array\n; Inputs: rdi = pointer, rsi = length\n; Output: rax = sum\nsum_array:\n    xor rax, rax          ; accumulator (use rax for return)\n    mov rcx, rsi          ; counter (rcx is caller-saved, fine)\n    add rdi, 0            ; just use rdi as pointer\n.loop:\n    test rcx, rcx\n    jz .done\n    add rax, [rdi]\n    add rdi, 8\n    dec rcx\n    jmp .loop\n.done:\n    ret",
+            "explanation": "Here we used rax for accumulator (also return), rcx for counter (caller-saved, no need to preserve), and rdi for the pointer (caller-saved). No callee-saved registers used, so no prologue needed.\n\nIf we needed more variables (e.g., also compute product), we might need callee-saved registers:"
+          },
+          {
+            "language": "nasm",
+            "title": "sum_and_product: compute sum and product of array",
+            "code": "; sum_and_product: compute sum and product of array\n; Inputs: rdi = pointer, rsi = length\n; Outputs: rax = sum, rdx = product\nsum_and_product:\n    push rbx              ; save callee-saved rbx (use for product)\n    xor eax, eax          ; sum\n    mov ebx, 1            ; product\n    mov ecx, esi          ; counter\n.loop:\n    test ecx, ecx\n    jz .done\n    mov r8, [rdi]\n    add eax, r8d          ; sum\n    imul ebx, r8d         ; product\n    add rdi, 4\n    dec ecx\n    jmp .loop\n.done:\n    mov edx, ebx          ; product in edx\n    pop rbx               ; restore rbx\n    ret",
+            "explanation": "Here we used rbx for product (callee-saved, saved/restored), eax for sum, ecx for counter, rdi for pointer."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected qword sum and product",
+            "code": "sum_and_product:\n    xor eax, eax\n    mov edx, 1\n    test rsi, rsi\n    jz .done\n.loop:\n    mov rcx, [rdi]\n    add rax, rcx\n    imul rdx, rcx\n    add rdi, 8\n    dec rsi\n    jnz .loop\n.done:\n    ret",
+            "explanation": "Empty array returns sum 0 and product 1. No callee-saved registers are modified. Overflow wraps modulo 2^64."
+          }
+        ]
+      },
+      {
+        "id": "sec-19-5",
+        "title": "19.5 Compiler Register Allocation",
+        "content": "Compilers like GCC and LLVM perform sophisticated register allocation using algorithms like graph coloring or linear scan. Understanding their choices helps in reading compiler-generated assembly."
+      },
+      {
+        "id": "sec-19-5-1",
+        "title": "19.5.1 How Compilers Allocate Registers",
+        "content": "- The compiler builds a control flow graph and computes live ranges.\n- It constructs an interference graph.\n- It colors the graph with available registers, possibly spilling some variables.\n- It inserts spill code (stores/loads) as needed."
+      },
+      {
+        "id": "sec-19-5-2",
+        "title": "19.5.2 Observing Compiler Register Allocation",
+        "content": "Compile a simple C function with -S -fverbose-asm to see the assembly with comments indicating variable names and register choices.\n\nExample:\n\nClarification: Generated assembly varies by compiler, version, flags and surrounding code. Do not infer a stable register assignment from C variable names. Use the emitted instructions as evidence.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "19.5.2 Observing Compiler Register Allocation — listing 1",
+            "code": "int add(int a, int b) {\n    int sum = a + b;\n    return sum;\n}",
+            "explanation": "Compile with:"
+          },
+          {
+            "language": "bash",
+            "title": "19.5.2 Observing Compiler Register Allocation — listing 2",
+            "code": "gcc -S -O2 -fverbose-asm add.c",
+            "explanation": "The generated add.s might look like:"
+          },
+          {
+            "language": "text",
+            "title": "19.5.2 Observing Compiler Register Allocation — listing 3",
+            "code": "add:\n    leal    (%rdi,%rsi), %eax\n    ret",
+            "explanation": "Here, a is in edi, b in esi, and sum in eax (return register).\n\nFor a more complex function, you might see spills to the stack and moves to/from callee-saved registers."
+          }
+        ]
+      },
+      {
+        "id": "sec-19-5-3",
+        "title": "19.5.3 Impact on Hand-Written Assembly",
+        "content": "By studying compiler output, you can learn effective register allocation strategies and apply them in your own code. However, hand-optimized assembly can sometimes beat the compiler by exploiting domain-specific knowledge."
+      },
+      {
+        "id": "sec-19-6",
+        "title": "19.6 Practical Examples",
+        "content": ""
+      },
+      {
+        "id": "sec-19-6-1",
+        "title": "19.6.1 Interfacing with C: Writing an Assembly Function",
+        "content": "Let's write an assembly function array_sum that sums an array of int and is called from C. We must follow the ABI.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "array_sum.asm",
+            "code": "; array_sum.asm\nglobal array_sum\n\n; int array_sum(int *arr, int len);\narray_sum:\n    xor eax, eax          ; sum = 0\n    test esi, esi         ; check if len <= 0\n    jle .done\n.loop:\n    add eax, [rdi]        ; sum += *arr\n    add rdi, 4            ; arr++\n    dec esi\n    jnz .loop\n.done:\n    ret",
+            "explanation": "In C:"
+          },
+          {
+            "language": "c",
+            "title": "19.6.1 Interfacing with C: Writing an Assembly Function — listing 2",
+            "code": "#include <stdio.h>\nextern int array_sum(int *arr, int len);\nint main() {\n    int arr[] = {1,2,3,4,5};\n    int sum = array_sum(arr, 5);\n    printf(\"Sum: %d\\n\", sum);\n    return 0;\n}",
+            "explanation": "Compile:"
+          },
+          {
+            "language": "bash",
+            "title": "19.6.1 Interfacing with C: Writing an Assembly Function — listing 3",
+            "code": "nasm -f elf64 array_sum.asm -o array_sum.o\ngcc -c main.c -o main.o\ngcc main.o array_sum.o -o program\n./program"
+          }
+        ]
+      },
+      {
+        "id": "sec-19-6-2",
+        "title": "19.6.2 Optimizing a Computational Kernel",
+        "content": "Consider a kernel that computes the dot product of two float arrays. We want to use SIMD and minimize register spilling. We'll allocate registers carefully.\n\nClarification: The unrolled source processes four values whenever index < length, even when fewer than four remain. It can overread and its remainder block is missing. The corrected routine below uses a full-vector count and scalar tail. Reassociation changes floating-point rounding; compare within the intended numerical tolerance.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "dot_product: dot product of two float arrays",
+            "code": "; dot_product: dot product of two float arrays\n; Inputs: rdi = a, rsi = b, rdx = length\n; Returns: xmm0 = dot product\ndot_product:\n    xorps xmm0, xmm0      ; accumulator\n    xor eax, eax          ; index\n.loop:\n    cmp eax, edx\n    je .done\n    movss xmm1, [rdi + rax*4]\n    mulss xmm1, [rsi + rax*4]\n    addss xmm0, xmm1\n    inc rax\n    jmp .loop\n.done:\n    ret",
+            "explanation": "But we can unroll and use multiple accumulators to improve ILP and reduce loop overhead. We'll also keep values in XMM registers (callee-saved if needed? XMM0-7 are caller-saved, so we don't need to preserve them if we use them as temporary inside the function; but we must not assume they survive a call to another function). Since this function doesn't call others, we can use all XMM registers freely.\n\nUnrolled version with 4 accumulators:"
+          },
+          {
+            "language": "nasm",
+            "title": "19.6.2 Optimizing a Computational Kernel — listing 2",
+            "code": "dot_product:\n    xorps xmm0, xmm0\n    xorps xmm1, xmm1\n    xorps xmm2, xmm2\n    xorps xmm3, xmm3\n    xor eax, eax\n    ; main loop, unroll 4\n.loop:\n    cmp eax, edx\n    jge .remainder\n    movss xmm4, [rdi + rax*4]\n    mulss xmm4, [rsi + rax*4]\n    addss xmm0, xmm4\n    movss xmm5, [rdi + rax*4 + 4]\n    mulss xmm5, [rsi + rax*4 + 4]\n    addss xmm1, xmm5\n    movss xmm6, [rdi + rax*4 + 8]\n    mulss xmm6, [rsi + rax*4 + 8]\n    addss xmm2, xmm6\n    movss xmm7, [rdi + rax*4 + 12]\n    mulss xmm7, [rsi + rax*4 + 12]\n    addss xmm3, xmm7\n    add eax, 4\n    jmp .loop\n.remainder:\n    ; handle remaining elements\n    ; ...\n    ; combine accumulators\n    addss xmm0, xmm1\n    addss xmm2, xmm3\n    addss xmm0, xmm2\n    ret",
+            "explanation": "This uses many XMM registers, reducing dependency chains and increasing parallelism."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected dot product with full-vector and scalar tail",
+            "code": "dot_product:\n    xorps xmm0, xmm0\n    mov rcx, rdx\n    shr rcx, 2\n    jz .reduce\n.loop:\n    movups xmm1, [rdi]\n    movups xmm2, [rsi]\n    mulps xmm1, xmm2\n    addps xmm0, xmm1\n    add rdi, 16\n    add rsi, 16\n    dec rcx\n    jnz .loop\n.reduce:\n    movaps xmm1, xmm0\n    shufps xmm1, xmm1, 0x4e\n    addps xmm0, xmm1\n    movaps xmm1, xmm0\n    shufps xmm1, xmm1, 0xb1\n    addss xmm0, xmm1\n    and edx, 3\n    jz .done\n.tail:\n    movss xmm1, [rdi]\n    mulss xmm1, [rsi]\n    addss xmm0, xmm1\n    add rdi, 4\n    add rsi, 4\n    dec edx\n    jnz .tail\n.done:\n    ret",
+            "explanation": "RDI and RSI point to count floats, RDX is the count; XMM0.low returns the sum. Zero count reads no memory, unaligned arrays are supported, and no callee-saved registers are touched."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-19-1',
-        title: 'Exercise 19.1: Preserve Callee-Saved Registers',
-        description: 'Write a prologue and epilogue that safely preserves rbx, r12, and r13.',
-        solution: `my_func:\n    push rbx\n    push r12\n    push r13\n    ; ... body ...\n    pop r13\n    pop r12\n    pop rbx\n    ret`,
-        solutionLanguage: 'nasm'
+        "id": "ex-19-1",
+        "title": "Exercise 19.1: Callee-Saved Registers",
+        "description": "Write a function that uses rbx, r12, and r13 as temporary variables. Show the necessary prologue and epilogue to preserve these registers.",
+        "solution": "section .text\nglobal _start\nmy_func:\n    push rbx\n    push r12\n    push r13\n    mov rbx, 10\n    mov r12, 20\n    mov r13, 30\n    lea rax, [rbx+r12]\n    add rax, r13\n    pop r13\n    pop r12\n    pop rbx\n    ret\n_start:\n    mov rbx, 111\n    mov r12, 222\n    mov r13, 333\n    call my_func\n    cmp rbx, 111\n    jne failure\n    cmp r12, 222\n    jne failure\n    cmp r13, 333\n    jne failure\n    mov rdi, rax\n    mov eax, 60\n    syscall\nfailure:\n    mov edi, 1\n    mov eax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Make sure to restore in reverse order.\n\nChecks all three saved-register values and exits 60."
+      },
+      {
+        "id": "ex-19-2",
+        "title": "Exercise 19.2: Red Zone",
+        "description": "Write a leaf function that stores three local variables in the red zone (at [rsp-8], [rsp-16], [rsp-24]) without adjusting rsp. Demonstrate that it works.",
+        "solution": "section .text\nglobal _start\nleaf_func:\n    mov [rsp-8], rdi\n    mov [rsp-16], rsi\n    mov [rsp-24], rdx\n    mov rax, [rsp-8]\n    add rax, [rsp-16]\n    add rax, [rsp-24]\n    ret\n_start:\n    mov edi, 10\n    mov esi, 20\n    mov edx, 30\n    mov r12, rsp\n    call leaf_func\n    cmp rsp, r12\n    jne failure\n    mov rdi, rax\n    mov eax, 60\n    syscall\nfailure:\n    mov edi, 1\n    mov eax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "No sub rsp; uses red zone.\n\nReads three independent red-zone locals, checks RSP restoration, exits 60. Do not add a nested call while those locals are live."
+      },
+      {
+        "id": "ex-19-3",
+        "title": "Exercise 19.3: Register Pressure",
+        "description": "Create a function that needs to keep 8 integer variables live simultaneously. Show how you would allocate registers, and where you would need to spill to the stack. Write the assembly code.",
+        "solution": "section .text\nglobal _start\nmy_func:\n    push rbx\n    push rbp\n    push r12\n    push r13\n    push r14\n    push r15\n    sub rsp, 24          ; 16 bytes spills plus 8 alignment padding\n    mov ebx, 1\n    mov ebp, 2\n    mov r12d, 3\n    mov r13d, 4\n    mov r14d, 5\n    mov r15d, 6\n    mov qword [rsp], 7\n    mov qword [rsp+8], 8\n    call scratch\n    lea rax, [rbx+rbp]\n    add rax, r12\n    add rax, r13\n    add rax, r14\n    add rax, r15\n    add rax, [rsp]\n    add rax, [rsp+8]\n    add rsp, 24\n    pop r15\n    pop r14\n    pop r13\n    pop r12\n    pop rbp\n    pop rbx\n    ret\nscratch:\n    xor eax, eax\n    xor ecx, ecx\n    xor edx, edx\n    xor esi, esi\n    xor edi, edi\n    xor r8d, r8d\n    xor r9d, r9d\n    xor r10d, r10d\n    xor r11d, r11d\n    ret\n_start:\n    call my_func\n    mov rdi, rax\n    mov eax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "We need 8 variables. Available callee-saved: rbx, r12-r15 (6), plus rax, rcx, rdx, rsi, rdi, r8-r11 are caller-saved but can be used if not needed across calls. Assume we need to preserve them across a call, so we cannot use caller-saved. Thus we use rbx, r12, r13, r14, r15 (5), plus two spills to stack. Or use rbp as general if no frame pointer: rbx, r12, r13, r14, r15, rbp (6), still need 2 spills. We'll save callee-saved on stack and use all 6, and spill 2 variables to local stack slots.\n\nSix callee-saved registers, including RBP without a frame pointer, hold values 1–6; two allocated slots hold 7–8. An aligned call clobbers all scratch registers, then the result is 36."
+      },
+      {
+        "id": "ex-19-4",
+        "title": "Exercise 19.4: Interfacing with C",
+        "description": "Write an assembly function max_of_three that takes three int arguments and returns the maximum. Call it from a C program and print the result.",
+        "solution": "; File: max.asm\nsection .text\nglobal max_of_three\n\n; int max_of_three(int a, int b, int c);\nmax_of_three:\n    mov eax, edi\n    cmp esi, eax\n    cmovg eax, esi\n    cmp edx, eax\n    cmovg eax, edx\n    ret\n\n; File: main.c\n#include <stdio.h>\nextern int max_of_three(int a, int b, int c);\nint main() {\n    int m = max_of_three(10, 25, 15);\n    printf(\"Max: %d\\n\", m);\n    return 0;\n}",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "C program:\nSave the two File blocks separately. nasm -f elf64 max.asm -o max.o; gcc main.c max.o -o max_demo; ./max_demo. Expected output: Max: 25. Add a .note.GNU-stack section to max.asm to mark a non-executable stack.\n\nThe function compares signed 32-bit arguments; test negative inputs and ties too."
+      },
+      {
+        "id": "ex-19-5",
+        "title": "Exercise 19.5: Compiler Output",
+        "description": "Write a small C function with several local variables and loops. Compile with gcc -S -O2 -fverbose-asm and analyze the register allocation. Identify which variables are kept in registers and which are spilled.",
+        "solution": "int compute(int a, int b) {\n    int x = a + b;\n    int y = a * b;\n    int z = x + y;\n    for (int i = 0; i < 10; i++) {\n        z += i;\n    }\n    return z;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Example C:\n\nCompile and observe. Likely a in edi, b in esi, x in eax (but reused), y in edx, z in eax, i in ecx. No spills needed. If more variables, some may go to stack.\n\nAt -O2 the fixed loop can be folded to addition of 45, leaving no loop counter at all. Compile and inspect actual output rather than expecting the speculative assignments in the source. Use small inputs to avoid signed C overflow."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'What is the red zone in x86-64 Linux?',
-        answer: 'The red zone is a 128-byte memory space directly below the current stack pointer (rsp) that cannot be clobbered by signals or interrupt handlers, usable by leaf functions without allocating stack space.'
+        "question": "What is the difference between an API and an ABI? Why does the ABI matter for assembly?",
+        "answer": "An API describes source-level operations and types; an ABI defines binary representations and calling rules. Assembly must honor the ABI so independently compiled code agrees on arguments, returns and preservation."
+      },
+      {
+        "question": "List the caller-saved and callee-saved registers in the System V AMD64 ABI.",
+        "answer": "Caller-saved GPRs: RAX,RCX,RDX,RSI,RDI,R8–R11. Callee-saved: RBX,RBP,R12–R15; restore RSP. All XMM0–XMM15 are caller-saved in System V AMD64."
+      },
+      {
+        "question": "What is the red zone? How can it be used? Are there restrictions?",
+        "answer": "The 128 bytes below entry/current RSP are protected from user-space signal-handler use under this ABI. Leaf temporaries can live there without moving RSP; do not keep them across calls or assume the guarantee in kernel or Windows code."
+      },
+      {
+        "question": "Explain the stack alignment requirement before a call. How does a function prologue ensure it?",
+        "answer": "For scalar calls RSP modulo 16 must be zero before CALL, then is eight at callee entry. PUSH RBP aligns it; allocating a multiple of 16 maintains it. Count all saves and spills before further calls."
+      },
+      {
+        "question": "What is register pressure? What happens when it is high?",
+        "answer": "Register pressure is simultaneous demand for registers of usable classes. High pressure can require spills, reloads or recomputation; constraints and live ranges matter more than the number of source variable names."
+      },
+      {
+        "question": "Describe the concept of a live range and how it affects register allocation.",
+        "answer": "A value is live while a later computation needs it. Interfering live values cannot occupy the same register simultaneously. Ending or splitting live ranges can reduce allocation pressure."
+      },
+      {
+        "question": "What is spilling? How does it impact performance?",
+        "answer": "Spilling stores a live value to memory, with later loads or memory-operand uses. It adds instructions and traffic, but cost depends on placement, cache behavior and available parallelism."
+      },
+      {
+        "question": "How can you reduce the number of registers needed in a function? Provide an example.",
+        "answer": "Consume values earlier and reuse dead registers, keep constants as immediates, or recompute cheap expressions. For example, accumulate A and B before loading C into A’s former register."
+      },
+      {
+        "question": "When would you choose to use callee-saved registers instead of caller-saved registers for a variable?",
+        "answer": "Use a callee-saved register for a hot value that must survive calls, paying save/restore once in your function. Caller-saved registers suit short-lived temporaries; spills around calls can also be appropriate."
+      },
+      {
+        "question": "How does a compiler typically perform register allocation? What algorithms are used?",
+        "answer": "Compilers compute liveness and interference, then allocate registers using target constraints and cost heuristics. Graph-coloring, linear-scan and region-based methods are common, with spill placement, coalescing and rematerialization."
       }
     ],
-    summary: ['System V ABI governs register usage.', 'Red zone accelerates leaf function execution.']
+    "summary": [
+      "The System V AMD64 ABI defines register usage, calling conventions, stack layout, and data types.",
+      "Caller-saved registers can be freely modified; callee-saved must be preserved.",
+      "The red zone allows leaf functions to use up to 128 bytes below rsp without adjusting the stack.",
+      "Register allocation is the process of assigning variables to registers, aiming to minimize expensive memory spills.",
+      "Manual register allocation involves choosing registers based on usage frequency, reordering code to reduce live variables, and using the red zone or frame pointer omission.",
+      "Compilers use sophisticated algorithms (graph coloring, linear scan) to allocate registers.",
+      "Understanding the ABI and register allocation is essential for writing efficient assembly and interfacing with high-level languages.",
+      "In the next chapter, we'll explore inline assembly and integration with C/C++, allowing you to embed assembly within high-level code."
+    ]
   },
   {
     id: 20,
