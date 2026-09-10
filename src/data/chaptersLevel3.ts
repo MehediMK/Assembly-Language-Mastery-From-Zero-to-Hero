@@ -1928,98 +1928,497 @@ export const CHAPTERS_LEVEL_3: Chapter[] = [
     ]
   },
   {
-    id: 16,
-    slug: 'chapter-16-system-calls-os-interaction',
-    level: 3,
-    levelTitle: 'Intermediate Assembly',
-    title: 'Chapter 16: System Calls and Interaction with the OS',
-    subtitle: 'File I/O, Heap Management (brk, mmap), and Error Codes (errno)',
-    learningObjectives: [
-      'Understand the Linux x86-64 syscall convention: rax, rdi, rsi, rdx, r10, r8, r9.',
-      'Perform file I/O: open, read, write, close, lseek.',
-      'Inspect error returns (negative rax represents -errno).',
-      'Allocate memory with brk and anonymous mmap.'
+    "id": 16,
+    "slug": "chapter-16-system-calls-os-interaction",
+    "level": 3,
+    "levelTitle": "Intermediate Assembly",
+    "title": "Chapter 16: System Calls and Interaction with the OS",
+    "subtitle": "File I/O, Heap Management (brk, mmap), and Error Codes (errno)",
+    "learningObjectives": [
+      "Understand what system calls are and why they are essential for user programs.",
+      "Learn the Linux x86-64 system call convention: how to pass arguments and invoke the kernel.",
+      "Use common system calls for I/O, file operations, process control, and memory management.",
+      "Differentiate between direct system calls and C library wrappers.",
+      "Handle errors from system calls and understand the role of errno.",
+      "Write assembly programs that read input, write output, open and manipulate files, and interact with the operating system.",
+      "Explore advanced system calls such as mmap, brk, and getpid."
     ],
-    prerequisites: ['Chapters 1–15'],
-    keyConcepts: [
-      'syscall switches the CPU to Ring 0 kernel mode and clobbers rcx and r11.',
-      'The 4th argument uses r10 instead of rcx.',
-      'Return values in range [-4095, -1] indicate negative errno.'
+    "prerequisites": [
+      "Solid understanding of assembly instructions, registers, and calling conventions (Chapters 3, 10).",
+      "Familiarity with procedures and modular programming (Chapters 10, 15).",
+      "Basic knowledge of the Linux command line and file system.",
+      "Ability to assemble and link programs (Chapter 4)."
     ],
-    diagramType: 'syscalls_os',
-    sections: [
+    "keyConcepts": [
+      "System call: A controlled entry point from user space into the kernel to request a service.",
+      "On x86-64 Linux, system calls are invoked with the syscall instruction.",
+      "The system call number is placed in rax; arguments go in rdi, rsi, rdx, r10, r8, r9.",
+      "Return value is in rax; on error, rax contains a negative error code (or -errno).",
+      "The kernel preserves all registers except rax, rcx, and r11.",
+      "Common system calls: read, write, open, close, exit, brk, mmap, lseek, getpid.",
+      "Direct system calls bypass the C library, giving full control but requiring manual error handling.",
+      "System calls are slow; minimize their use for performance-critical code."
+    ],
+    "diagramType": "syscalls_os",
+    "sections": [
       {
-        id: 'sec-16-1',
-        title: '16.1 Complete File Copy with Direct Syscalls',
-        content: `Copying input.txt to output.txt using raw Linux system calls:`,
-        codeSnippets: [
+        "id": "sec-16-1",
+        "title": "16.1 Introduction to System Calls",
+        "content": "A system call is a mechanism that allows a user-space program to request services from the operating system kernel—such as reading from a file, writing to the console, allocating memory, or creating a process. Because user programs run in a restricted mode (ring 3 on x86), they cannot directly access hardware or kernel data structures. System calls provide a controlled interface."
+      },
+      {
+        "id": "sec-16-1-1",
+        "title": "16.1.1 How a System Call Works",
+        "content": "1. The program places the system call number in rax and arguments in specific registers.\n2. The program executes the syscall instruction.\n3. The CPU switches to kernel mode and jumps to the kernel's system call handler.\n4. The kernel performs the requested operation, then returns to user mode.\n5. The result is placed in rax (or an error indicator).\n\nThe syscall instruction is the modern (64-bit) way to enter the kernel. It saves the return address in rcx and the flags in r11, then jumps to the kernel entry point. The kernel restores those when returning via sysret."
+      },
+      {
+        "id": "sec-16-1-2",
+        "title": "16.1.2 System Call vs C Library Function",
+        "content": "In C, functions like printf, fopen, read are library wrappers around system calls. They often add buffering, formatting, and error handling. In assembly, we can call the system calls directly using the syscall instruction, bypassing the C library. This gives complete control and reduces overhead but requires us to handle errors manually.\n\nExample: write system call directly:\n\nClarification: printf is a libc formatting function, not a one-to-one syscall wrapper. It may buffer output and issue writes later. Raw syscalls do not set libc errno.",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'file_copy.asm',
-            code: `section .data
-    in_file  db 'input.txt', 0
-    out_file db 'output.txt', 0
-    buf times 4096 db 0
-
-section .text
-    global _start
-_start:
-    ; open input (O_RDONLY = 0)
-    mov rax, 2
-    lea rdi, [in_file]
-    xor rsi, rsi
-    syscall
-    mov r12, rax          ; in_fd
-
-    ; open output (O_WRONLY|O_CREAT|O_TRUNC = 0x241, mode = 0644o)
-    mov rax, 2
-    lea rdi, [out_file]
-    mov rsi, 577
-    mov rdx, 0644o
-    syscall
-    mov r13, rax          ; out_fd
-
-.copy_loop:
-    mov rax, 0            ; sys_read
-    mov rdi, r12
-    lea rsi, [buf]
-    mov rdx, 4096
-    syscall
-    test rax, rax
-    jle .done
-
-    mov rdx, rax          ; byte count
-    mov rax, 1            ; sys_write
-    mov rdi, r13
-    lea rsi, [buf]
-    syscall
-    jmp .copy_loop
-
-.done:
-    ; close fds
-    mov rax, 3; mov rdi, r12; syscall
-    mov rax, 3; mov rdi, r13; syscall
-    mov rax, 60; xor rdi, rdi; syscall`
+            "language": "nasm",
+            "title": "16.1.2 System Call vs C Library Function — listing 1",
+            "code": "mov rax, 1          ; syscall number for write\nmov rdi, 1          ; file descriptor (stdout)\nmov rsi, msg        ; pointer to data\nmov rdx, len        ; length\nsyscall",
+            "explanation": "Equivalent C: write(1, msg, len);"
+          }
+        ]
+      },
+      {
+        "id": "sec-16-2",
+        "title": "16.2 Linux x86-64 System Call Convention",
+        "content": "The System V AMD64 ABI defines how system calls are made on Linux:\n\n- System call number: rax\n- Arguments: rdi, rsi, rdx, r10, r8, r9 (for up to 6 arguments). The 4th argument uses r10 instead of rcx because syscall clobbers rcx.\n- Return value: rax (negative value indicates error, with absolute value being errno).\n- Clobbered registers: rcx and r11 are destroyed; all other registers are preserved by the kernel.\n\nThis is slightly different from the function calling convention, where the 4th argument is rcx. Pay close attention when writing system call code.\n\nClarification: These are Linux x86-64 syscall rules, distinct from the System V function ABI. SYSCALL overwrites RCX and R11; RAX holds the result. Preserve live values elsewhere. Raw error returns normally occupy -4095 through -1; brk is an important exception."
+      },
+      {
+        "id": "sec-16-2-1",
+        "title": "16.2.1 Table of Common System Call Numbers",
+        "content": "A full list is in /usr/include/asm/unistd_64.h. Here are some common ones:",
+        "tableData": {
+          "headers": [
+            "System Call",
+            "Number (rax)",
+            "Arguments"
+          ],
+          "rows": [
+            [
+              "read",
+              "0",
+              "rdi=fd, rsi=buf, rdx=count"
+            ],
+            [
+              "write",
+              "1",
+              "rdi=fd, rsi=buf, rdx=count"
+            ],
+            [
+              "open",
+              "2",
+              "rdi=path, rsi=flags, rdx=mode"
+            ],
+            [
+              "close",
+              "3",
+              "rdi=fd"
+            ],
+            [
+              "lseek",
+              "8",
+              "rdi=fd, rsi=offset, rdx=whence"
+            ],
+            [
+              "mmap",
+              "9",
+              "rdi=addr, rsi=length, rdx=prot, r10=flags, r8=fd, r9=offset"
+            ],
+            [
+              "brk",
+              "12",
+              "rdi=addr"
+            ],
+            [
+              "exit",
+              "60",
+              "rdi=status"
+            ],
+            [
+              "getpid",
+              "39",
+              "none"
+            ],
+            [
+              "socket",
+              "41",
+              "rdi=domain, rsi=type, rdx=protocol"
+            ],
+            [
+              "connect",
+              "42",
+              "rdi=fd, rsi=addr, rdx=addrlen"
+            ],
+            [
+              "accept",
+              "43",
+              "rdi=fd, rsi=addr, rdx=addrlen"
+            ],
+            [
+              "sendto",
+              "44",
+              "rdi=fd, rsi=buf, rdx=len, r10=flags, r8=dest_addr, r9=addrlen"
+            ],
+            [
+              "recvfrom",
+              "45",
+              "rdi=fd, rsi=buf, rdx=len, r10=flags, r8=src_addr, r9=addrlen"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-16-2-2",
+        "title": "16.2.2 Error Handling",
+        "content": "If a system call fails, rax contains a negative value, the negation of the errno value (e.g., -2 for ENOENT). Success returns a non-negative value (often 0 or a positive result). We can check for errors by testing the sign of rax or comparing to -4095 (since error codes are in range -1 to -4095).\n\nExample: check for error after open:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.2.2 Error Handling — listing 1",
+            "code": "    mov rax, 2          ; sys_open\n    lea rdi, [filename]\n    xor rsi, rsi        ; O_RDONLY = 0\n    syscall\n    test rax, rax\n    js  .error          ; if negative, error\n    ; success, rax = fd\n.error:\n    ; handle error"
+          }
+        ]
+      },
+      {
+        "id": "sec-16-3",
+        "title": "16.3 File I/O Using System Calls",
+        "content": "We'll now explore common file operations: opening, reading, writing, and closing files."
+      },
+      {
+        "id": "sec-16-3-1",
+        "title": "16.3.1 Opening a File: open",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.3.1 Opening a File: open — listing 1",
+            "code": "mov rax, 2              ; sys_open\nlea rdi, [filename]     ; path\nmov rsi, flags          ; access mode and flags (O_RDONLY=0, O_WRONLY=1, O_RDWR=2, etc.)\nmov rdx, mode           ; permissions (used when creating a file)\nsyscall",
+            "explanation": "On success, rax = file descriptor (non-negative integer). On error, negative.\n\nFlags are defined in <fcntl.h>. Common flags:\n- O_RDONLY (0), O_WRONLY (1), O_RDWR (2)\n- O_CREAT (64), O_TRUNC (512), O_APPEND (1024)\n\nExample: open a file for reading"
+          },
+          {
+            "language": "nasm",
+            "title": "16.3.1 Opening a File: open — listing 2",
+            "code": "section .data\n    filename db 'input.txt', 0\nsection .text\nglobal _start\n_start:\n    mov rax, 2          ; open\n    lea rdi, [filename]\n    xor rsi, rsi        ; O_RDONLY\n    syscall\n    test rax, rax\n    js  error\n    mov rdi, rax        ; fd\n    ; now read or process"
+          }
+        ]
+      },
+      {
+        "id": "sec-16-3-2",
+        "title": "16.3.2 Reading from a File: read",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.3.2 Reading from a File: read — listing 1",
+            "code": "mov rax, 0              ; sys_read\nmov rdi, fd             ; file descriptor\nmov rsi, buffer         ; buffer\nmov rdx, count          ; max bytes to read\nsyscall",
+            "explanation": "Returns number of bytes read in rax (0 indicates EOF). On error, negative."
+          }
+        ]
+      },
+      {
+        "id": "sec-16-3-3",
+        "title": "16.3.3 Writing to a File: write",
+        "content": "\n\nClarification: A successful write can be short. Advance the pointer and retry the remaining bytes; handle EINTR before retrying. A zero-byte write with bytes remaining must not cause an endless loop.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.3.3 Writing to a File: write — listing 1",
+            "code": "mov rax, 1              ; sys_write\nmov rdi, fd\nmov rsi, buffer\nmov rdx, count\nsyscall",
+            "explanation": "Returns number of bytes written."
+          },
+          {
+            "language": "nasm",
+            "title": "Write all bytes with short-write and EINTR handling",
+            "code": "; RDI=fd, RSI=buffer, RDX=count; RAX=0 success or negative error.\nwrite_all:\n    test rdx, rdx\n    jz .done\n.retry:\n    mov eax, 1\n    syscall\n    cmp rax, -4\n    je .retry\n    test rax, rax\n    js .return\n    jz .stalled\n    add rsi, rax\n    sub rdx, rax\n    jnz .retry\n.done:\n    xor eax, eax\n.return:\n    ret\n.stalled:\n    mov rax, -5\n    ret",
+            "explanation": "This blocking-descriptor helper advances the buffer after each successful partial write. Other errors are returned to the caller; nonblocking descriptors require a readiness strategy."
+          }
+        ]
+      },
+      {
+        "id": "sec-16-3-4",
+        "title": "16.3.4 Closing a File: close",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.3.4 Closing a File: close — listing 1",
+            "code": "mov rax, 3              ; sys_close\nmov rdi, fd\nsyscall",
+            "explanation": "Returns 0 on success."
+          }
+        ]
+      },
+      {
+        "id": "sec-16-3-5",
+        "title": "16.3.5 Complete File Copy Example",
+        "content": "Copy a file named input.txt to output.txt.\n\nClarification: The original copy assumes every write completes the entire chunk and ignores close errors. The corrected exercise uses a write-all loop and checks close results. Input and output must refer to different files: opening an alias of the input with O_TRUNC would destroy its contents.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.3.5 Complete File Copy Example — listing 1",
+            "code": "section .data\n    in_filename db 'input.txt', 0\n    out_filename db 'output.txt', 0\n    buf times 4096 db 0\n    o_rdonly equ 0\n    o_wronly equ 1\n    o_creat equ 64\n    o_trunc equ 512\n\nsection .bss\n    fd_in resq 1\n    fd_out resq 1\n\nsection .text\nglobal _start\n\n_start:\n    ; open input file\n    mov rax, 2\n    lea rdi, [in_filename]\n    mov rsi, o_rdonly\n    syscall\n    test rax, rax\n    js  .error\n    mov [fd_in], rax\n\n    ; open output file (create/truncate)\n    mov rax, 2\n    lea rdi, [out_filename]\n    mov rsi, o_wronly | o_creat | o_trunc\n    mov rdx, 0644o      ; permissions (octal)\n    syscall\n    test rax, rax\n    js  .error\n    mov [fd_out], rax\n\n.copy_loop:\n    ; read chunk\n    mov rax, 0          ; read\n    mov rdi, [fd_in]\n    lea rsi, [buf]\n    mov rdx, 4096\n    syscall\n    test rax, rax\n    js  .error\n    jz  .copy_done      ; EOF\n\n    ; write chunk\n    mov rdx, rax        ; number of bytes read\n    mov rax, 1          ; write\n    mov rdi, [fd_out]\n    lea rsi, [buf]\n    syscall\n    test rax, rax\n    js  .error\n    jmp .copy_loop\n\n.copy_done:\n    ; close files\n    mov rax, 3\n    mov rdi, [fd_in]\n    syscall\n    mov rax, 3\n    mov rdi, [fd_out]\n    syscall\n    ; exit success\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\n.error:\n    ; exit with error code 1\n    mov rax, 60\n    mov rdi, 1\n    syscall",
+            "explanation": "Note: This example assumes files exist and permissions are correct; error handling is minimal."
+          }
+        ]
+      },
+      {
+        "id": "sec-16-4",
+        "title": "16.4 Process and Memory System Calls",
+        "content": ""
+      },
+      {
+        "id": "sec-16-4-1",
+        "title": "16.4.1 exit",
+        "content": "Terminates the process with a status code.\n\nClarification: Raw syscall 60 exits the calling thread. For whole-process termination in a multithreaded program, Linux exit_group is syscall 231. These examples are single-threaded. The shell observes only the low eight bits of the status.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.4.1 exit — listing 1",
+            "code": "mov rax, 60     ; sys_exit\nmov rdi, status ; exit code (0-255)\nsyscall",
+            "explanation": "No return."
+          }
+        ]
+      },
+      {
+        "id": "sec-16-4-2",
+        "title": "16.4.2 getpid",
+        "content": "Returns the process ID.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.4.2 getpid — listing 1",
+            "code": "mov rax, 39     ; sys_getpid\nsyscall\n; rax = pid"
+          }
+        ]
+      },
+      {
+        "id": "sec-16-4-3",
+        "title": "16.4.3 brk – Allocate Memory",
+        "content": "brk sets the end of the data segment (heap). The argument is the new program break address; returns the new break on success, or the current break if rdi=0.\n\nClarification: Raw brk returns the current break on failure; compare its return with the requested address before writing. Check addition overflow. Do not mix direct break manipulation with libc allocators managing the same heap.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Get current break",
+            "code": "; Get current break\nmov rax, 12\nxor rdi, rdi\nsyscall\n; rax = current break\n\n; Allocate 4096 bytes by incrementing break\nmov rdi, rax\nadd rdi, 4096\nmov rax, 12\nsyscall\n; rax = new break (or old break on failure)"
+          }
+        ]
+      },
+      {
+        "id": "sec-16-4-4",
+        "title": "16.4.4 mmap – Memory Mapping",
+        "content": "mmap maps files or devices into memory, or allocates anonymous memory. It's more flexible than brk.\n\nArguments:\n- rdi = address hint (0 for any)\n- rsi = length\n- rdx = protection (PROT_READ=1, PROT_WRITE=2, PROT_EXEC=4)\n- r10 = flags (MAP_PRIVATE=2, MAP_ANONYMOUS=32, etc.)\n- r8 = file descriptor (-1 for anonymous)\n- r9 = offset\n\nExample: allocate 4096 bytes of anonymous memory:\n\nClarification: Check RAX with cmp rax,-4095 followed by jae error before dereferencing. Release successful mappings with munmap (11) when no longer needed. Flags and syscall numbers here are specific to Linux x86-64.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.4.4 mmap – Memory Mapping — listing 1",
+            "code": "mov rax, 9          ; mmap\nxor rdi, rdi        ; addr = NULL\nmov rsi, 4096       ; length\nmov rdx, 3          ; PROT_READ | PROT_WRITE\nmov r10, 0x22       ; MAP_PRIVATE | MAP_ANONYMOUS\nmov r8, -1          ; fd = -1\nxor r9, r9          ; offset = 0\nsyscall\n; rax = pointer to memory or -errno"
+          }
+        ]
+      },
+      {
+        "id": "sec-16-5",
+        "title": "16.5 Standard Input and Output",
+        "content": "We've been using write to stdout (fd 1) and read from stdin (fd 0). These are system calls too. Here's a program that reads a line from stdin and echoes it back.\n\nClarification: A read returns bytes, not necessarily a complete line, and does not append a null terminator. The original echoes only one chunk and does not check its write result.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.5 Standard Input and Output — listing 1",
+            "code": "section .bss\n    buffer resb 256\nsection .text\nglobal _start\n_start:\n    ; read from stdin\n    mov rax, 0          ; read\n    mov rdi, 0          ; stdin\n    lea rsi, [buffer]\n    mov rdx, 256\n    syscall\n    test rax, rax\n    js  error\n    mov rcx, rax        ; number of bytes read\n\n    ; write to stdout\n    mov rdx, rcx\n    mov rax, 1          ; write\n    mov rdi, 1          ; stdout\n    lea rsi, [buffer]\n    syscall\n\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall\nerror:\n    mov rax, 60\n    mov rdi, 1\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-16-6",
+        "title": "16.6 Advanced: Using stat, lseek, and dup",
+        "content": ""
+      },
+      {
+        "id": "sec-16-6-1",
+        "title": "16.6.1 lseek – Reposition File Offset",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.6.1 lseek – Reposition File Offset — listing 1",
+            "code": "mov rax, 8          ; lseek\nmov rdi, fd\nmov rsi, offset\nmov rdx, whence     ; SEEK_SET=0, SEEK_CUR=1, SEEK_END=2\nsyscall",
+            "explanation": "Returns new offset."
+          }
+        ]
+      },
+      {
+        "id": "sec-16-6-2",
+        "title": "16.6.2 dup / dup2 – Duplicate File Descriptor",
+        "content": "Useful for redirecting stdin/stdout.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "dup2(oldfd, newfd)",
+            "code": "; dup2(oldfd, newfd)\nmov rax, 33         ; dup2\nmov rdi, oldfd\nmov rsi, newfd\nsyscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-16-6-3",
+        "title": "16.6.3 stat – Get File Status",
+        "content": "stat fills a structure with file metadata (size, permissions, etc.). It requires a pointer to a stat structure.\n\nClarification: The simplified structure stops at st_size but is too small for a real stat syscall. Reserve the entire target kernel ABI structure (144 bytes for the conventional Linux x86-64 stat layout, st_size at offset 48), and verify layout against the target headers. Passing only the prefix lets the kernel overwrite following memory.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "sys_stat",
+            "code": "; sys_stat\nmov rax, 4          ; stat\nlea rdi, [filename]\nlea rsi, [statbuf]\nsyscall",
+            "explanation": "The stat structure layout is defined in <asm/stat.h>; we can define it manually or use struc.\n\nExample definition (simplified):"
+          },
+          {
+            "language": "nasm",
+            "title": "16.6.3 stat – Get File Status — listing 2",
+            "code": "struc stat\n    .st_dev: resq 1\n    .st_ino: resq 1\n    .st_nlink: resq 1\n    .st_mode: resd 1\n    .st_uid: resd 1\n    .st_gid: resd 1\n    .pad0: resd 1\n    .st_rdev: resq 1\n    .st_size: resq 1\n    ; ... many more fields, but for size we can stop here, though need full size.\nendstruc",
+            "explanation": "But the exact layout varies; it's better to use C's struct stat if interop is needed."
+          }
+        ]
+      },
+      {
+        "id": "sec-16-7",
+        "title": "16.7 Error Handling and errno",
+        "content": "In C, when a system call fails, the library sets errno to a positive error code and returns -1. In assembly, the kernel returns the negative error code directly. To handle errors, check if rax is in the range [-4095, -1]. If so, the absolute value is the errno equivalent.\n\nCommon error codes:\n- EACCES (13): Permission denied\n- ENOENT (2): No such file or directory\n- EBADF (9): Bad file descriptor\n- ENOMEM (12): Out of memory\n- EINVAL (22): Invalid argument\n\nExample: check for file open error and print an error message\n\nClarification: The source error-handling fragment falls through to open_error on success unless actual success code branches away. Use a distinct success path. A sign test works for open/read/write/lseek here, but the raw error-range test is more general; brk needs its own success check.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "16.7 Error Handling and errno — listing 1",
+            "code": "    mov rax, 2\n    lea rdi, [filename]\n    xor rsi, rsi\n    syscall\n    cmp rax, 0\n    jl  open_error\n    ; success\nopen_error:\n    neg rax          ; get positive errno\n    ; print error number (simplified)\n    ; ..."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 16.1",
+            "code": "section .bss\n    buffer resb 101       ; one extra for newline? Actually 100 bytes max.\nsection .data\n    prompt db 'You entered: '\n    prompt_len equ $ - prompt\nsection .text\nglobal _start\n_start:\n    ; read up to 100 bytes from stdin\n    mov rax, 0\n    mov rdi, 0\n    lea rsi, [buffer]\n    mov rdx, 100\n    syscall\n    test rax, rax\n    js  error\n    mov rcx, rax          ; bytes read\n\n    ; print prompt\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [prompt]\n    mov rdx, prompt_len\n    syscall\n\n    ; print input\n    mov rdx, rcx\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [buffer]\n    syscall\n\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall\nerror:\n    mov rax, 60\n    mov rdi, 1\n    syscall",
+            "explanation": "Original source retained for comparison; use the completed corrected exercise solution."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 16.2",
+            "code": "section .data\n    filename db 'input.txt', 0\nsection .text\nglobal _start\n_start:\n    ; open file read-only\n    mov rax, 2\n    lea rdi, [filename]\n    xor rsi, rsi\n    syscall\n    test rax, rax\n    js  error\n    mov rbx, rax          ; fd\n\n    ; lseek to end, offset 0, SEEK_END=2\n    mov rax, 8\n    mov rdi, rbx\n    xor rsi, rsi\n    mov rdx, 2            ; SEEK_END\n    syscall\n    test rax, rax\n    js  error\n    ; rax = size\n    mov rdi, rax\n    ; close file\n    mov rax, 3\n    mov rdi, rbx\n    syscall\n    ; exit with size\n    mov rax, 60\n    mov rdi, rdi\n    syscall\nerror:\n    mov rax, 60\n    mov rdi, 1\n    syscall",
+            "explanation": "Original source retained for comparison; use the completed corrected exercise solution."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 16.3",
+            "code": "; After first open:\n    test rax, rax\n    js  .open_input_error\n; After second open:\n    test rax, rax\n    js  .open_output_error\n...\n.open_input_error:\n    mov rdi, 2\n    jmp .exit\n.open_output_error:\n    mov rdi, 3\n    jmp .exit\n.exit:\n    mov rax, 60\n    syscall",
+            "explanation": "Original source retained for comparison; use the completed corrected exercise solution."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 16.4",
+            "code": "section .bss\n    pid_str resb 16\nsection .text\nglobal _start\n\n_start:\n    mov rax, 39         ; getpid\n    syscall\n    ; rax = pid\n    lea rdi, [pid_str]\n    call uint_to_str\n    ; write string\n    mov rdx, rax\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [pid_str]\n    syscall\n    ; newline\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, newline\n    mov rdx, 1\n    syscall\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\n; uint_to_str implementation (from Chapter 9)\n; ...",
+            "explanation": "Original source retained for comparison; use the completed corrected exercise solution."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 16.5",
+            "code": "section .text\nglobal _start\n_start:\n    ; Get current break\n    mov rax, 12\n    xor rdi, rdi\n    syscall\n    mov rbx, rax         ; save current break\n\n    ; Allocate 100 bytes\n    mov rdi, rax\n    add rdi, 100\n    mov rax, 12\n    syscall\n    ; rax = new break (should be rbx+100)\n\n    ; Fill 100 bytes with 0xAA starting at rbx\n    lea rdi, [rbx]\n    mov al, 0xAA\n    mov rcx, 100\n    cld\n    rep stosb\n\n    ; Sum the bytes\n    lea rsi, [rbx]\n    xor rbx, rbx          ; sum\n    mov rcx, 100\nsum_loop:\n    add bl, [rsi]         ; add byte (bl to avoid overflow, but sum=17000, need 16-bit)\n    inc rsi\n    dec rcx\n    jnz sum_loop\n    ; bl will overflow; use 16-bit accumulator\n    ; Let's do properly with 16-bit\n    xor rbx, rbx\n    lea rsi, [rbx]        ; rbx is zero, so rsi=0, not correct. Need to preserve pointer.\n    ; We'll use rsi = original pointer saved before.\n    ; For brevity, assume it works in 16-bit.\n    ; Exit with sum low byte (17000 mod 256 = 104)\n    mov rdi, rbx\n    mov rax, 60\n    syscall",
+            "explanation": "Original source retained for comparison; use the completed corrected exercise solution."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-16-1',
-        title: 'Exercise 16.1: Query Current Process ID',
-        description: 'Invoke getpid (syscall 39) and return PID as exit status.',
-        solution: `mov rax, 39\nsyscall\nmov rdi, rax\nmov rax, 60\nsyscall`,
-        solutionLanguage: 'nasm'
+        "id": "ex-16-1",
+        "title": "Exercise 16.1: Read and Write",
+        "description": "Write a program that reads up to 100 bytes from stdin and writes them to stdout, prefixed with \"You entered: \". Handle the case where input is longer than the buffer by reading in a loop (or just read once). Exit with 0.",
+        "solution": "section .bss\n    buffer resb 101       ; one extra for newline? Actually 100 bytes max.\nsection .data\n    prompt db 'You entered: '\n    prompt_len equ $ - prompt\nsection .text\nglobal _start\n_start:\n    ; read up to 100 bytes from stdin\n    mov rax, 0\n    mov rdi, 0\n    lea rsi, [buffer]\n    mov rdx, 100\n    syscall\n    test rax, rax\n    js  error\n    mov r12, rax          ; preserve across syscalls\n\n    ; print prompt\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [prompt]\n    mov rdx, prompt_len\n    call write_all\n    test rax, rax\n    js error\n\n    ; print input\n    mov rdx, r12\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [buffer]\n    call write_all\n    test rax, rax\n    js error\n\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall\nerror:\n    mov rax, 60\n    mov rdi, 1\n    syscall\n\n; RDI=fd, RSI=buffer, RDX=count; RAX=0 success or negative error.\nwrite_all:\n    test rdx, rdx\n    jz .done\n.retry:\n    mov eax, 1\n    syscall\n    cmp rax, -4\n    je .retry\n    test rax, rax\n    js .return\n    jz .stalled\n    add rsi, rax\n    sub rdx, rax\n    jnz .retry\n.done:\n    xor eax, eax\n.return:\n    ret\n.stalled:\n    mov rax, -5\n    ret",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nReads once, at most 100 bytes; R12 preserves the count across the prefix write. Writes exactly the bytes received, including embedded zero bytes. Expected prefix: You entered: ."
+      },
+      {
+        "id": "ex-16-2",
+        "title": "Exercise 16.2: File Size",
+        "description": "Open a file (e.g., input.txt), seek to the end using lseek, and get the file size (offset). Exit with the size as exit code (mod 256 if large).",
+        "solution": "section .data\n    filename db 'input.txt', 0\nsection .text\nglobal _start\n_start:\n    ; open file read-only\n    mov rax, 2\n    lea rdi, [filename]\n    xor rsi, rsi\n    syscall\n    test rax, rax\n    js  error\n    mov rbx, rax          ; fd\n\n    ; lseek to end, offset 0, SEEK_END=2\n    mov rax, 8\n    mov rdi, rbx\n    xor rsi, rsi\n    mov rdx, 2            ; SEEK_END\n    syscall\n    test rax, rax\n    js  error\n    ; rax = size\n    mov r12, rax\n    ; close file\n    mov rax, 3\n    mov rdi, rbx\n    syscall\n    ; exit with size\n    mov rax, 60\n    mov rdi, r12\n    syscall\nerror:\n    mov rax, 60\n    mov rdi, 1\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nPreserves the seek result in R12 across close; the exit code is file size modulo 256. Seeking is suitable for regular files, not pipes."
+      },
+      {
+        "id": "ex-16-3",
+        "title": "Exercise 16.3: Copy File with Error Handling",
+        "description": "Enhance the file copy example to handle errors gracefully: if the input file doesn't exist, exit with code 2; if output cannot be created, exit with code 3.",
+        "solution": "section .data\n    in_filename db 'input.txt', 0\n    out_filename db 'output.txt', 0\n    buf times 4096 db 0\n    o_rdonly equ 0\n    o_wronly equ 1\n    o_creat equ 64\n    o_trunc equ 512\n\nsection .bss\n    fd_in resq 1\n    fd_out resq 1\n\nsection .text\nglobal _start\n\n_start:\n    ; open input file\n    mov rax, 2\n    lea rdi, [in_filename]\n    mov rsi, o_rdonly\n    syscall\n    test rax, rax\n    js  .input_error\n    mov [fd_in], rax\n\n    ; open output file (create/truncate)\n    mov rax, 2\n    lea rdi, [out_filename]\n    mov rsi, o_wronly | o_creat | o_trunc\n    mov rdx, 0644o      ; permissions (octal)\n    syscall\n    test rax, rax\n    js  .output_error\n    mov [fd_out], rax\n\n.copy_loop:\n    ; read chunk\n    mov rax, 0          ; read\n    mov rdi, [fd_in]\n    lea rsi, [buf]\n    mov rdx, 4096\n    syscall\n    cmp rax, -4\n    je .copy_loop\n    test rax, rax\n    js  .error\n    jz  .copy_done      ; EOF\n\n    ; write chunk\n    mov rdx, rax        ; number of bytes read\n    mov rax, 1          ; write\n    mov rdi, [fd_out]\n    lea rsi, [buf]\n    call write_all\n    test rax, rax\n    js  .error\n    jmp .copy_loop\n\n.copy_done:\n    ; close files\n    mov rax, 3\n    mov rdi, [fd_in]\n    syscall\n    test rax, rax\n    js .error\n    mov rax, 3\n    mov rdi, [fd_out]\n    syscall\n    test rax, rax\n    js .error\n    ; exit success\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\n.error:\n    ; exit with error code 1\n    mov rax, 60\n    mov rdi, 1\n    syscall\n.input_error:\n    mov edi, 2\n    jmp .exit_status\n.output_error:\n    mov edi, 3\n.exit_status:\n    mov eax, 60\n    syscall\n\n; RDI=fd, RSI=buffer, RDX=count; RAX=0 success or negative error.\nwrite_all:\n    test rdx, rdx\n    jz .done\n.retry:\n    mov eax, 1\n    syscall\n    cmp rax, -4\n    je .retry\n    test rax, rax\n    js .return\n    jz .stalled\n    add rsi, rax\n    sub rdx, rax\n    jnz .retry\n.done:\n    xor eax, eax\n.return:\n    ret\n.stalled:\n    mov rax, -5\n    ret",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Add checks after open calls. If rax < 0, jump to specific error exit.\n\nComplete program: input-open failure exits 2, output-open failure exits 3, I/O/close failure exits 1, success exits 0. Process exit closes remaining descriptors on failure. Output may be partial after an I/O error."
+      },
+      {
+        "id": "ex-16-4",
+        "title": "Exercise 16.4: Print Process ID",
+        "description": "Use the getpid system call to get the process ID and print it as a decimal string. You may need to implement integer-to-string conversion (see Chapter 9) or use a simple approach for small PIDs.",
+        "solution": "section .bss\n    pid_str resb 21\nsection .text\nglobal _start\n\n_start:\n    mov rax, 39         ; getpid\n    syscall\n    ; rax = pid\n    lea rdi, [pid_str]\n    call uint_to_str\n    ; write string\n    mov rdx, rax\n    mov rax, 1\n    mov rdi, 1\n    lea rsi, [pid_str]\n    syscall\n    ; newline\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, newline\n    mov rdx, 1\n    syscall\n    ; exit\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n\n; uint_to_str implementation (from Chapter 9)\n; ...\n\n; Input: RAX = unsigned 64-bit value; RDI = writable buffer of at least 21 bytes.\n; Output: RAX = length, buffer is null-terminated.\n; Clobbers: RCX, RDX, RSI, RDI, R8, R9 and arithmetic flags. DF is cleared.\n; Preserves RBX, RBP, R12-R15 and restores RSP.\nuint_to_str:\n    sub rsp, 32\n    lea r8, [rsp+32]      ; end of the allocated temporary buffer\n    mov r9, r8\n    mov rcx, 10\n.digit_loop:\n    xor rdx, rdx\n    div rcx\n    add dl, '0'\n    dec r9\n    mov [r9], dl\n    test rax, rax\n    jnz .digit_loop       ; zero still produces one digit\n    mov rax, r8\n    sub rax, r9           ; save returned length independently of RCX\n    mov rcx, rax\n    mov rsi, r9\n    cld\n    rep movsb\n    mov byte [rdi], 0\n    add rsp, 32\n    ret\n\nsection .data\nnewline db 10\n",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "We'll need a helper to convert integer to decimal string. Use the function from Chapter 9. Here's a simplified version for PID < 100000.\n\nIncludes both the missing conversion routine and newline definition. Prints the actual PID, not a truncated exit value; buffer accommodates any unsigned 64-bit number."
+      },
+      {
+        "id": "ex-16-5",
+        "title": "Exercise 16.5: Memory Allocation with `brk`",
+        "description": "Allocate 100 bytes using brk, fill it with 0xAA, and then verify by reading back and summing the bytes. Exit with the sum (should be 17000 if all bytes are 0xAA, but exit code is low byte).",
+        "solution": "section .text\nglobal _start\n_start:\n    mov eax, 12\n    xor edi, edi\n    syscall\n    mov r12, rax\n    mov rdi, rax\n    add rdi, 100\n    jc error\n    mov r13, rdi\n    mov eax, 12\n    syscall\n    cmp rax, r13\n    jne error\n    mov rdi, r12\n    mov al, 0xaa\n    mov ecx, 100\n    cld\n    rep stosb\n    mov rsi, r12\n    xor ebx, ebx\n    mov ecx, 100\n.sum:\n    movzx eax, byte [rsi]\n    add ebx, eax\n    inc rsi\n    dec ecx\n    jnz .sum\n    cmp ebx, 17000\n    jne error\n    mov edi, ebx\n    mov eax, 60\n    syscall\nerror:\n    mov edi, 1\n    mov eax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "This solution needs a bit of refinement; the key idea is there.\n\nChecks allocation success and preserves the pointer separately from a wide sum. Verifies 17000 internally and exits with low byte 104."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why does the 4th argument in Linux x86-64 syscalls use r10 instead of rcx?',
-        answer: 'Because the CPU syscall hardware instruction automatically uses rcx to store the return instruction pointer (RIP) during the user-to-kernel transition, clobbering rcx.'
+        "question": "What is a system call? How does a program invoke one on x86-64 Linux?",
+        "answer": "A syscall enters the kernel to request an OS operation. Put its Linux x86-64 number in RAX, arguments in the syscall registers, execute SYSCALL, and inspect RAX."
+      },
+      {
+        "question": "Which registers are used for system call arguments? Why is r10 used instead of rcx for the 4th argument?",
+        "answer": "Arguments use RDI, RSI, RDX, R10, R8, R9. RCX is overwritten by SYSCALL with the return instruction address, so argument four uses R10. R11 is also clobbered."
+      },
+      {
+        "question": "How do you detect an error from a system call in assembly? What does a negative return value mean?",
+        "answer": "cmp rax, -4095; jae error detects the normal raw error range using unsigned comparison. Negate an error to get its positive errno number. Raw brk is exceptional: compare returned and requested breaks."
+      },
+      {
+        "question": "What is the difference between a system call and a library function like printf?",
+        "answer": "A library function runs user-space code and may format, buffer, allocate, or make multiple syscalls. printf is not a direct syscall. Raw syscalls return kernel errors without setting libc errno."
+      },
+      {
+        "question": "Write the assembly code to open a file for writing, creating it if it doesn't exist, with permissions 0644.",
+        "answer": "mov eax, 2\nlea rdi, [rel filename]\nmov esi, 1 | 64\nmov edx, 0644o\nsyscall\ntest rax, rax\njs error\nCreation permissions are filtered by umask. This does not truncate an existing file; add O_TRUNC only when intended."
+      },
+      {
+        "question": "How does brk work? What argument does it take? How do you allocate memory using brk?",
+        "answer": "Query with RDI=0, save the returned break, add the allocation size with overflow checking, call brk again, and verify its return equals the requested end. It changes the process break; it is not a general replacement for a coordinated allocator."
+      },
+      {
+        "question": "What is the purpose of mmap? What are its arguments?",
+        "answer": "mmap maps files or anonymous pages. Arguments are address hint, length, protection, flags, fd, and offset in RDI,RSI,RDX,R10,R8,R9. Check the error range and later release with munmap."
+      },
+      {
+        "question": "How would you read the size of a file without reading its contents? Which system call do you use?",
+        "answer": "Use lseek(fd,0,SEEK_END) for a seekable file, preserving/restoring the original offset if needed. stat/fstat returns size without moving the offset, using a correctly sized ABI structure."
+      },
+      {
+        "question": "What is a file descriptor? What are the standard descriptors and their numbers?",
+        "answer": "A file descriptor is a process-local integer referring to an open file description. Conventionally 0 is stdin, 1 stdout, 2 stderr; descriptors can be redirected and duplicated."
+      },
+      {
+        "question": "Why are system calls relatively slow compared to normal function calls? What can you do to minimize their impact?",
+        "answer": "Kernel entry and exit, validation, scheduling and I/O work add overhead. Batch operations, buffer small writes, handle partial results, and avoid repeated calls inside tight loops when one larger operation suffices."
       }
     ],
-    summary: ['System calls provide controlled access to OS services.', 'Check for negative rax return values to detect error codes.']
+    "summary": [
+      "System calls are the interface between user programs and the kernel.",
+      "Linux x86-64 uses syscall instruction with number in rax, args in rdi, rsi, rdx, r10, r8, r9.",
+      "Return value in rax; negative indicates error (-errno).",
+      "Common calls: read, write, open, close, lseek, exit, brk, mmap, getpid.",
+      "Direct system calls avoid C library overhead but require manual error handling.",
+      "File I/O uses file descriptors (0=stdin, 1=stdout, 2=stderr).",
+      "Memory can be allocated with brk or mmap.",
+      "Always check for errors by testing rax for negative values.",
+      "In the next chapter, we'll explore debugging with GDB and other tools, essential for diagnosing issues in assembly programs."
+    ]
   },
   {
     id: 17,
