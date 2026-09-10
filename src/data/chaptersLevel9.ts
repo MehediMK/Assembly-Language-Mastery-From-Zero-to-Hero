@@ -575,24 +575,73 @@ strlen:
       'Understand the open-source, modular RISC-V ISA philosophy.',
       'Master RV64 general-purpose registers: x0–x31 (zero, ra, sp, gp, tp, t0–t6, a0–a7, s0–s11).',
       'Execute load/store operations, branches without flags, and jumps (jal, jalr).',
-      'Invoke Linux RISC-V system calls using ecall (syscall number in a7).'
+      'Invoke Linux RISC-V system calls using ecall (syscall number in a7).',
+      'Compare RISC-V with x86-64 and ARM64 architectures.',
+      'Understand RISC-V calling convention.',
+      'Learn RISC-V modular extensions (M, A, F, D, C).',
+      'Study RISC-V privilege levels and virtual memory.'
     ],
     prerequisites: ['Chapters 1–22, 45'],
     keyConcepts: [
-      'RISC-V is royalty-free and extensible (RV64IMAFDC).',
-      'x0 is hardwired to zero.',
-      'ecall is the system call trap instruction, using a7 for syscall ID.'
+      'RISC-V: Open-source, royalty-free ISA from UC Berkeley.',
+      'Modular design: Base integer ISA + extensions (M, A, F, D, C).',
+      'x0 is hardwired to zero (no need for zeroing instructions).',
+      'ecall: Environment Call (system call instruction).',
+      'No condition codes: Branches compare registers directly.',
+      'RV64I: 64-bit integer base instruction set.',
+      'Compressed (C) extension: 16-bit instructions for code density.',
+      'Privilege levels: User, Supervisor, Machine.'
     ],
     diagramType: 'riscv_assembly',
     sections: [
       {
         id: 'sec-46-1',
-        title: '46.1 Linux RISC-V 64 Hello World Program',
-        content: `Complete runnable RISC-V 64-bit assembly program:`,
+        title: '46.1 RISC-V Architecture Overview',
+        content: `RISC-V is an open, modular ISA designed for education and industry.
+
+### Why RISC-V?
+• Open-source: No licensing fees
+• Modular: Customize for specific applications
+• Clean design: Minimal legacy baggage
+• Growing ecosystem: Linux, GCC, LLVM support
+• Industry adoption: SiFive, Espressif, StarFive
+
+### RISC-V Register Set (RV64I)
+| Register | ABI Name | Purpose | Description |
+|----------|----------|---------|-------------|
+| x0 | zero | Hardwired zero | Always 0 |
+| x1 | ra | Return address | Function return address |
+| x2 | sp | Stack pointer | Stack pointer |
+| x3 | gp | Global pointer | Global data pointer |
+| x4 | tp | Thread pointer | Thread-local storage |
+| x5-x7 | t0-t2 | Temporaries | Caller-saved |
+| x8 | s0/fp | Saved/frame | Callee-saved / Frame pointer |
+| x9 | s1 | Saved | Callee-saved |
+| x10-x11 | a0-a1 | Arguments/Returns | Function args, return values |
+| x12-x17 | a2-a7 | Arguments | Function arguments |
+| x18-x27 | s2-s11 | Saved | Callee-saved |
+| x28-x31 | t3-t6 | Temporaries | Caller-saved |
+
+### Key Features
+1. **No condition codes**: Branches compare registers directly
+2. **Load/store architecture**: Memory access only via LDR/STR
+3. **Fixed-length instructions**: 32-bit (base), 16-bit (C extension)
+4. **Simple encoding**: Easy to decode
+5. **Modular extensions**: M (multiply), A (atomic), F/D (float), C (compressed)
+
+### RISC-V vs ARM64 vs x86-64
+| Feature | RISC-V | ARM64 | x86-64 |
+|---------|--------|-------|--------|
+| License | Open (free) | Proprietary | Proprietary |
+| Modularity | High | Medium | Low |
+| Condition codes | None | PSTATE | RFLAGS |
+| Zero register | x0 | XZR | None |
+| Instruction size | 32/16-bit | 32-bit | 1-15 bytes |
+| Operand format | 3-operand | 3-operand | 2-operand |`,
         codeSnippets: [
           {
             language: 'riscv',
-            title: 'hello_riscv64.s',
+            title: 'RISC-V Hello World',
             code: `.section .data
 msg:
     .ascii "Hello, World!\\n"
@@ -615,6 +664,315 @@ _start:
     ecall`
           }
         ]
+      },
+      {
+        id: 'sec-46-2',
+        title: '46.2 RISC-V Instruction Set',
+        content: `RISC-V uses simple, regular instruction formats.
+
+### Instruction Formats (RISC-V)
+| Format | Usage | Layout |
+|--------|-------|--------|
+| R-type | Register-register | funct7[31:25] rs2[24:20] rs1[19:15] funct3[14:12] rd[11:7] opcode[6:0] |
+| I-type | Immediate | imm[31:20] rs1[19:15] funct3[14:12] rd[11:7] opcode[6:0] |
+| S-type | Store | imm[31:25] rs2[24:20] rs1[19:15] funct3[14:12] imm[11:7] opcode[6:0] |
+| B-type | Branch | imm[31] imm[7] imm[30:25] rs2[24:20] rs1[19:15] funct3[14:12] imm[11:8] imm[30:25] opcode[6:0] |
+| U-type | Upper immediate | imm[31:12] rd[11:7] opcode[6:0] |
+| J-type | Jump | imm[31] imm[19:12] imm[20] imm[30:21] rd[11:7] opcode[6:0] |
+
+### Arithmetic Instructions
+```riscv
+# Integer register-register (R-type)
+add  x1, x2, x3      # x1 = x2 + x3
+sub  x1, x2, x3      # x1 = x2 - x3
+and  x1, x2, x3      # x1 = x2 & x3
+or   x1, x2, x3      # x1 = x2 | x3
+xor  x1, x2, x3      # x1 = x2 ^ x3
+sll  x1, x2, x3      # x1 = x2 << x3
+srl  x1, x2, x3      # x1 = x2 >> x3 (logical)
+sra  x1, x2, x3      # x1 = x2 >> x3 (arithmetic)
+slt  x1, x2, x3      # x1 = (x2 < x3) ? 1 : 0
+
+# Integer register-immmediate (I-type)
+addi x1, x2, 42      # x1 = x2 + 42
+andi x1, x2, 0xFF    # x1 = x2 & 0xFF
+ori  x1, x2, 0x10    # x1 = x2 | 0x10
+xori x1, x2, 0xFF    # x1 = x2 ^ 0xFF
+slli x1, x2, 3       # x1 = x2 << 3
+srli x1, x2, 3       # x1 = x2 >> 3 (logical)
+srai x1, x2, 3       # x1 = x2 >> 3 (arithmetic)
+slti x1, x2, 42      # x1 = (x2 < 42) ? 1 : 0
+
+# Multiply/Divide (M extension)
+mul    x1, x2, x3    # x1 = x2 * x3 (low 64 bits)
+mulh   x1, x2, x3    # x1 = (x2 * x3) >> 64 (high)
+div    x1, x2, x3    # x1 = x2 / x3 (signed)
+divu   x1, x2, x3    # x1 = x2 / x3 (unsigned)
+rem    x1, x2, x3    # x1 = x2 % x3 (signed)
+remu   x1, x2, x3    # x1 = x2 % x3 (unsigned)
+```
+
+### Load/Store Instructions
+```riscv
+# Load (I-type)
+lb   x1, 0(x2)       # Load byte (sign-extended)
+lbu  x1, 0(x2)       # Load byte unsigned (zero-extended)
+lh   x1, 0(x2)       # Load halfword (16-bit)
+lhu  x1, 0(x2)       # Load halfword unsigned
+lw   x1, 0(x2)       # Load word (32-bit)
+ld   x1, 0(x2)       # Load doubleword (64-bit)
+
+# Store (S-type)
+sb   x1, 0(x2)       # Store byte
+sh   x1, 0(x2)       # Store halfword
+sw   x1, 0(x2)       # Store word
+sd   x1, 0(x2)       # Store doubleword
+
+# Example: Load/Store with offset
+lw   x5, 8(x1)       # Load word from x1+8
+sw   x5, 12(x1)      # Store word to x1+12
+```
+
+### Branch Instructions (B-type)
+```riscv
+# No condition codes! Compare registers directly.
+beq  x1, x2, label   # Branch if x1 == x2
+bne  x1, x2, label   # Branch if x1 != x2
+blt  x1, x2, label   # Branch if x1 < x2 (signed)
+bge  x1, x2, label   # Branch if x1 >= x2 (signed)
+bltu x1, x2, label   # Branch if x1 < x2 (unsigned)
+bgeu x1, x2, label   # Branch if x1 >= x2 (unsigned)
+
+# Pseudo-instructions
+beqz x1, label       # Branch if x1 == 0 (beq x1, x0, label)
+bnez x1, label       # Branch if x1 != 0 (bne x1, x0, label)
+blez x1, label       # Branch if x1 <= 0
+bgez x1, label       # Branch if x1 >= 0
+bltz x1, label       # Branch if x1 < 0
+bgtz x1, label       # Branch if x1 > 0
+```
+
+### Jump Instructions
+```riscv
+# Jump and Link (J-type)
+jal  x1, label       # x1 = PC+4, jump to label (call)
+
+# Jump and Link Register (I-type)
+jalr x1, x2, 0       # x1 = PC+4, jump to x2 + 0
+
+# Pseudo-instructions
+j    label            # jal x0, label (unconditional jump)
+jr   x1              # jalr x0, x1, 0 (jump to register)
+ret                  # jalr x0, x1, 0 (return = jump to ra)
+
+# Example: Function call
+call func            # jal x1, func (link in x1)
+ret                  # jalr x0, x1, 0 (return to caller)
+```
+
+### Upper Immediate (U-type)
+```riscv
+lui  x1, 0x12345     # x1 = 0x12345000 (load upper 20 bits)
+auipc x1, 0x12345    # x1 = PC + 0x12345000
+
+# Common pattern for 32-bit immediate:
+lui  x1, upper20     # Load upper 20 bits
+addi x1, x1, lower12 # Add lower 12 bits
+````,
+        codeSnippets: [
+          {
+            language: 'riscv',
+            title: 'RISC-V Instruction Examples',
+            code: `.section .text
+.global _start
+
+_start:
+    # Load immediate values
+    li a0, 10           # a0 = 10
+    li a1, 20           # a1 = 20
+    
+    # Arithmetic
+    add a2, a0, a1      # a2 = 30
+    sub a3, a1, a0      # a3 = 10
+    mul a4, a0, a1      # a4 = 200 (M extension)
+    div a5, a1, a0      # a5 = 2
+    
+    # Logical
+    and a6, a0, a1      # Bitwise AND
+    or  a7, a0, a1      # Bitwise OR
+    xor t0, a0, a1      # Bitwise XOR
+    
+    # Shifts
+    slli t1, a0, 3      # Left shift by 3
+    srli t2, a1, 1      # Right shift by 1
+    
+    # Load/Store
+    la   t3, data       # Get address
+    lw   t4, 0(t3)      # Load word
+    addi t4, t4, 1      # Increment
+    sw   t4, 0(t3)      # Store word
+    
+    # Branch
+    beq  a0, a1, equal
+    bne  a0, a1, not_equal
+    blt  a0, a1, less
+    
+equal:
+    # a0 == a1
+    j done
+    
+not_equal:
+    # a0 != a1
+    
+less:
+    # a0 < a1
+    
+done:
+    # Exit
+    li a0, 0
+    li a7, 93
+    ecall
+
+.section .data
+data:
+    .word 42`
+          }
+        ]
+      },
+      {
+        id: 'sec-46-3',
+        title: '46.3 RISC-V System Calls and Calling Convention',
+        content: `Linux RISC-V system calls use ecall instruction.
+
+### System Call Convention
+| Register | Purpose |
+|----------|---------|
+| a7 | System call number |
+| a0-a5 | Arguments |
+| a0 | Return value |
+
+### Common System Calls
+| Number | Name | Arguments |
+|--------|------|-----------|
+| 64 | write | a0=fd, a1=buf, a2=count |
+| 63 | read | a0=fd, a1=buf, a2=count |
+| 93 | exit | a0=status |
+| 56 | openat | a0=dirfd, a1=pathname, a2=flags |
+| 57 | close | a0=fd |
+
+### Function Call Convention (RISC-V)
+```riscv
+# Caller-saved (temporary) registers
+# t0-t6 (x5-x7, x28-x31): Not preserved
+
+# Callee-saved registers
+# s0-s11 (x8-x9, x18-x27): Must be preserved
+
+# Arguments/returns
+# a0-a7 (x10-x17): Function arguments, return values
+
+# Special registers
+# ra (x1): Return address
+# sp (x2): Stack pointer
+# gp (x3): Global pointer
+# tp (x4): Thread pointer
+```
+
+### Function Prologue/Epilogue
+```riscv
+# Prologue
+func:
+    addi sp, sp, -32    # Allocate stack frame
+    sd   ra, 24(sp)     # Save return address
+    sd   s0, 16(sp)     # Save callee-saved register
+    sd   s1, 8(sp)      # Save callee-saved register
+    mv   s0, a0         # Save argument
+    
+    # ... function body ...
+    
+    # Epilogue
+    ld   s1, 8(sp)      # Restore callee-saved register
+    ld   s0, 16(sp)     # Restore callee-saved register
+    ld   ra, 24(sp)     # Restore return address
+    addi sp, sp, 32     # Deallocate stack frame
+    ret                 # Return (jump to ra)
+```
+
+### Tail Call Optimization
+```riscv
+# Tail call: reuse caller's stack frame
+tail_call:
+    ld   t0, 0(s0)      # Load function pointer
+    ld   a0, 8(s0)      # Load argument
+    jr   t0             # Jump to function (no return)
+    # No stack frame setup needed
+```
+
+### Structure Passing
+```riscv
+# Small structures: passed in registers
+# Large structures: passed by pointer
+
+# Return small struct in a0-a1
+ret_small:
+    li a0, 1
+    li a1, 2
+    ret
+
+# Return large struct via pointer in a0
+ret_large:
+    la t0, result
+    li t1, 1
+    sd t1, 0(t0)
+    mv a0, t0
+    ret
+```
+
+### Stack Alignment
+RISC-V requires 16-byte stack alignment:
+```riscv
+# Allocate stack frame (must be multiple of 16)
+addi sp, sp, -32     # 32 is multiple of 16
+# ... use stack ...
+addi sp, sp, 32      # Restore stack
+````,
+        codeSnippets: [
+          {
+            language: 'riscv',
+            title: 'RISC-V System Call Examples',
+            code: `.section .text
+.global _start
+
+_start:
+    # write(1, "Hello\\n", 6)
+    li a0, 1              # fd = stdout
+    la a1, msg            # buffer address
+    li a2, 6              # count
+    li a7, 64             # sys_write = 64
+    ecall                 # syscall
+
+    # read(0, buf, 100)
+    li a0, 0              # fd = stdin
+    la a1, buf            # buffer address
+    li a2, 100            # max count
+    li a7, 63             # sys_read = 63
+    ecall                 # syscall
+    # a0 = bytes read
+
+    # exit(0)
+    li a0, 0              # status
+    li a7, 93             # sys_exit = 93
+    ecall
+
+.section .data
+msg:
+    .ascii "Hello, World!\\n"
+
+.section .bss
+buf:
+    .skip 100`
+          }
+        ]
       }
     ],
     exercises: [
@@ -624,15 +982,62 @@ _start:
         description: 'Implement factorial in RV64 assembly saving ra and s0 on the stack.',
         solution: `factorial:\n    addi sp, sp, -16\n    sd ra, 8(sp)\n    sd s0, 0(sp)\n    mv s0, a0\n    li t0, 1\n    ble s0, t0, .base\n    addi a0, s0, -1\n    call factorial\n    mul a0, s0, a0\n    j .done\n.base: li a0, 1\n.done: ld s0, 0(sp); ld ra, 8(sp); addi sp, sp, 16; ret`,
         solutionLanguage: 'riscv'
+      },
+      {
+        id: 'ex-46-2',
+        title: 'Exercise 46.2: RISC-V Array Sum',
+        description: 'Sum an array of 10 words using RISC-V load instructions.',
+        solution: 'Use a0 for array pointer, a1 for count. Loop: load word, add to sum, increment pointer, decrement count, branch if not zero.'
+      },
+      {
+        id: 'ex-46-3',
+        title: 'Exercise 46.3: RISC-V String Length',
+        description: 'Write a strlen function in RISC-V assembly.',
+        solution: 'Loop: load byte, check if zero, increment count, increment pointer. Return count in a0.'
+      },
+      {
+        id: 'ex-46-4',
+        title: 'Exercise 46.4: RISC-V Bubble Sort',
+        description: 'Implement bubble sort for an integer array.',
+        solution: 'Nested loops: outer loop iterates n-1 times, inner loop compares adjacent elements and swaps if needed. Use bge/blt for comparisons.'
       }
     ],
     practiceQuestions: [
       {
         question: 'How do conditional branches in RISC-V differ from x86 and ARM?',
-        answer: 'RISC-V does not have a status flags register (like RFLAGS or PSTATE). Instead, branch instructions (beq, bne, blt, bge) directly compare two registers in a single instruction.'
+        answer: 'RISC-V does not have a status flags register (like RFLAGS or PSTATE). Instead, branch instructions (beq, bne, blt, bge) directly compare two registers in a single instruction. This simplifies the hardware but requires explicit comparison instructions before branches.'
+      },
+      {
+        question: 'What is the purpose of the x0 register in RISC-V?',
+        answer: 'x0 is hardwired to zero: reading always returns 0, writing discards the value. This eliminates many instructions: li rd, 0 becomes addi rd, x0, 0 (or pseudo li), mv rd, rs becomes addi rd, rs, 0, nop becomes addi x0, x0, 0, and unconditional jumps can use jal x0, offset.'
+      },
+      {
+        question: 'How does RISC-V modularity benefit embedded systems?',
+        answer: 'RISC-V\'s modular ISA allows designers to include only needed extensions: base integer (I) for minimal cores, multiply (M) for arithmetic, atomic (A) for threading, float (F/D) for math, compressed (C) for code density. This reduces silicon area and power consumption for embedded applications.'
+      },
+      {
+        question: 'What is the RISC-V calling convention?',
+        answer: 'RISC-V uses: a0-a7 for arguments/returns, t0-t6 as caller-saved temporaries, s0-s11 as callee-saved, ra for return address, sp for stack pointer. Functions must preserve s0-s11, sp, and gp. Arguments beyond 8 use the stack.'
+      },
+      {
+        question: 'How do RISC-V system calls work?',
+        answer: 'RISC-V Linux system calls use the ecall instruction. The syscall number goes in a7, arguments in a0-a5, and the return value comes back in a0. ecall traps to the kernel, which executes the system call and returns to user space.'
+      },
+      {
+        question: 'What are RISC-V privilege levels?',
+        answer: 'RISC-V defines three privilege levels: User (U) for applications, Supervisor (S) for OS kernels, and Machine (M) for firmware/hypervisors. Each level has its own registers and memory protection. This enables virtualization and security isolation.'
       }
     ],
-    summary: ['RISC-V is an open, modern, clean RISC standard.', 'Modular extensions tailor the ISA to microcontrollers, desktops, and supercomputers.']
+    summary: [
+      'RISC-V is an open, modern, clean RISC standard.',
+      'Modular extensions tailor the ISA to microcontrollers, desktops, and supercomputers.',
+      'x0 hardwired to zero simplifies many operations.',
+      'No condition codes: branches compare registers directly.',
+      'ecall is the RISC-V system call instruction.',
+      'Modular design enables customization for specific applications.',
+      'Growing ecosystem with Linux, GCC, LLVM support.',
+      'RISC-V is gaining traction in industry and education.'
+    ]
   },
   {
     id: 47,
