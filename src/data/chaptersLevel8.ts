@@ -1891,31 +1891,43 @@ gdb -x bypass.gdb $BINARY`
     title: 'Chapter 44: Secure Coding and Defensive Assembly',
     subtitle: 'Bounds Checking, Arithmetic Overflow Verification, Manual Canaries, and RELRO',
     learningObjectives: [
+      'Understand secure coding principles for assembly and low-level programming.',
       'Apply defensive programming standards to pure assembly and C interop code.',
       'Implement bounds-checked string and memory copy routines.',
       'Verify integer overflow on arithmetic using jo and jc flags.',
-      'Implement custom stack canaries with getrandom syscall (318).'
+      'Implement custom stack canaries with getrandom syscall (318).',
+      'Understand and apply compiler security flags.',
+      'Learn input validation and sanitization techniques.',
+      'Study secure memory handling and zeroization.'
     ],
     prerequisites: ['Chapters 1–43'],
     keyConcepts: [
-      'Bounds checking prevents memory writes beyond buffer allocations.',
-      'Arithmetic checks catch integer overflows before buffer calculations.',
-      'Full RELRO makes the GOT read-only to prevent malicious redirection.'
+      'Bounds checking: Prevent memory writes beyond buffer allocations.',
+      'Arithmetic overflow: Integer operations exceeding type size.',
+      'Stack canaries: Random values to detect stack smashing.',
+      'RELRO: Read-only GOT to prevent function pointer hijacking.',
+      'Input validation: Verify all external inputs before use.',
+      'Memory zeroization: Clear sensitive data after use.',
+      'Secure coding standards: CERT C, MISRA, SEI guidelines.',
+      'Defense in depth: Multiple security layers.'
     ],
     diagramType: 'defensive_assembly',
     sections: [
       {
         id: 'sec-44-1',
-        title: '44.1 Bounds-Checked String Copy (safe_strcpy)',
-        content: `A resilient string copy that guarantees null-termination without overflowing destination:`,
-        codeSnippets: [
-          {
-            language: 'nasm',
-            title: 'safe_strcpy.asm',
-            code: `; safe_strcpy: rdi=dest, rsi=src, rdx=dest_size
-; returns 0 on success, -1 on truncation
-global safe_strcpy
-section .text
+        title: '44.1 Bounds Checking and Input Validation',
+        content: `Preventing buffer overflows requires rigorous bounds checking.
+
+### Why Bounds Checking?
+• Prevents buffer overflows
+• Stops out-of-bounds reads/writes
+• Protects against integer overflow in size calculations
+• Essential for secure string handling
+
+### Bounds-Checked String Copy
+Always verify destination buffer size:
+```nasm
+; safe_strcpy: rdi=dest, rsi=src, rdx=dest_size
 safe_strcpy:
     push rdi; push rsi; push rbx
     mov rbx, rdx        ; remaining space
@@ -1932,13 +1944,235 @@ safe_strcpy:
     mov byte [rdi], 0   ; guarantee null terminator
     mov eax, -1
 .done:
-    pop rbx; pop rsi; pop rdi; ret`
-          },
+    pop rbx; pop rsi; pop rdi; ret
+```
+
+### Input Validation Patterns
+1. **Length checks**: Verify input length before copy
+2. **Character validation**: Check for allowed characters
+3. **Range validation**: Verify numeric values within bounds
+4. **Format validation**: Ensure expected structure
+5. **Null termination**: Always ensure strings are null-terminated
+
+### Safe Memory Operations
+```nasm
+; memcpy with bounds check
+; rdi=dest, rsi=src, rdx=size, rcx=dest_size
+safe_memcpy:
+    cmp rdx, rcx
+    ja .overflow        ; size > dest_size
+    ; Proceed with memcpy
+    ...
+```
+
+### Integer Overflow Prevention
+Integer overflow in size calculations causes underallocation:
+```c
+// VULNERABLE
+size_t total = count * sizeof(int);  // Can overflow!
+int *arr = malloc(total);
+
+// SAFE
+if (count > SIZE_MAX / sizeof(int)) {
+    return NULL;  // Overflow check
+}
+size_t total = count * sizeof(int);
+```
+
+### Compiler Built-in Checks
+```c
+// GCC/Clang overflow-checked arithmetic
+int result;
+if (__builtin_add_overflow(a, b, &result)) {
+    // Overflow occurred
+}
+
+if (__builtin_mul_overflow(a, b, &result)) {
+    // Overflow occurred
+}
+```
+
+### Fuzzing for Bounds Checking
+Use fuzzing to find bounds violations:
+• AFL (American Fuzzy Lop)
+• libFuzzer
+• Honggfuzz
+• Microsoft OneFuzz`,
+        codeSnippets: [
           {
             language: 'nasm',
-            title: 'safe_add.asm (Safe Addition with Overflow Detection)',
-            code: `; safe_add: rdi=a, rsi=b, rdx=ptr_to_result
-; returns 0 on success, -1 on overflow
+            title: 'Bounds-Checked Functions',
+            code: `; safe_strncpy: Guaranteed null-terminated, bounds-checked
+; rdi=dest, rsi=src, rdx=dest_size
+global safe_strncpy
+section .text
+safe_strncpy:
+    push rdi
+    push rsi
+    push rcx
+    push rbx
+    
+    mov rbx, rdx        ; dest_size
+    test rbx, rbx
+    jz .overflow
+    
+.copy_loop:
+    dec rbx
+    jz .truncated
+    lodsb               ; AL = [RSI], RSI++
+    stosb               ; [RDI] = AL, RDI++
+    test al, al
+    jnz .copy_loop
+    jmp .done
+    
+.truncated:
+    mov byte [rdi-1], 0  ; Ensure null termination
+    mov eax, -1          ; Return truncation error
+    jmp .cleanup
+    
+.overflow:
+    xor eax, eax         ; Return 0 on zero-size
+    jmp .cleanup
+    
+.done:
+    xor eax, eax         ; Return success
+    
+.cleanup:
+    pop rbx
+    pop rcx
+    pop rsi
+    pop rdi
+    ret
+
+; memset with bounds check
+; rdi=dest, sil=value, rdx=size, rcx=dest_size
+safe_memset:
+    cmp rdx, rcx
+    ja .overflow
+    ; Proceed with memset
+    mov rcx, rdx
+    mov al, sil
+    rep stosb
+    xor eax, eax
+    ret
+.overflow:
+    mov eax, -1
+    ret`
+          }
+        ]
+      },
+      {
+        id: 'sec-44-2',
+        title: '44.2 Arithmetic Overflow Detection',
+        content: `Detecting integer overflow is critical for secure arithmetic.
+
+### Why Integer Overflow is Dangerous
+• Buffer size underallocation
+• Unexpected negative values
+• Bypass of security checks
+• Logic errors in comparisons
+
+### x86-64 Overflow Detection Flags
+| Flag | Name | Set When |
+|------|------|----------|
+| OF | Overflow Flag | Signed overflow |
+| CF | Carry Flag | Unsigned overflow |
+| ZF | Zero Flag | Result is zero |
+| SF | Sign Flag | Result is negative |
+
+### Detecting Signed Overflow (jo/jno)
+```nasm
+; Safe addition with overflow detection
+; rdi=a, rsi=b, rdx=ptr_to_result
+safe_add:
+    mov rax, rdi
+    add rax, rsi
+    jo .overflow        ; Jump if signed overflow
+    mov [rdx], rax
+    xor eax, eax        ; Return success
+    ret
+.overflow:
+    mov eax, -1         ; Return error
+    ret
+```
+
+### Detecting Unsigned Overflow (jc/jnc)
+```nasm
+; Safe multiplication with overflow detection
+; rdi=a, rsi=b, rdx=ptr_to_result
+safe_mul:
+    mov rax, rdi
+    mul rsi             ; RDX:RAX = RAX * RSI
+    jc .overflow        ; Jump if unsigned overflow (RDX != 0)
+    mov [rdx], rax
+    xor eax, eax
+    ret
+.overflow:
+    mov eax, -1
+    ret
+```
+
+### Compiler Built-in Overflow Checks
+```c
+// GCC/Clang built-in functions
+int result;
+
+// Addition
+if (__builtin_add_overflow(a, b, &result)) {
+    handle_overflow();
+}
+
+// Multiplication
+if (__builtin_mul_overflow(a, b, &result)) {
+    handle_overflow();
+}
+
+// Subtraction
+if (__builtin_sub_overflow(a, b, &result)) {
+    handle_overflow();
+}
+```
+
+### Safe Integer Library Pattern
+```c
+typedef struct {
+    int64_t value;
+    int overflow;
+} safe_int;
+
+safe_int safe_add(safe_int a, safe_int b) {
+    safe_int result;
+    result.overflow = a.overflow || b.overflow;
+    if (!result.overflow) {
+        result.value = a.value + b.value;
+        result.overflow = (result.value < a.value) != (b.value > 0);
+    }
+    return result;
+}
+```
+
+### Common Integer Overflow Vulnerabilities
+1. **malloc(count * size)**: Multiplication overflow
+2. **Array indexing**: Signed/unsigned confusion
+3. **Buffer length calculations**: Subtraction underflow
+4. **Loop counters**: Increment overflow
+5. **Time calculations**: Wraparound issues
+
+### Mitigation Strategies
+• Use safe integer libraries
+• Check arithmetic operations with jo/jc
+• Validate all size calculations before allocation
+• Use larger types for intermediate results
+• Fuzz with extreme values`,
+        codeSnippets: [
+          {
+            language: 'nasm',
+            title: 'Safe Arithmetic Functions',
+            code: `; safe_add: Signed addition with overflow detection
+; Input: rdi=a, rsi=b, rdx=ptr_to_result
+; Output: eax=0 success, eax=-1 overflow
+global safe_add
+section .text
 safe_add:
     mov rax, rdi
     add rax, rsi
@@ -1948,6 +2182,372 @@ safe_add:
     ret
 .overflow:
     mov eax, -1
+    ret
+
+; safe_mul: Unsigned multiplication with overflow detection
+; Input: rdi=a, rsi=b, rdx=ptr_to_result
+global safe_mul
+section .text
+safe_mul:
+    mov rax, rdi
+    mul rsi             ; RDX:RAX = RAX * RSI
+    test rdx, rdx       ; Check high 64 bits
+    jnz .overflow
+    mov [rdx], rax
+    xor eax, eax
+    ret
+.overflow:
+    mov eax, -1
+    ret
+
+; safe_sub: Signed subtraction with underflow detection
+; Input: rdi=a, rsi=b, rdx=ptr_to_result
+global safe_sub
+section .text
+safe_sub:
+    mov rax, rdi
+    sub rax, rsi
+    jo .overflow
+    mov [rdx], rax
+    xor eax, eax
+    ret
+.overflow:
+    mov eax, -1
+    ret`
+          }
+        ]
+      },
+      {
+        id: 'sec-44-3',
+        title: '44.3 Stack Canaries and RELRO',
+        content: `Modern compile-time protections against memory corruption.
+
+### Stack Canaries (Stack Protector)
+Random value placed before saved return address:
+```nasm
+; Function prologue
+push rbp
+mov rbp, rsp
+sub rsp, 32
+mov rax, qword [fs:0x28]    ; Load canary
+mov qword [rbp-8], rax       ; Store in stack frame
+
+; Function epilogue
+mov rax, qword [rbp-8]       ; Load canary
+xor rax, qword [fs:0x28]    ; Compare with master
+jnz .stack_chk_fail          ; Abort if modified
+leave
+ret
+```
+
+### Custom Stack Canary Implementation
+```nasm
+; Custom canary using getrandom syscall
+section .text
+global _start
+
+_start:
+    ; Allocate stack frame
+    push rbp
+    mov rbp, rsp
+    sub rsp, 16
+    
+    ; Generate random canary
+    mov rax, 318        ; sys_getrandom
+    lea rdi, [rbp-8]    ; Buffer for canary
+    mov rsi, 8          ; 8 bytes
+    xor rdx, rdx        ; Flags = 0
+    syscall
+    
+    ; Store canary
+    mov rax, qword [rbp-8]
+    
+    ; ... function body ...
+    
+    ; Verify canary
+    mov rcx, qword [rbp-8]
+    xor rcx, qword [rbp-8]  ; Compare
+    jnz .canary_breach
+    
+    ; Return
+    leave
+    ret
+    
+.canary_breach:
+    ; Canary corrupted! Abort
+    mov rax, 60
+    mov rdi, 1
+    syscall
+```
+
+### RELRO (Relocation Read-Only)
+Protects GOT (Global Offset Table) from modification:
+
+**Partial RELRO** (default):
+• GOT is writable
+• .dynamic section is read-only
+• Partial protection
+
+**Full RELRO** (`-z relro -z now`):
+• GOT is read-only after startup
+• All symbols resolved at startup
+• Strong protection against GOT hijacking
+
+### Compiler Security Flags
+```bash
+# Stack canary
+gcc -fstack-protector-strong -o binary source.c
+
+# NX (No-Execute)
+gcc -z noexecstack -o binary source.c
+
+# RELRO
+gcc -z relro -z now -o binary source.c
+
+# PIE (Position-Independent Executable)
+gcc -pie -fPIE -o binary source.c
+
+# Fortify Source
+gcc -D_FORTIFY_SOURCE=2 -o binary source.c
+
+# Full protection
+gcc -fstack-protector-strong -z noexecstack -z relro -z now \
+    -pie -fPIE -D_FORTIFY_SOURCE=2 -o binary source.c
+```
+
+### Checking Protections
+```bash
+# checksec tool
+checksec --file=binary
+
+# readelf for NX
+readelf -l binary | grep GNU_STACK
+
+# readelf for PIE
+readelf -h binary | grep Type
+
+# readelf for RELRO
+readelf -l binary | grep GNU_RELRO
+```
+
+### Limitations of Protections
+| Protection | Bypass Technique |
+|------------|------------------|
+| Stack canary | Leak canary value |
+| NX/DEP | ROP, ret2libc |
+| ASLR | Information leak |
+| PIE | Code leak |
+| RELRO | Data-only attacks |`,
+        codeSnippets: [
+          {
+            language: 'nasm',
+            title: 'Custom Canary Implementation',
+            code: `; Custom stack canary with getrandom
+section .bss
+    canary_value: resq 1
+
+section .text
+global init_canary
+global check_canary
+
+; Initialize canary (call once at program start)
+init_canary:
+    push rax
+    push rdi
+    push rsi
+    push rdx
+    
+    mov rax, 318            ; sys_getrandom
+    lea rdi, [canary_value] ; Buffer
+    mov rsi, 8              ; 8 bytes
+    xor rdx, rdx            ; Flags = 0
+    syscall
+    
+    ; Ensure canary has null byte in low byte
+    ; (for string function protection)
+    mov byte [canary_value], 0
+    
+    pop rdx
+    pop rsi
+    pop rdi
+    pop rax
+    ret
+
+; Check canary (call before return)
+check_canary:
+    push rax
+    push rcx
+    
+    mov rax, qword [canary_value]
+    mov rcx, [rsp+16]       ; Saved RBP from stack frame
+    xor rax, rcx
+    jnz .breach
+    
+    pop rcx
+    pop rax
+    ret
+    
+.breach:
+    ; Canary corrupted - abort
+    mov rax, 60
+    mov rdi, 1
+    syscall`
+          }
+        ]
+      },
+      {
+        id: 'sec-44-4',
+        title: '44.4 Secure Memory Handling',
+        content: `Protecting sensitive data in memory.
+
+### Why Secure Memory Handling?
+• Prevent sensitive data leakage
+• Stop memory dump analysis
+• Protect cryptographic keys
+• Clear passwords from memory
+
+### Memory Zeroization
+Always clear sensitive data after use:
+```nasm
+; Secure memset: Clear buffer with volatile to prevent optimization
+section .text
+; rdi=buffer, rsi=size
+secure_zero:
+    push rax
+    push rcx
+    push rdi
+    
+    mov rcx, rsi
+    xor al, al
+    
+.loop:
+    mov byte [rdi], al
+    ; Compiler barrier to prevent optimization
+    ; (In real code, use volatile or inline asm)
+    inc rdi
+    dec rcx
+    jnz .loop
+    
+    pop rdi
+    pop rcx
+    pop rax
+    ret
+```
+
+### Stack Variable Clearing
+Clear local variables before return:
+```nasm
+function:
+    push rbp
+    mov rbp, rsp
+    sub rsp, 64         ; Local variables
+    
+    ; ... function body ...
+    
+    ; Clear sensitive local variables
+    lea rdi, [rbp-64]
+    mov rsi, 64
+    call secure_zero
+    
+    leave
+    ret
+```
+
+### Password Handling
+```c
+// BAD: Password stays in memory
+char password[256];
+gets(password);
+authenticate(password);
+// Password still in memory!
+
+// GOOD: Clear after use
+char password[256];
+gets(password);
+authenticate(password);
+explicit_bzero(password, sizeof(password));  // Clear
+```
+
+### Cryptographic Key Handling
+• Use mlock() to prevent swapping to disk
+• Clear keys immediately after use
+• Consider using kernel keyring
+• Use constant-time operations to prevent timing attacks
+
+### Compiler Optimization Issues
+Compilers may optimize away zeroization:
+```c
+// May be optimized away!
+memset(sensitive_data, 0, size);
+
+// Use volatile to prevent optimization
+volatile char *p = (volatile char *)sensitive_data;
+for (size_t i = 0; i < size; i++) {
+    p[i] = 0;
+}
+
+// Or use explicit_bzero (POSIX)
+explicit_bzero(sensitive_data, size);
+```
+
+### Memory Protection Techniques
+| Technique | Purpose |
+|-----------|---------|
+| mlock() | Prevent swapping to disk |
+| mprotect() | Control page permissions |
+| guard pages | Detect stack overflows |
+| ASLR | Randomize memory layout |
+| Stack canaries | Detect stack corruption |`,
+        codeSnippets: [
+          {
+            language: 'nasm',
+            title: 'Secure Memory Operations',
+            code: `; secure_memzero: Volatile zeroization
+; rdi=buffer, rsi=size
+section .text
+global secure_memzero
+secure_memzero:
+    push rax
+    push rcx
+    push rdi
+    
+    mov rcx, rsi
+    xor al, al
+    
+.loop:
+    ; Use volatile write (prevent optimization)
+    mov byte [rdi], al
+    ; Memory barrier
+    mfence
+    inc rdi
+    dec rcx
+    jnz .loop
+    
+    pop rdi
+    pop rcx
+    pop rax
+    ret
+
+; Secure string clear (for passwords)
+; rdi=string
+section .text
+secure_strclear:
+    push rax
+    push rdi
+    
+.loop:
+    lodsb               ; AL = [RSI], RSI++
+    test al, al
+    jz .done
+    stosb               ; Write zero
+    jmp .loop
+    
+.done:
+    ; Ensure null terminator cleared
+    mov byte [rdi], 0
+    
+    pop rdi
+    pop rax
     ret`
           }
         ]
@@ -1960,14 +2560,61 @@ safe_add:
         description: 'Read a random 64-bit word with sys_getrandom (318), store at [rbp-8], and verify before return.',
         solution: `sub rsp, 8\nmov rax, 318; mov rdi, rsp; mov rsi, 8; xor rdx, rdx; syscall\nmov rax, [rsp]; add rsp, 8\n; store in stack frame\nmov [rbp-8], rax\n; ... body ...\nmov rcx, [rbp-8]; cmp rax, rcx; jne .abort`,
         solutionLanguage: 'nasm'
+      },
+      {
+        id: 'ex-44-2',
+        title: 'Exercise 44.2: Bounds-Checked Memory Copy',
+        description: 'Implement a memory copy function that validates destination buffer size.',
+        solution: 'Function takes dest, src, copy_size, dest_size. Check if copy_size > dest_size. If overflow, return error. Otherwise, copy bytes with loop and return success.'
+      },
+      {
+        id: 'ex-44-3',
+        title: 'Exercise 44.3: Integer Overflow Check',
+        description: 'Write a function that checks if multiplying two 64-bit integers would overflow.',
+        solution: 'Use mul instruction which stores result in RDX:RAX. If RDX != 0, overflow occurred. Or use: if (a > UINT64_MAX / b) overflow.'
+      },
+      {
+        id: 'ex-44-4',
+        title: 'Exercise 44.4: Secure Password Buffer',
+        description: 'Implement a secure password buffer that clears itself after use.',
+        solution: 'Allocate buffer on stack. After password is used, call secure_memzero to clear. Use volatile writes to prevent compiler optimization from removing the clear operation.'
       }
     ],
     practiceQuestions: [
       {
         question: 'What is Full RELRO and how does it prevent exploitation?',
-        answer: 'Full RELRO (Relocation Read-Only) resolves all dynamic symbols at program startup and marks the Global Offset Table (GOT) as completely read-only, preventing attackers from overwriting function pointers.'
+        answer: 'Full RELRO (Relocation Read-Only) resolves all dynamic symbols at program startup and marks the Global Offset Table (GOT) as completely read-only. This prevents attackers from overwriting GOT entries to redirect function calls, which is a common exploitation technique for hijacking control flow.'
+      },
+      {
+        question: 'Why is bounds checking essential for secure code?',
+        answer: 'Bounds checking prevents buffer overflows by verifying that memory writes stay within allocated buffer boundaries. Without bounds checking, writing past a buffer can overwrite adjacent memory, including return addresses, function pointers, or other critical data, leading to code execution or crashes.'
+      },
+      {
+        question: 'How do stack canaries detect buffer overflows?',
+        answer: 'Stack canaries place a random value before the saved return address. Before returning, the function verifies the canary value matches the original. If an overflow overwrites the canary, the check fails and the program terminates, preventing exploitation of the corrupted return address.'
+      },
+      {
+        question: 'What is integer overflow and why is it dangerous?',
+        answer: 'Integer overflow occurs when an arithmetic operation produces a value outside the representable range. It is dangerous because it can cause: buffer size underallocation (leading to overflow), bypass of security checks (if size check uses small type), or logic errors that enable exploitation.'
+      },
+      {
+        question: 'Why must sensitive data be cleared from memory?',
+        answer: 'Sensitive data (passwords, cryptographic keys) must be cleared to prevent: memory dump analysis (extracting secrets from core dumps), swap file exposure (data written to disk), cold boot attacks (reading DRAM contents), and memory disclosure vulnerabilities (reading process memory).'
+      },
+      {
+        question: 'What compiler flags improve security?',
+        answer: 'Key flags: -fstack-protector-strong (stack canaries), -z noexecstack (NX), -z relro -z now (Full RELRO), -pie -fPIE (ASLR), -D_FORTIFY_SOURCE=2 (buffer overflow checks). These provide defense-in-depth against common vulnerabilities.'
       }
     ],
-    summary: ['Defensive assembly implements explicit bounds and arithmetic safety.', 'Security flags (canaries, PIE, RELRO) harden binaries against memory corruption.']
+    summary: [
+      'Bounds checking prevents buffer overflows and out-of-bounds access.',
+      'Arithmetic overflow detection uses jo/jc flags or compiler built-ins.',
+      'Stack canaries detect stack smashing before return.',
+      'RELRO protects GOT from modification.',
+      'Secure memory handling clears sensitive data after use.',
+      'Compiler flags provide automatic security protections.',
+      'Defense in depth uses multiple security layers.',
+      'Secure coding is essential for reliable software.'
+    ]
   }
 ];
