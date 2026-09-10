@@ -506,94 +506,511 @@ export const CHAPTERS_LEVEL_3: Chapter[] = [
     ]
   },
   {
-    id: 13,
-    slug: 'chapter-13-structures-memory-manipulation',
-    level: 3,
-    levelTitle: 'Intermediate Assembly',
-    title: 'Chapter 13: Structures and Memory Manipulation',
-    subtitle: 'Struct Layout, C ABI Padding, Linked Lists, and Block Memory Functions',
-    learningObjectives: [
-      'Define structures using NASM struc / endstruc macros.',
-      'Access members with base+offset addressing.',
-      'Calculate struct padding and alignment to match C ABI.',
-      'Manipulate linked lists of structures (insertion, deletion, traversal).',
-      'Implement memset, memcpy, and memcmp.'
+    "id": 13,
+    "slug": "chapter-13-structures-memory-manipulation",
+    "level": 3,
+    "levelTitle": "Intermediate Assembly",
+    "title": "Chapter 13: Structures and Memory Manipulation",
+    "subtitle": "Struct Layout, C ABI Padding, Linked Lists, and Block Memory Functions",
+    "learningObjectives": [
+      "Understand how structures (records) are represented in memory as contiguous blocks of fields.",
+      "Define structures in NASM using the struc macro or manual offset calculation.",
+      "Access and modify structure members using base+offset addressing.",
+      "Work with arrays of structures and nested structures.",
+      "Understand memory alignment and padding rules for structures.",
+      "Implement common memory manipulation routines: copy, fill, and compare blocks using both string instructions and custom loops.",
+      "Apply structures to solve real-world problems, such as managing records and linked data structures."
     ],
-    prerequisites: ['Chapters 1–12'],
-    keyConcepts: [
-      'C compilers insert padding bytes so members land on natural alignment boundaries.',
-      'NASM struc defines offsets; memory must still be reserved explicitly.',
-      'memmove correctly handles overlapping memory by checking pointer direction.'
+    "prerequisites": [
+      "Solid understanding of addressing modes and pointer arithmetic (Chapter 12).",
+      "Familiarity with arrays, strings, and memory operations (Chapter 9).",
+      "Knowledge of procedures and calling conventions (Chapter 10).",
+      "Basic arithmetic and logical instructions (Chapter 7)."
     ],
-    diagramType: 'structures_memory',
-    sections: [
+    "keyConcepts": [
+      "A structure is a user-defined composite data type that groups related variables of possibly different types under one name.",
+      "Structure members are laid out sequentially in memory; each member’s offset is determined by its size and alignment requirements.",
+      "NASM provides the struc/endstruc macros to define structure templates and compute member offsets.",
+      "Accessing a member uses the structure’s base address plus the member’s offset (e.g., [rbx + member_offset]).",
+      "Alignment inserts padding bytes to ensure each member starts at its natural boundary; the structure size is rounded up to the alignment of its largest member.",
+      "Memory manipulation routines like memset, memcpy, and memcmp can be implemented using rep stosb, rep movsb, rep cmpsb, or custom loops."
+    ],
+    "diagramType": "structures_memory",
+    "sections": [
       {
-        id: 'sec-13-1',
-        title: '13.1 Linked List Deletion with Structs',
-        content: `Traversing and deleting a node from a linked list:`,
-        codeSnippets: [
+        "id": "sec-13-1",
+        "title": "13.1 Introduction to Structures",
+        "content": "In high-level languages, a structure (or record) groups multiple fields into a single unit. In assembly, there is no built-in structure type, but we can simulate it by reserving a block of memory and accessing fields using their offsets from the base address. This approach gives full control over memory layout and is essential for interacting with operating system data structures, file formats, and complex algorithms."
+      },
+      {
+        "id": "sec-13-1-1",
+        "title": "13.1.1 Why Structures Matter",
+        "content": "- Represent complex data (e.g., points, rectangles, linked list nodes, process control blocks).\n- Interface with C structs (same memory layout).\n- Improve code readability and maintainability by using symbolic names instead of raw offsets."
+      },
+      {
+        "id": "sec-13-1-2",
+        "title": "13.1.2 Example: A Simple Point Structure",
+        "content": "In C:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'linked_list.asm',
-            code: `struc Node
-    .value: resq 1
-    .next:  resq 1
-endstruc
-
-section .data
-    n1: dq 10, n2
-    n2: dq 20, n3
-    n3: dq 30, 0        ; null terminates list
-
-section .text
-    global _start
-_start:
-    ; Delete node n2 (update n1.next -> n3)
-    lea rsi, [n1]       ; current node
-    lea rbx, [n2]       ; target to delete
-.find_loop:
-    mov rax, [rsi + Node.next]
-    cmp rax, rbx
-    je .found
-    mov rsi, rax
-    jmp .find_loop
-.found:
-    mov rax, [rbx + Node.next] ; n3
-    mov [rsi + Node.next], rax ; n1.next = n3
-
-    ; Verify: sum remaining values (10 + 30 = 40)
-    lea rsi, [n1]
-    xor rcx, rcx
-.sum_loop:
-    test rsi, rsi
-    jz .done
-    add rcx, [rsi + Node.value]
-    mov rsi, [rsi + Node.next]
-    jmp .sum_loop
-.done:
-    mov rdi, rcx        ; exit code = 40
-    mov rax, 60
-    syscall`
+            "language": "c",
+            "title": "13.1.2 Example: A Simple Point Structure — listing 1",
+            "code": "struct Point {\n    int x;\n    int y;\n};",
+            "explanation": "Memory layout (assuming 4-byte int):"
+          },
+          {
+            "language": "text",
+            "title": "13.1.2 Example: A Simple Point Structure — listing 2",
+            "code": "Offset 0: x (4 bytes)\nOffset 4: y (4 bytes)\nTotal size: 8 bytes",
+            "explanation": "In assembly, we can define offsets manually:"
+          },
+          {
+            "language": "nasm",
+            "title": "Offsets for Point",
+            "code": "; Offsets for Point\nPOINT_X equ 0\nPOINT_Y equ 4\nPOINT_SIZE equ 8",
+            "explanation": "Then allocate a Point instance in .bss or on the stack, and access fields using [base + POINT_X]."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-2",
+        "title": "13.2 Defining Structures in NASM",
+        "content": "NASM provides a convenient macro facility: struc and endstruc. This defines a structure template and automatically assigns offsets to members. The syntax is:\n\nClarification: For struc Point with the normal zero origin, Point.x=0, Point.y=4 and Point_size=8. The size symbol has the suffix _size. Use [instance_base + Point.x]; neither %$Point_size nor adding the type name is required. STRUC defines constants, not storage or automatic C-style padding.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.2 Defining Structures in NASM — listing 1",
+            "code": "struc Point\n    .x: resd 1      ; reserve 4 bytes\n    .y: resd 1\nendstruc",
+            "explanation": "This creates constants Point.x and Point.y with values 0 and 4, respectively, and Point_size (note: the actual size is Point_size with an underscore prefix, or you can use %$Point_size if using %define? Actually, NASM's struc creates a symbol Point_size for the size. To be precise, if the structure name is Point, then Point_size is the size.) The member names have a leading dot when used inside the structure definition, but when accessing, you use Point + Point.x? Wait: Point.x is a constant equal to the offset. To use it, you typically do [rbx + Point.x]. However, if you want a more readable syntax, you can define a structure instance as a label, but in pure assembly you often manage addresses manually."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-2-1",
+        "title": "13.2.1 Example with struc",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.2.1 Example with struc — listing 1",
+            "code": "struc Student\n    .name: resb 20      ; 20 bytes for name\n    .age:  resd 1       ; 4 bytes\n    .gpa:  resd 1       ; 4 bytes (float, but here as integer for simplicity)\nendstruc",
+            "explanation": "Now Student.name equals 0, Student.age equals 20, Student.gpa equals 24, and Student_size is 28.\n\nNote: The struc macro does not allocate memory; it only defines offsets. You must allocate instances separately using resb Student_size or on the stack."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-2-2",
+        "title": "13.2.2 Manual Offset Definition",
+        "content": "If you prefer, you can define offsets with equ:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.2.2 Manual Offset Definition — listing 1",
+            "code": "STUDENT_NAME equ 0\nSTUDENT_AGE  equ 20\nSTUDENT_GPA  equ 24\nSTUDENT_SIZE equ 28",
+            "explanation": "This gives you complete control."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-3",
+        "title": "13.3 Accessing Structure Members",
+        "content": "Given the base address of a structure instance in a register (say rbx), you access members using base+offset addressing:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.3 Accessing Structure Members — listing 1",
+            "code": "mov eax, [rbx + Student.age]   ; load age\nmov dword [rbx + Student.gpa], 95 ; set gpa",
+            "explanation": "When the structure is on the stack, the base is rbp plus an offset to the structure."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-3-1",
+        "title": "13.3.1 Example: Point Operations",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.3.1 Example: Point Operations — listing 1",
+            "code": "section .data\n    ; Point instance initialized in .data\n    p:  dd 10      ; x\n        dd 20      ; y\n\nsection .text\nglobal _start\n_start:\n    ; Load point coordinates\n    lea rbx, [p]\n    mov eax, [rbx]              ; x\n    mov ecx, [rbx + 4]          ; y (using manual offset 4)\n\n    ; Add x and y, store result back in x\n    add eax, ecx\n    mov [rbx], eax              ; x = 30\n\n    ; Exit with x\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-13-3-2",
+        "title": "13.3.2 Using struc for Readability",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.3.2 Using struc for Readability — listing 1",
+            "code": "struc Point\n    .x: resd 1\n    .y: resd 1\nendstruc\n\nsection .bss\n    p resb Point_size\n\nsection .text\nglobal _start\n_start:\n    lea rbx, [p]\n    mov dword [rbx + Point.x], 10\n    mov dword [rbx + Point.y], 20\n    mov eax, [rbx + Point.x]\n    add eax, [rbx + Point.y]\n    mov [rbx + Point.x], eax\n    ; exit with x\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-13-4",
+        "title": "13.4 Arrays of Structures",
+        "content": "Arrays of structures are contiguous blocks where each element is a structure. To access element i, compute the address: base + i * struct_size.\n\nClarification: Structure strides such as Student_size=28 are not legal x86 index scales. Multiply the index by the size explicitly, or advance a pointer by the size. Ensure each initialized record occupies exactly that many bytes."
+      },
+      {
+        "id": "sec-13-4-1",
+        "title": "13.4.1 Example: Array of Students",
+        "content": "Define a structure and an array of 3 students.\n\nClarification: The source introduces three students but actually defines two. Its hand-counted name fields exceed 20 bytes, and its indexed loop adds an age to the address in EAX instead of loading the age. The corrected example fixes both layout and arithmetic. The pointer-loop alternative is valid only with correctly sized records; a 32-bit accumulator can overflow for large datasets.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.4.1 Example: Array of Students — listing 1",
+            "code": "struc Student\n    .name: resb 20\n    .age:  resd 1\n    .gpa:  resd 1\nendstruc\n\nsection .data\n    ; Pre-initialized array of 2 students\n    students:\n        db 'Alice', 0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0   ; name padded to 20\n        dd 20\n        dd 90\n        db 'Bob', 0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n        dd 22\n        dd 85\n    count equ 2\n\nsection .text\nglobal _start\n_start:\n    ; Sum ages of all students\n    xor rbx, rbx              ; accumulator\n    xor rcx, rcx              ; index\n    lea rsi, [students]       ; base address\nloop:\n    cmp rcx, count\n    je done\n    ; compute address of age field: base + rcx*Student_size + Student.age\n    mov rax, rcx\n    imul rax, Student_size\n    add rax, rsi\n    add eax, [rax + Student.age]   ; add age\n    add rbx, rax\n    inc rcx\n    jmp loop\ndone:\n    ; rbx = 42\n    mov rdi, rbx\n    mov rax, 60\n    syscall",
+            "explanation": "Note: The above uses a convoluted way; better to keep base pointer and advance by struct size each iteration:"
+          },
+          {
+            "language": "nasm",
+            "title": "13.4.1 Example: Array of Students — listing 2",
+            "code": "    lea rsi, [students]\n    mov rcx, count\n    xor rbx, rbx\nloop:\n    test rcx, rcx\n    jz done\n    add ebx, [rsi + Student.age]   ; add age\n    add rsi, Student_size          ; advance to next student\n    dec rcx\n    jmp loop\ndone:"
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected indexed student age sum",
+            "code": "struc Student\n    .name: resb 20\n    .age: resd 1\n    .gpa: resd 1\nendstruc\nsection .data\n    align 4, db 0\nstudents:\ns1: istruc Student\n    at Student.name, db 'Alice', 0\n    at Student.age, dd 20\n    at Student.gpa, dd 90\n    iend\ns2: istruc Student\n    at Student.name, db 'Bob', 0\n    at Student.age, dd 22\n    at Student.gpa, dd 85\n    iend\ncount equ 2\nsection .text\nglobal _start\n_start:\n    lea rsi, [rel students]\n    xor ecx, ecx\n    xor ebx, ebx\n.loop:\n    cmp rcx, count\n    jae .done\n    imul rdx, rcx, Student_size\n    mov eax, [rsi + rdx + Student.age]\n    add rbx, rax\n    inc rcx\n    jmp .loop\n.done:\n    mov rdi, rbx\n    mov eax, 60\n    syscall",
+            "explanation": "ISTRUC/AT/IEND pad each name to the declared age offset and complete each 28-byte record. Expected exit status: 42. GPA is an integer score here, not an IEEE floating-point value."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 13.2",
+            "code": "struc Student\n    .name: resb 20\n    .age:  resd 1\n    .gpa:  resd 1\nendstruc\n\nsection .data\n    s1: db 'Alice', 0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n        dd 20\n        dd 90\n    s2: db 'Bob', 0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n        dd 22\n        dd 85\n    s3: db 'Carol', 0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n        dd 19\n        dd 95\n    count equ 3\n\nsection .text\nglobal _start\n_start:\n    lea rsi, [s1]          ; pointer to first student\n    xor rbx, rbx           ; sum of gpas\n    mov rcx, count\nloop:\n    test rcx, rcx\n    jz done\n    add ebx, [rsi + Student.gpa]\n    add rsi, Student_size\n    dec rcx\n    jmp loop\ndone:\n    ; sum = 90+85+95 = 270, avg = 90\n    mov eax, ebx\n    xor edx, edx\n    mov ecx, count\n    div ecx                ; quotient in eax = 90\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "Original name padding does not match Student_size. Use the corrected exercise solution with exact field offsets."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-5",
+        "title": "13.5 Nested Structures and Pointers to Structures",
+        "content": "Structures can contain other structures or pointers to structures."
+      },
+      {
+        "id": "sec-13-5-1",
+        "title": "13.5.1 Nested Structure",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.5.1 Nested Structure — listing 1",
+            "code": "struc Point\n    .x: resd 1\n    .y: resd 1\nendstruc\n\nstruc Rectangle\n    .top_left:  resb Point_size\n    .bottom_right: resb Point_size\nendstruc\n\nsection .bss\n    rect resb Rectangle_size\nsection .text\nglobal _start\n_start:\n    lea rbx, [rect]\n    ; Set top_left.x = 1, top_left.y = 2\n    mov dword [rbx + Rectangle.top_left + Point.x], 1\n    mov dword [rbx + Rectangle.top_left + Point.y], 2\n    ; Set bottom_right.x = 3, bottom_right.y = 4\n    mov dword [rbx + Rectangle.bottom_right + Point.x], 3\n    mov dword [rbx + Rectangle.bottom_right + Point.y], 4\n    ; Compute sum of all coordinates\n    mov eax, [rbx + Rectangle.top_left + Point.x]\n    add eax, [rbx + Rectangle.top_left + Point.y]\n    add eax, [rbx + Rectangle.bottom_right + Point.x]\n    add eax, [rbx + Rectangle.bottom_right + Point.y]\n    ; eax = 10\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 13.4",
+            "code": "struc Point\n    .x: resd 1\n    .y: resd 1\nendstruc\n\nstruc Line\n    .p1: resb Point_size\n    .p2: resb Point_size\nendstruc\n\nsection .bss\n    line resb Line_size\n\nsection .text\nglobal _start\n_start:\n    lea rbx, [line]\n    ; p1 = (3, 4), p2 = (6, 8)\n    mov dword [rbx + Line.p1 + Point.x], 3\n    mov dword [rbx + Line.p1 + Point.y], 4\n    mov dword [rbx + Line.p2 + Point.x], 6\n    mov dword [rbx + Line.p2 + Point.y], 8\n\n    ; dx = 6-3=3, dy = 8-4=4\n    mov eax, [rbx + Line.p2 + Point.x]\n    sub eax, [rbx + Line.p1 + Point.x]\n    mov ecx, [rbx + Line.p2 + Point.y]\n    sub ecx, [rbx + Line.p1 + Point.y]\n    ; dx^2 + dy^2 = 9 + 16 = 25\n    imul eax, eax\n    imul ecx, ecx\n    add eax, ecx\n    ; eax = 25\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "The source computes the result inline although the exercise asks for a procedure. The corrected solution calls a reusable procedure with the Line pointer in RDI."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-5-2",
+        "title": "13.5.2 Pointer to Structure",
+        "content": "A structure can contain a pointer to another structure (or itself, for linked lists). Accessing through a pointer requires an extra level of indirection.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.5.2 Pointer to Structure — listing 1",
+            "code": "struc Node\n    .value: resq 1\n    .next:  resq 1\nendstruc\n\nsection .data\n    ; Create three nodes manually\n    n1: dq 10, n2\n    n2: dq 20, n3\n    n3: dq 30, 0    ; null pointer\n\nsection .text\nglobal _start\n_start:\n    lea rsi, [n1]           ; head pointer\n    xor rbx, rbx            ; sum\ntraverse:\n    test rsi, rsi\n    jz done\n    add rbx, [rsi + Node.value]   ; add value\n    mov rsi, [rsi + Node.next]    ; move to next node\n    jmp traverse\ndone:\n    ; rbx = 60\n    mov rdi, rbx\n    mov rax, 60\n    syscall",
+            "explanation": "This combines structures with linked list traversal."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-6",
+        "title": "13.6 Memory Alignment and Padding in Structures",
+        "content": "Alignment ensures that each member is placed at an address that is a multiple of its size (or natural alignment). Padding bytes are inserted between members to satisfy alignment. The total size of the structure is a multiple of the alignment of its largest member.\n\nClarification: These layouts target the usual Linux x86-64 System V ABI without packing attributes. Alignment is a type/ABI requirement, not universally equal to size. Explicitly align each instance as well as padding the field offsets; array stride must include tail padding. Packed layouts and other ABIs can differ."
+      },
+      {
+        "id": "sec-13-6-1",
+        "title": "13.6.1 Alignment Rules",
+        "content": "- byte (1 byte): any address.\n- word (2 bytes): even address (multiple of 2).\n- dword (4 bytes): multiple of 4.\n- qword (8 bytes): multiple of 8.\n\nNASM’s struc macro does not automatically align members; you must manually insert padding using resb to align subsequent members. This is different from C compilers which add padding automatically. Therefore, you must be aware of alignment to match C struct layouts."
+      },
+      {
+        "id": "sec-13-6-2",
+        "title": "13.6.2 Example: C-Style Struct with Padding",
+        "content": "Consider this C struct on x86-64:",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "13.6.2 Example: C-Style Struct with Padding — listing 1",
+            "code": "struct {\n    char c;      // 1 byte\n    int i;       // 4 bytes, needs 4-byte alignment -> 3 bytes padding after c\n    short s;     // 2 bytes -> needs 2-byte alignment, but after i we are at offset 8, aligned, so no extra before s? Actually after i, offset 8, s at 8, then total size 10, but needs alignment to 4 (largest member is int), so size padded to 12.\n};",
+            "explanation": "Memory layout:"
+          },
+          {
+            "language": "text",
+            "title": "13.6.2 Example: C-Style Struct with Padding — listing 2",
+            "code": "offset 0: c (1 byte)\noffset 1-3: padding (3 bytes)\noffset 4-7: i (4 bytes)\noffset 8-9: s (2 bytes)\noffset 10-11: padding (2 bytes)\ntotal size: 12",
+            "explanation": "In NASM, to mimic this:"
+          },
+          {
+            "language": "nasm",
+            "title": "13.6.2 Example: C-Style Struct with Padding — listing 3",
+            "code": "struc Mixed\n    .c: resb 1\n    .pad1: resb 3       ; alignment for int\n    .i: resd 1\n    .s: resw 1\n    .pad2: resb 2       ; pad to multiple of 4\nendstruc"
+          }
+        ]
+      },
+      {
+        "id": "sec-13-6-3",
+        "title": "13.6.3 Using align Inside struc",
+        "content": "You can use the align directive within a struc block to automatically insert padding to the next boundary. However, align inside a struc may not work as expected because it aligns relative to the start of the section, not the start of the structure. To be safe, use manual padding with resb when defining structures that must match C ABI.\n\nClarification: Use alignb inside a normal zero-origin STRUC: it reserves padding and aligns member offsets relative to the structure base. Plain align normally emits bytes and is unsuitable for this reservation context. Manual padding also works. Align the actual instances separately.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Mixed structure using ALIGNB",
+            "code": "struc MixedAligned\n    .c: resb 1\n    alignb 4\n    .i: resd 1\n    .s: resw 1\n    alignb 4\nendstruc\n; .c=0, .i=4, .s=8, MixedAligned_size=12\nsection .bss\n    alignb 4\n    mixed_instance resb MixedAligned_size",
+            "explanation": "Matches the shown char/int/short layout on Linux x86-64. Check offsetof, sizeof, and _Alignof in a small C program when interoperating with C."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-6-4",
+        "title": "13.6.4 Determining Offsets",
+        "content": "Use a small program or the assembler’s %assign to compute offsets if needed. You can also use NASM’s struc and then print the constants with %warning during assembly to verify."
+      },
+      {
+        "id": "sec-13-7",
+        "title": "13.7 Memory Manipulation: Copying, Filling, Comparing",
+        "content": "Memory block operations are common when working with structures. The string instructions with repeat prefixes are ideal for these tasks.\n\nClarification: The original fill and copy fragments do the memory operation but do not implement the C return contract: memset and memcpy return the original destination pointer. The corrected routines below do so. All accessed bytes must be valid, and memcpy requires non-overlap. Bigger element sizes are not automatically faster; benchmark the target workload."
+      },
+      {
+        "id": "sec-13-7-1",
+        "title": "13.7.1 memset (Fill Memory)",
+        "content": "Fill a block of memory with a byte value.\n\nUsing rep stosb:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "memset: rdi = dest, rsi = byte value (low 8 bits), rdx = count",
+            "code": "; memset: rdi = dest, rsi = byte value (low 8 bits), rdx = count\nmemset:\n    mov al, sil          ; byte value\n    mov rcx, rdx\n    cld\n    rep stosb\n    ret",
+            "explanation": "For larger fills, you can use stosq with a pre-filled 8-byte pattern for speed, but byte fill is often sufficient."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected memset with destination return",
+            "code": "; RDI=destination, RSI=byte value, RDX=count. RAX=original destination.\nmemset:\n    mov r8, rdi\n    mov eax, esi\n    mov rcx, rdx\n    cld\n    rep stosb\n    mov rax, r8\n    ret",
+            "explanation": "Fills count bytes with the low eight bits of RSI and returns the original destination. Count zero performs no memory access."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-7-2",
+        "title": "13.7.2 memcpy (Copy Memory)",
+        "content": "Copy a block from source to destination. Must handle overlap? For simplicity, assume non-overlapping. For overlapping, use memmove which checks direction and uses backward copy if needed.\n\nUsing rep movsb:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "memcpy: rdi = dest, rsi = src, rdx = count",
+            "code": "; memcpy: rdi = dest, rsi = src, rdx = count\nmemcpy:\n    mov rcx, rdx\n    cld\n    rep movsb\n    ret",
+            "explanation": "For performance, you may copy in larger chunks (e.g., movsq) when both pointers are aligned and count is multiple of 8."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected memcpy with destination return",
+            "code": "; RDI=destination, RSI=source, RDX=count. Non-overlapping buffers.\n; RAX=original destination; callee-saved registers preserved.\nmemcpy:\n    mov rax, rdi\n    mov rcx, rdx\n    cld\n    rep movsb\n    ret",
+            "explanation": "Copies exactly count bytes, clears DF, and returns the original destination. Use memmove when ranges overlap."
+          },
+          {
+            "language": "nasm",
+            "title": "Overlap-safe memmove",
+            "code": "; RDI=destination, RSI=source, RDX=count; RAX=original destination.\nmemmove:\n    mov rax, rdi\n    cld\n    test rdx, rdx\n    jz .done\n    cmp rdi, rsi\n    jbe .forward\n    mov r8, rdi\n    sub r8, rsi\n    cmp r8, rdx\n    jae .forward\n    lea rdi, [rdi+rdx-1]\n    lea rsi, [rsi+rdx-1]\n    mov rcx, rdx\n    std\n    rep movsb\n    cld\n    ret\n.forward:\n    mov rcx, rdx\n    rep movsb\n.done:\n    ret",
+            "explanation": "Copies backward only when destination begins inside the source range at a higher address; otherwise copies forward. Count zero does not dereference pointers. DF is clear on every return."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-7-3",
+        "title": "13.7.3 memcmp (Compare Memory)",
+        "content": "Compare two blocks; return 0 if equal, negative if first differing byte in block1 < block2, positive if >.\n\nUsing repe cmpsb:\n\nClarification: With count zero, REPE performs no comparison and leaves the old flags unchanged; the source may then read before either buffer. The source also modifies callee-saved RBX through BL. The corrected version handles zero first and uses caller-saved ECX. CMPSB subtracts [RDI] from [RSI]; equality is symmetric, then the explicit comparison below establishes block1 versus block2 order. EAX=-1 is a signed 32-bit return; use MOVSXD if a signed 64-bit value is needed.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "memcmp: rdi = block1, rsi = block2, rdx = count",
+            "code": "; memcmp: rdi = block1, rsi = block2, rdx = count\n; Returns: 0 if equal, -1 if block1 < block2, 1 if block1 > block2\nmemcmp:\n    mov rcx, rdx\n    cld\n    repe cmpsb\n    je .equal\n    ; find difference in last compared byte\n    ; After repe, rdi and rsi point to byte after mismatch, rcx may be not zero\n    ; Compare the last byte\n    mov al, [rdi-1]\n    mov bl, [rsi-1]\n    cmp al, bl\n    jb .less\n    mov eax, 1\n    ret\n.less:\n    mov eax, -1\n    ret\n.equal:\n    xor eax, eax\n    ret"
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected memcmp for empty and nonempty blocks",
+            "code": "; RDI=block1, RSI=block2, RDX=count.\n; Returns signed int in EAX: -1, 0, or 1. Callee-saved registers preserved.\nmemcmp:\n    cld\n    test rdx, rdx\n    jz .equal\n    mov rcx, rdx\n    repe cmpsb\n    je .equal\n    movzx eax, byte [rdi-1]\n    movzx ecx, byte [rsi-1]\n    cmp eax, ecx\n    jb .less\n    mov eax, 1\n    ret\n.less:\n    mov eax, -1\n    ret\n.equal:\n    xor eax, eax\n    ret",
+            "explanation": "Unsigned byte comparison returns a signed int. It handles equal blocks and mismatches at any position without touching RBX."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 13.3",
+            "code": "section .bss\n    buf1 resb 100\n    buf2 resb 100\n\nsection .text\nglobal _start\n\n; memcmp function from 13.7.3\nmemcmp:\n    ; rdi, rsi, rdx\n    mov rcx, rdx\n    cld\n    repe cmpsb\n    je .equal\n    mov al, [rdi-1]\n    mov bl, [rsi-1]\n    cmp al, bl\n    jb .less\n    mov eax, 1\n    ret\n.less:\n    mov eax, -1\n    ret\n.equal:\n    xor eax, eax\n    ret\n\n_start:\n    ; fill buf1 with 0xAA\n    lea rdi, [buf1]\n    mov al, 0xAA\n    mov rcx, 100\n    cld\n    rep stosb\n\n    ; copy buf1 to buf2\n    lea rsi, [buf1]\n    lea rdi, [buf2]\n    mov rcx, 100\n    cld\n    rep movsb\n\n    ; compare\n    lea rdi, [buf1]\n    lea rsi, [buf2]\n    mov rdx, 100\n    call memcmp\n    ; if equal, eax=0, else nonzero\n    test eax, eax\n    jz .equal_buf\n    mov rdi, 1\n    jmp .exit\n.equal_buf:\n    mov rdi, 0\n.exit:\n    mov rax, 60\n    syscall",
+            "explanation": "Original comparison routine lacks a zero-count guard and modifies RBX. The corrected exercise replaces that routine."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-7-4",
+        "title": "13.7.4 Custom Loops for Memory Operations",
+        "content": "Sometimes you need more control (e.g., to avoid string instruction overhead for small counts). You can use a simple loop:\n\nClarification: This forward byte loop has memcpy-like non-overlap requirements and does not return the original destination. A bytewise comparison of structures can include padding, so equal field values do not imply identical bytes. Copying a structure containing pointers makes a shallow copy, not a copy of the pointed-to objects.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "custom copy: rdi dest, rsi src, rdx count",
+            "code": "; custom copy: rdi dest, rsi src, rdx count\ncopy_loop:\n    test rdx, rdx\n    jz .done\n    mov al, [rsi]\n    mov [rdi], al\n    inc rsi\n    inc rdi\n    dec rdx\n    jmp copy_loop\n.done:\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-13-8",
+        "title": "13.8 Practical Examples",
+        "content": ""
+      },
+      {
+        "id": "sec-13-8-1",
+        "title": "13.8.1 Student Record Management",
+        "content": "We'll create a small program that defines a structure for a student, initializes two students, and computes the average age.\n\nClarification: Hand-counted name padding in the source shifts the fields. ISTRUC places the age and GPA at their exact offsets. The corrected example averages ages 20 and 22 to 21; integer division truncates.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.8.1 Student Record Management — listing 1",
+            "code": "struc Student\n    .name: resb 20\n    .age:  resd 1\n    .gpa:  resd 1\nendstruc\n\nsection .data\n    s1:\n        db 'Alice', 0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0   ; 20 bytes name\n        dd 20\n        dd 90\n    s2:\n        db 'Bob', 0, 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0\n        dd 22\n        dd 85\n\nsection .text\nglobal _start\n_start:\n    ; Compute average age\n    lea rsi, [s1]\n    lea rdi, [s2]\n    mov eax, [rsi + Student.age]\n    add eax, [rdi + Student.age]\n    shr eax, 1          ; divide by 2\n    ; eax = 21\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected student average age",
+            "code": "struc Student\n    .name: resb 20\n    .age: resd 1\n    .gpa: resd 1\nendstruc\nsection .data\n    align 4, db 0\nstudents:\ns1: istruc Student\n    at Student.name, db 'Alice', 0\n    at Student.age, dd 20\n    at Student.gpa, dd 90\n    iend\ns2: istruc Student\n    at Student.name, db 'Bob', 0\n    at Student.age, dd 22\n    at Student.gpa, dd 85\n    iend\ncount equ 2\nsection .text\nglobal _start\n_start:\n    lea rsi, [rel s1]\n    lea rdi, [rel s2]\n    mov eax, [rsi + Student.age]\n    mov ecx, [rdi + Student.age]\n    add rax, rcx\n    shr rax, 1\n    mov rdi, rax\n    mov eax, 60\n    syscall",
+            "explanation": "Expected exit status: 21. The 64-bit addition avoids overflowing a 32-bit sum of two unsigned ages."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-8-2",
+        "title": "13.8.2 Linked List with Structures (Deleting a Node)",
+        "content": "We'll traverse a linked list of nodes (as shown earlier) and delete (skip) a node with a specific value. This demonstrates pointer manipulation and structure access.\n\nClarification: This example unlinks the specific non-head node n2 by address; it is not a general search by value and cannot delete the head. A general routine must update the head pointer when deleting the first node. Unlinking static storage does not free memory. Use finite, acyclic lists and valid nodes.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.8.2 Linked List with Structures (Deleting a Node) — listing 1",
+            "code": "struc Node\n    .value: resq 1\n    .next:  resq 1\nendstruc\n\nsection .data\n    ; Build list: 10 -> 20 -> 30 -> 0\n    n1: dq 10, n2\n    n2: dq 20, n3\n    n3: dq 30, 0\n    ; We'll delete node with value 20 (n2) by updating n1.next to n3\n\nsection .text\nglobal _start\n_start:\n    ; Find n2 and update n1.next\n    lea rsi, [n1]             ; current node\n    lea rbx, [n2]             ; target node to delete\n\n    ; Traverse until we find the node whose next == target\nfind_loop:\n    test rsi, rsi\n    jz done\n    mov rax, [rsi + Node.next]\n    cmp rax, rbx\n    je found\n    mov rsi, rax             ; move to next\n    jmp find_loop\nfound:\n    ; Update this node's next to skip target\n    mov rax, [rbx + Node.next] ; n3\n    mov [rsi + Node.next], rax ; n1.next = n3\n\ndone:\n    ; Traverse and sum values\n    lea rsi, [n1]\n    xor rcx, rcx\nsum_loop:\n    test rsi, rsi\n    jz print_sum\n    add rcx, [rsi + Node.value]\n    mov rsi, [rsi + Node.next]\n    jmp sum_loop\nprint_sum:\n    ; rcx = 10+30 = 40\n    mov rdi, rcx\n    mov rax, 60\n    syscall"
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 13.5",
+            "code": "struc Node\n    .value: resq 1\n    .next:  resq 1\nendstruc\n\nsection .data\n    n1: dq 10, n2\n    n2: dq 20, n3\n    n3: dq 30, 0\n\nsection .text\nglobal _start\n_start:\n    lea rsi, [n1]      ; head\n    xor rax, rax       ; prev = NULL\nreverse_loop:\n    test rsi, rsi\n    jz done\n    mov rbx, [rsi + Node.next]   ; save next\n    mov [rsi + Node.next], rax   ; current->next = prev\n    mov rax, rsi                 ; prev = current\n    mov rsi, rbx                 ; current = saved next\n    jmp reverse_loop\ndone:\n    ; rax = new head (n3)\n    ; sum values from new head\n    mov rsi, rax\n    xor rcx, rcx\nsum_loop:\n    test rsi, rsi\n    jz exit\n    add rcx, [rsi + Node.value]\n    mov rsi, [rsi + Node.next]\n    jmp sum_loop\nexit:\n    ; rcx = 30+20+10 = 60\n    mov rdi, rcx\n    mov rax, 60\n    syscall",
+            "explanation": "The source exits with the sum 60, but the exercise requests the new head value. A sum alone cannot verify list order. The corrected solution checks each link and exits with 30."
+          }
+        ]
+      },
+      {
+        "id": "sec-13-8-3",
+        "title": "13.8.3 Memory Copy of Structure",
+        "content": "Copy one structure to another using rep movsb.\n\nClarification: The source is a fragment and depends on the earlier Student definition. The complete version below allocates both records and exits with the copied age. BSS starts zeroed, so all bytes of this example are initialized before copying.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "13.8.3 Memory Copy of Structure — listing 1",
+            "code": "section .bss\n    src resb Student_size\n    dst resb Student_size\nsection .text\n    ; initialize src\n    lea rdi, [src]\n    mov dword [rdi + Student.age], 25\n    ; copy\n    lea rsi, [src]\n    lea rdi, [dst]\n    mov rcx, Student_size\n    cld\n    rep movsb"
+          },
+          {
+            "language": "nasm",
+            "title": "Complete runnable structure copy",
+            "code": "struc Student\n    .name: resb 20\n    .age: resd 1\n    .gpa: resd 1\nendstruc\nsection .bss\n    alignb 4\n    src resb Student_size\n    dst resb Student_size\nsection .text\nglobal _start\n_start:\n    lea rdi, [rel src]\n    mov dword [rdi+Student.age], 25\n    lea rsi, [rel src]\n    lea rdi, [rel dst]\n    mov rcx, Student_size\n    cld\n    rep movsb\n    mov edi, [rel dst+Student.age]\n    mov eax, 60\n    syscall",
+            "explanation": "Expected exit status: 25. Copies all 28 bytes including the zero-initialized name and GPA."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-13-1',
-        title: 'Exercise 13.1: Calculate Struct Size with Padding',
-        description: 'Given struct { char c; int i; short s; }, determine field offsets and total padded size on x86-64.',
-        solution: 'offset 0: c (1 byte)\noffset 1-3: padding (3 bytes)\noffset 4-7: i (4 bytes)\noffset 8-9: s (2 bytes)\noffset 10-11: padding (2 bytes)\nTotal size = 12 bytes (padded to multiple of 4, the largest member).',
-        solutionLanguage: 'c'
+        "id": "ex-13-1",
+        "title": "Exercise 13.1: Define and Use a Rectangle Structure",
+        "description": "Define a Rectangle structure with two Point members (top-left and bottom-right). Write a program that computes the area (width * height) where width = bottom_right.x - top_left.x, height = bottom_right.y - top_left.y. Assume positive coordinates. Exit with area.",
+        "solution": "struc Point\n    .x: resd 1\n    .y: resd 1\nendstruc\n\nstruc Rectangle\n    .top_left: resb Point_size\n    .bottom_right: resb Point_size\nendstruc\n\nsection .bss\n    rect resb Rectangle_size\n\nsection .text\nglobal _start\n_start:\n    lea rbx, [rect]\n    ; set top_left = (10, 20)\n    mov dword [rbx + Rectangle.top_left + Point.x], 10\n    mov dword [rbx + Rectangle.top_left + Point.y], 20\n    ; set bottom_right = (30, 40)\n    mov dword [rbx + Rectangle.bottom_right + Point.x], 30\n    mov dword [rbx + Rectangle.bottom_right + Point.y], 40\n\n    ; width = 30-10 = 20, height = 40-20 = 20, area = 400\n    mov eax, [rbx + Rectangle.bottom_right + Point.x]\n    sub eax, [rbx + Rectangle.top_left + Point.x]   ; width\n    mov ecx, [rbx + Rectangle.bottom_right + Point.y]\n    sub ecx, [rbx + Rectangle.top_left + Point.y]   ; height\n    imul eax, ecx        ; area = 400\n\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nArea is 400, so the shell exit status is 400 modulo 256 = 144. Positive coordinates alone do not guarantee positive width and height: require bottom_right.x >= top_left.x and bottom_right.y >= top_left.y. This example uses 32-bit arithmetic; avoid overflow or widen the calculation."
+      },
+      {
+        "id": "ex-13-2",
+        "title": "Exercise 13.2: Array of Structures – Average GPA",
+        "description": "Create an array of 3 students (name, age, gpa) using a struc. Compute the average GPA (as integer sum / 3) and exit with it.",
+        "solution": "struc Student\n    .name: resb 20\n    .age:  resd 1\n    .gpa:  resd 1\nendstruc\n\nsection .data\n    align 4, db 0\nstudents:\ns1: istruc Student\n    at Student.name, db 'Alice', 0\n    at Student.age, dd 20\n    at Student.gpa, dd 90\n    iend\ns2: istruc Student\n    at Student.name, db 'Bob', 0\n    at Student.age, dd 22\n    at Student.gpa, dd 85\n    iend\ns3: istruc Student\n    at Student.name, db 'Carol', 0\n    at Student.age, dd 19\n    at Student.gpa, dd 95\n    iend\ncount equ 3\n\nsection .text\nglobal _start\n_start:\n    lea rsi, [s1]          ; pointer to first student\n    xor rbx, rbx           ; sum of gpas\n    mov rcx, count\nloop:\n    test rcx, rcx\n    jz done\n    add ebx, [rsi + Student.gpa]\n    add rsi, Student_size\n    dec rcx\n    jmp loop\ndone:\n    ; sum = 90+85+95 = 270, avg = 90\n    mov eax, ebx\n    xor edx, edx\n    mov ecx, count\n    div ecx                ; quotient in eax = 90\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nCorrected record initialization yields GPA sum 270 and integer average 90; expected exit status 90. Each record is exactly 28 bytes. These GPA values are integer scores, and the unsigned 32-bit sum is sufficient for the supplied inputs."
+      },
+      {
+        "id": "ex-13-3",
+        "title": "Exercise 13.3: Memset and Memcpy",
+        "description": "Write a program that fills a 100-byte buffer with 0xAA, then copies it to another 100-byte buffer. Verify by comparing the two buffers using memcmp and exit with 0 if equal, 1 if not.",
+        "solution": "section .bss\n    buf1 resb 100\n    buf2 resb 100\n\nsection .text\nglobal _start\n\n; memcmp function from 13.7.3\n; RDI=block1, RSI=block2, RDX=count.\n; Returns signed int in EAX: -1, 0, or 1. Callee-saved registers preserved.\nmemcmp:\n    cld\n    test rdx, rdx\n    jz .equal\n    mov rcx, rdx\n    repe cmpsb\n    je .equal\n    movzx eax, byte [rdi-1]\n    movzx ecx, byte [rsi-1]\n    cmp eax, ecx\n    jb .less\n    mov eax, 1\n    ret\n.less:\n    mov eax, -1\n    ret\n.equal:\n    xor eax, eax\n    ret\n\n_start:\n    ; fill buf1 with 0xAA\n    lea rdi, [buf1]\n    mov al, 0xAA\n    mov rcx, 100\n    cld\n    rep stosb\n\n    ; copy buf1 to buf2\n    lea rsi, [buf1]\n    lea rdi, [buf2]\n    mov rcx, 100\n    cld\n    rep movsb\n\n    ; compare\n    lea rdi, [buf1]\n    lea rsi, [buf2]\n    mov rdx, 100\n    call memcmp\n    ; if equal, eax=0, else nonzero\n    test eax, eax\n    jz .equal_buf\n    mov rdi, 1\n    jmp .exit\n.equal_buf:\n    mov rdi, 0\n.exit:\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected exit status 0. The corrected comparison handles empty ranges and preserves callee-saved registers. Both buffers must contain all 100 bytes of 0xAA; equality alone could otherwise pass if both were incorrectly initialized."
+      },
+      {
+        "id": "ex-13-4",
+        "title": "Exercise 13.4: Nested Structures",
+        "description": "Define a Line structure containing two Point structures. Write a procedure that computes the length (Euclidean distance) given a pointer to a Line. For simplicity, compute squared length and exit with that. Use integer coordinates.",
+        "solution": "struc Point\n    .x: resd 1\n    .y: resd 1\nendstruc\n\nstruc Line\n    .p1: resb Point_size\n    .p2: resb Point_size\nendstruc\n\nsection .bss\n    line resb Line_size\n\nsection .text\nglobal _start\n_start:\n    lea rbx, [line]\n    ; p1 = (3, 4), p2 = (6, 8)\n    mov dword [rbx + Line.p1 + Point.x], 3\n    mov dword [rbx + Line.p1 + Point.y], 4\n    mov dword [rbx + Line.p2 + Point.x], 6\n    mov dword [rbx + Line.p2 + Point.y], 8\n\n    mov rdi, rbx\n    call line_length_squared\n    mov rdi, rax\n    mov rax, 60\n    syscall\n\n; RDI=Line pointer with signed 32-bit coordinates; RAX=squared length.\n; Require dx*dx+dy*dy to fit unsigned 64 bits.\nline_length_squared:\n    movsxd rax, dword [rdi+Line.p2+Point.x]\n    movsxd rcx, dword [rdi+Line.p1+Point.x]\n    sub rax, rcx\n    movsxd rdx, dword [rdi+Line.p2+Point.y]\n    movsxd rcx, dword [rdi+Line.p1+Point.y]\n    sub rdx, rcx\n    imul rax, rax\n    imul rdx, rdx\n    add rax, rdx\n    ret",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected squared length 25 for points (3,4) and (6,8), exit status 25. The procedure sign-extends coordinates before subtracting, handles negative coordinates, and returns a 64-bit value. Extreme endpoint differences can overflow the final sum; no overflow detection is provided."
+      },
+      {
+        "id": "ex-13-5",
+        "title": "Exercise 13.5: Linked List Reversal",
+        "description": "Given a singly linked list of nodes (value, next), reverse the list in place and sum the values to verify. Implement the reversal algorithm (iterative). Exit with the new head value.",
+        "solution": "struc Node\n    .value: resq 1\n    .next:  resq 1\nendstruc\n\nsection .data\n    n1: dq 10, n2\n    n2: dq 20, n3\n    n3: dq 30, 0\n\nsection .text\nglobal _start\n_start:\n    lea rsi, [n1]      ; head\n    xor rax, rax       ; prev = NULL\nreverse_loop:\n    test rsi, rsi\n    jz done\n    mov rbx, [rsi + Node.next]   ; save next\n    mov [rsi + Node.next], rax   ; current->next = prev\n    mov rax, rsi                 ; prev = current\n    mov rsi, rbx                 ; current = saved next\n    jmp reverse_loop\ndone:\n    mov r8, rax       ; preserve new head\n    ; rax = new head (n3)\n    ; sum values from new head\n    mov rsi, rax\n    xor rcx, rcx\nsum_loop:\n    test rsi, rsi\n    jz exit\n    add rcx, [rsi + Node.value]\n    mov rsi, [rsi + Node.next]\n    jmp sum_loop\nexit:\n    ; rcx = 30+20+10 = 60\n    cmp rcx, 60\n    jne failure\n    lea rdx, [rel n3]\n    cmp r8, rdx\n    jne failure\n    lea rdx, [rel n2]\n    cmp [r8+Node.next], rdx\n    jne failure\n    lea rdx, [rel n1]\n    cmp [rel n2+Node.next], rdx\n    jne failure\n    cmp qword [rel n1+Node.next], 0\n    jne failure\n    mov rdi, [r8+Node.value]\n    mov rax, 60\n    syscall\nfailure:\n    mov edi, 1\n    mov eax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected list is n3 -> n2 -> n1 -> NULL, sum 60, exit status 30 for the new head. The corrected program checks the links as well as the sum. It assumes the supplied nonempty, acyclic list; a reusable version should explicitly handle an empty head."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why does C insert padding in structures?',
-        answer: 'Modern CPUs read memory far faster when multi-byte types are aligned to addresses divisible by their size. Misaligned access causes penalty or bus exceptions.'
+        "question": "How do you define a structure in NASM? Explain the struc macro.",
+        "answer": "Use struc Point; .x: resd 1; .y: resd 1; endstruc on separate lines. It defines Point.x=0, Point.y=4, Point_size=8; it does not allocate an instance. Allocate resb Point_size or initialize with istruc/at/iend. Field alignment is explicit."
+      },
+      {
+        "question": "Given a structure with members a (byte) and b (dword), what offsets would you expect if no padding is manually added? How does C ABI differ?",
+        "answer": "Without padding, NASM places a at offset 0 and b at offset 1, for size 5. Under normal Linux x86-64 C layout, b is at offset 4, size is 8 and alignment is 4. Packing attributes can change the C layout."
+      },
+      {
+        "question": "How do you access the field age of a structure instance pointed to by rbx?",
+        "answer": "mov eax, [rbx + Student.age] reads the dword age. mov dword [rbx + Student.age], 22 writes it. Student.age is an offset; RBX must hold a valid instance address."
+      },
+      {
+        "question": "How do you compute the address of the i-th element in an array of structures?",
+        "answer": "imul rax, rcx, Student_size\nlea rax, [rbx+rax]\nHere RBX is the base and RCX is the zero-based index. Validate the index. Alternatively advance a pointer by Student_size after each record."
+      },
+      {
+        "question": "What are the alignment rules for a structure containing a char, a short, and a long on x86-64? Show the layout with padding.",
+        "answer": "Under Linux x86-64 System V LP64: char at 0, padding at 1, short at 2–3, padding at 4–7, long at 8–15. Size and stride are 16, alignment 8. Windows x64 uses a 4-byte long and has a different layout; x86-64 alone does not determine the C data model."
+      },
+      {
+        "question": "How would you copy an entire structure from one memory location to another? Show two methods.",
+        "answer": "For non-overlapping instances: lea rsi, [rel src]; lea rdi, [rel dst]; mov ecx, Student_size; cld; rep movsb. Alternatively use a byte loop that loads from source, stores to destination, advances both pointers and decrements a count. Both copy padding and pointer values; this is a shallow copy."
+      },
+      {
+        "question": "What is the difference between memcpy and memmove? How would you implement memmove to handle overlap?",
+        "answer": "memcpy requires non-overlapping ranges. memmove preserves the original source bytes with overlap: copy backward when destination starts above source but inside its range, otherwise forward. Check zero count before forming end pointers and clear DF after backward copying. The routine in 13.7.2 returns the original destination."
+      },
+      {
+        "question": "In a linked list using structures, how do you access the next node’s value given a pointer to a node in rax?",
+        "answer": "Test RAX for NULL before reading the current node. Load mov rdx, [rax+Node.next], then test RDX for NULL before mov rcx, [rdx+Node.value]. Each non-null pointer must identify a valid node."
+      },
+      {
+        "question": "Why is it important to match C struct layout when interfacing assembly with C code?",
+        "answer": "C and assembly must agree on member offsets, operand widths, alignment, total size and array stride; otherwise they read or overwrite different fields. Confirm with offsetof, sizeof and _Alignof for the target compiler and ABI. Padding bytes are not semantic field values."
+      },
+      {
+        "question": "Write a snippet to set the next pointer of a node to NULL using structure offsets.",
+        "answer": "mov qword [rax + Node.next], 0\nRAX must point to a writable Node. Specifying qword writes the complete eight-byte null pointer."
       }
     ],
-    summary: ['Structures group related fields contiguously.', 'Alignment padding is critical for C interoperability.']
+    "summary": [
+      "Structures are simulated using memory blocks and offsets; NASM’s struc macro defines offsets.",
+      "Access members using base+offset addressing.",
+      "Arrays of structures require multiplying the index by the structure size.",
+      "Nested structures and pointers to structures allow complex data models.",
+      "Alignment is crucial to match C ABI; use manual padding inside struc.",
+      "Memory block operations can be implemented with rep movsb, rep stosb, rep cmpsb, or custom loops.",
+      "Structures enable writing modular and maintainable assembly code for complex data.",
+      "In the next chapter, we’ll explore floating-point and SIMD instructions, expanding beyond integer arithmetic.",
+      "Clarifications: use explicit padding or ALIGNB for the chosen ABI, initialize records to the exact declared stride, guard empty comparisons, preserve callee-saved registers, and verify pointer links rather than relying only on sums."
+    ]
   },
   {
     id: 14,
