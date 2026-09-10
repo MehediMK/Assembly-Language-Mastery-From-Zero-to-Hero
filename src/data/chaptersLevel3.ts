@@ -2421,55 +2421,522 @@ export const CHAPTERS_LEVEL_3: Chapter[] = [
     ]
   },
   {
-    id: 17,
-    slug: 'chapter-17-debugging-gdb-tools',
-    level: 3,
-    levelTitle: 'Intermediate Assembly',
-    title: 'Chapter 17: Debugging with GDB and Other Tools',
-    subtitle: 'Breakpoints, Stepping, Memory Inspection, TUI Mode, and Tracing Tools',
-    learningObjectives: [
-      'Assemble with -g for source-level debugging symbols.',
-      'Use GDB to inspect registers, memory (x/nfu), and stack frames.',
-      'Set breakpoints, watchpoints, and step single instructions (stepi, nexti).',
-      'Use GDB TUI mode for split-screen visual debugging.',
-      'Trace execution with objdump, strace, ltrace, and valgrind.'
+    "id": 17,
+    "slug": "chapter-17-debugging-gdb-tools",
+    "level": 3,
+    "levelTitle": "Intermediate Assembly",
+    "title": "Chapter 17: Debugging with GDB and Other Tools",
+    "subtitle": "Breakpoints, Stepping, Memory Inspection, TUI Mode, and Tracing Tools",
+    "learningObjectives": [
+      "Understand the importance of debugging in assembly language development.",
+      "Install and set up GDB for debugging 64-bit assembly programs.",
+      "Compile assembly code with debugging symbols for GDB.",
+      "Use essential GDB commands: breakpoints, stepping, examining registers, memory, and disassembly.",
+      "Watch variables and memory locations using watchpoints.",
+      "Use GDB's TUI mode and command files for efficient debugging.",
+      "Explore other Linux debugging tools: objdump, strace, ltrace, valgrind, and readelf.",
+      "Apply debugging techniques to identify and fix common assembly bugs (segfaults, infinite loops, incorrect results)."
     ],
-    prerequisites: ['Chapters 1–16'],
-    keyConcepts: [
-      'x/nfu examines memory with custom unit sizes and formats.',
-      'stepi executes one machine instruction, entering function calls; nexti steps over.',
-      'strace displays all operating system syscall interactions.'
+    "prerequisites": [
+      "Solid understanding of assembly instructions, registers, and memory layout (Chapters 3, 6, 9).",
+      "Familiarity with the build process, NASM, and linking (Chapter 4).",
+      "Basic experience writing and running assembly programs.",
+      "A Linux environment with GDB installed (sudo apt install gdb)."
     ],
-    diagramType: 'gdb_debugging',
-    sections: [
+    "keyConcepts": [
+      "Debugging symbols (-g option in NASM) embed source-level information in the object file, enabling GDB to show source lines and variable names.",
+      "GDB is a powerful command-line debugger for Linux; it can control program execution, inspect state, and modify variables.",
+      "Breakpoints pause execution at specific instructions or source lines.",
+      "Stepping executes one instruction or source line at a time.",
+      "Examining registers and memory is crucial in assembly debugging.",
+      "Watchpoints trigger when a memory location changes.",
+      "TUI mode provides a split-screen with source and assembly views.",
+      "Other tools like objdump (disassembly), strace (system call tracing), and valgrind (memory errors) complement GDB."
+    ],
+    "diagramType": "gdb_debugging",
+    "sections": [
       {
-        id: 'sec-17-1',
-        title: '17.1 Essential GDB Commands & Memory Inspection',
-        content: `GDB commands for low-level assembly debugging:
-• break *0x400080: Break at exact memory address
-• stepi / nexti: Step one machine instruction
-• info registers (i r): Show all general purpose registers
-• x/8bx $rsp: Print 8 bytes in hexadecimal from the top of the stack
-• x/4gx $rsp: Print 4 64-bit quadwords from the top of the stack
-• x/i $rip: Disassemble instruction at current instruction pointer
-• layout asm: Enter GDB Text User Interface (TUI) assembly screen`
+        "id": "sec-17-1",
+        "title": "17.1 Introduction to Debugging Assembly",
+        "content": "Debugging assembly language presents unique challenges: you operate at the machine level, with no high-level abstractions. Bugs often manifest as segmentation faults, incorrect register values, or unexpected memory contents. A debugger is essential to inspect the state of the CPU and memory at any point.\n\nWhy use GDB?\n- View registers and flags.\n- Examine memory at specific addresses.\n- Disassemble machine code to see exactly what instructions execute.\n- Set breakpoints to pause at critical points.\n- Step through code instruction by instruction.\n- Watch variables and memory for changes.\n- Analyze core dumps from crashed programs.\n\nWhile GDB has a learning curve, mastering it greatly accelerates assembly development."
+      },
+      {
+        "id": "sec-17-2",
+        "title": "17.2 Preparing for Debugging",
+        "content": "To debug effectively, you need to assemble with debugging information. NASM's -g option includes debug symbols in the object file.\n\nExample:\n\nClarification: Use nasm -f elf64 -g -F dwarf program.asm -o program.o for explicit DWARF debug information; retain symbols when linking. Source labels often lack C type information, so cast memory expressions explicitly.",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "17.2 Preparing for Debugging — listing 1",
+            "code": "nasm -f elf64 -g program.asm -o program.o\nld program.o -o program",
+            "explanation": "Now GDB can map addresses to source lines and labels."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-2-1",
+        "title": "17.2.1 Starting GDB",
+        "content": "Launch GDB with the executable:",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "17.2.1 Starting GDB — listing 1",
+            "code": "gdb ./program",
+            "explanation": "You'll see the (gdb) prompt. Use quit to exit."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-2-2",
+        "title": "17.2.2 Basic GDB Commands",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Command",
+            "Description"
+          ],
+          "rows": [
+            [
+              "run / r",
+              "Start execution"
+            ],
+            [
+              "break / b",
+              "Set breakpoint at function, line, or address"
+            ],
+            [
+              "continue / c",
+              "Continue execution until next breakpoint"
+            ],
+            [
+              "nexti / ni",
+              "Step one instruction (over calls)"
+            ],
+            [
+              "stepi / si",
+              "Step one instruction (into calls)"
+            ],
+            [
+              "print / p",
+              "Print value of expression or register"
+            ],
+            [
+              "info registers / i r",
+              "Show all registers"
+            ],
+            [
+              "x",
+              "Examine memory"
+            ],
+            [
+              "disassemble / disas",
+              "Disassemble code"
+            ],
+            [
+              "watch",
+              "Set a watchpoint"
+            ],
+            [
+              "list / l",
+              "List source code"
+            ],
+            [
+              "quit / q",
+              "Exit GDB"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-17-3",
+        "title": "17.3 Setting Breakpoints",
+        "content": "Breakpoints are essential to pause execution at specific points."
+      },
+      {
+        "id": "sec-17-3-1",
+        "title": "17.3.1 Break at a Label or Function",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.3.1 Break at a Label or Function — listing 1",
+            "code": "break _start\nbreak my_function",
+            "explanation": "If labels are unique, GDB resolves them."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-3-2",
+        "title": "17.3.2 Break at a Source Line",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.3.2 Break at a Source Line — listing 1",
+            "code": "break program.asm:15",
+            "explanation": "This requires debug info."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-3-3",
+        "title": "17.3.3 Break at an Address",
+        "content": "\n\nClarification: Example numeric addresses are illustrative and may change with rebuilding or PIE/ASLR. Prefer symbol-based breakpoints or resolve addresses from the current disassembly.",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.3.3 Break at an Address — listing 1",
+            "code": "break *0x400080",
+            "explanation": "Use * to specify an address. You can find addresses via disassemble."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-3-4",
+        "title": "17.3.4 Conditional Breakpoints",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.3.4 Conditional Breakpoints — listing 1",
+            "code": "break *0x400080 if $rax == 5",
+            "explanation": "Pauses only when condition is true."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-4",
+        "title": "17.4 Stepping Through Code",
+        "content": "Once paused, use stepping commands to execute instructions one by one.\n\n- stepi (or si) – Step one machine instruction, entering function calls.\n- nexti (or ni) – Step one machine instruction, but treat call as a single step (doesn't go into called function).\n- continue (or c) – Run until next breakpoint or program exit.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.4 Stepping Through Code — listing 1",
+            "code": "(gdb) break _start\n(gdb) run\n(gdb) si           ; execute first instruction\n(gdb) si\n(gdb) i r rax      ; check rax"
+          }
+        ]
+      },
+      {
+        "id": "sec-17-5",
+        "title": "17.5 Examining Registers and Memory",
+        "content": ""
+      },
+      {
+        "id": "sec-17-5-1",
+        "title": "17.5.1 Viewing Registers",
+        "content": "Use info registers or i r to see all general-purpose registers and RIP, RFLAGS. For specific register:",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.5.1 Viewing Registers — listing 1",
+            "code": "p $rax\np/x $rax          ; hex format\np $rsp"
+          }
+        ]
+      },
+      {
+        "id": "sec-17-5-2",
+        "title": "17.5.2 Viewing Flags",
+        "content": "info registers eflags or p $eflags. To decode flags, use GDB's p with individual flags like $ZF (but not directly; use p $eflags & 0x40 for ZF). Or use info registers and look at eflags value."
+      },
+      {
+        "id": "sec-17-5-3",
+        "title": "17.5.3 Examining Memory with x",
+        "content": "The x command prints memory contents.\n\nSyntax: x/nfu address\n- n = number of units\n- f = format (x hex, d decimal, c char, s string, i instruction)\n- u = unit size (b byte, h halfword, w word, g giant/8 bytes)\n\nExamples:\n\nClarification: GDB unit w is four bytes, unlike an x86 word (two bytes). Use x/gd for a signed decimal qword and x/wd for a dword. x/s reads until a null terminator; use a bounded byte dump for non-terminated data.",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.5.3 Examining Memory with x — listing 1",
+            "code": "x/8bx $rsp          ; 8 bytes in hex at rsp\nx/4gx $rsp          ; 4 8-byte words in hex\nx/s $rsi            ; print string at address in rsi\nx/i $rip            ; disassemble instruction at rip\nx/10i $rip          ; 10 instructions starting at rip"
+          }
+        ]
+      },
+      {
+        "id": "sec-17-5-4",
+        "title": "17.5.4 Printing Variables and Symbols",
+        "content": "If you have debug info and labels, you can print the address or content:",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.5.4 Printing Variables and Symbols — listing 1",
+            "code": "p &myvar\np myvar            ; if it's a data label, GDB may know type from debug info? Not always.\nx/d &myvar         ; print decimal at address of myvar"
+          }
+        ]
+      },
+      {
+        "id": "sec-17-6",
+        "title": "17.6 Watchpoints",
+        "content": "Watchpoints pause execution when a specified memory location changes. Useful for tracking when a variable is modified.\n\nSet a watchpoint:\n\nClarification: Use watch -l *(unsigned long long *)&counter for an untyped qword label. Hardware watchpoints monitor memory locations and have limited slots and sizes. Register expressions can be software-watchable, but they are not register hardware watchpoints. watch *$rsp does not simply track every PUSH: RSP moves, and a push writes below the old top. Fix an address with a convenience variable and use watch -l with an explicit type.",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.6 Watchpoints — listing 1",
+            "code": "watch myvar\nwatch *0x600100",
+            "explanation": "Then continue; GDB stops when the value changes, showing old and new values.\n\nTo set a watchpoint on a register (not directly possible), watch the memory the register points to.\n\nExample:"
+          },
+          {
+            "language": "gdb",
+            "title": "17.6 Watchpoints — listing 2",
+            "code": "break _start\nrun\nwatch *$rsp\ncontinue",
+            "explanation": "This triggers when the stack top changes (e.g., after push)."
+          },
+          {
+            "language": "gdb",
+            "title": "Original source debugger commands: Exercise 17.2",
+            "code": "break _start\nrun\nwatch counter\ncontinue\ncontinue\n...",
+            "explanation": "Run as GDB commands, separately from the NASM source."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-7",
+        "title": "17.7 GDB TUI Mode",
+        "content": "TUI (Text User Interface) provides a split-screen with source code, assembly, and registers.\n\nEnable TUI:",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.7 GDB TUI Mode — listing 1",
+            "code": "layout src\nlayout asm\nlayout regs",
+            "explanation": "Or tui enable (newer GDB). You can combine layouts.\n\nExample:"
+          },
+          {
+            "language": "gdb",
+            "title": "17.7 GDB TUI Mode — listing 2",
+            "code": "(gdb) layout asm\n(gdb) layout regs",
+            "explanation": "Navigate with focus commands. To exit TUI, tui disable or Ctrl-x a."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-8",
+        "title": "17.8 GDB Command Files",
+        "content": "For repetitive debugging, create a GDB script file with commands.\n\nExample debug.gdb:",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "17.8 GDB Command Files — listing 1",
+            "code": "break _start\nrun\nstepi\ninfo registers rax rbx\nx/4gx $rsp\ncontinue\nquit",
+            "explanation": "Run with:"
+          },
+          {
+            "language": "bash",
+            "title": "17.8 GDB Command Files — listing 2",
+            "code": "gdb -x debug.gdb ./program",
+            "explanation": "You can also define custom commands using define."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-9",
+        "title": "17.9 Disassembling with GDB and objdump",
+        "content": "disassemble inside GDB shows instructions around a location.\n\nIn GDB:\n\nClarification: Select set disassembly-flavor intel to match NASM syntax. disassemble /s is useful for source interleaving; /m has limitations with reordered code. Disassembly without DWARF still works, but source mapping does not.",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "17.9 Disassembling with GDB and objdump — listing 1",
+            "code": "disas _start\ndisas /m _start    ; mixed source and assembly\ndisas 0x400080, 0x4000a0",
+            "explanation": "Outside GDB, use objdump:"
+          },
+          {
+            "language": "bash",
+            "title": "17.9 Disassembling with GDB and objdump — listing 2",
+            "code": "objdump -d -M intel program",
+            "explanation": "This disassembles the entire text section in Intel syntax.\n\nFor more detail, include source with -S (if debug info):"
+          },
+          {
+            "language": "bash",
+            "title": "17.9 Disassembling with GDB and objdump — listing 3",
+            "code": "objdump -dS -M intel program"
+          },
+          {
+            "language": "text",
+            "title": "Original source: Exercise 17.5 disassembly",
+            "code": "400080: b8 01 00 00 00    mov eax,0x1",
+            "explanation": "Illustrative address; compare the actual executable."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-10",
+        "title": "17.10 Tracing System Calls with strace",
+        "content": "strace shows all system calls made by a program, along with arguments and return values. This is invaluable for finding issues with file I/O, memory, and process management.\n\nExample:\n\nClarification: Trace output usually goes to stderr. Library code may use openat rather than open; include it in filters. ltrace visibility depends on dynamic linkage and call paths, and raw syscalls do not appear as libc calls.",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "17.10 Tracing System Calls with strace — listing 1",
+            "code": "strace ./program",
+            "explanation": "Output includes lines like:"
+          },
+          {
+            "language": "text",
+            "title": "17.10 Tracing System Calls with strace — listing 2",
+            "code": "write(1, \"Hello, World!\\n\", 14) = 14\nexit(0) = ?",
+            "explanation": "To trace only certain calls:"
+          },
+          {
+            "language": "bash",
+            "title": "17.10 Tracing System Calls with strace — listing 3",
+            "code": "strace -e trace=open,read,write ./program",
+            "explanation": "ltrace is similar but traces library calls (e.g., libc functions). Since our assembly code often bypasses libc, strace is more useful."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-11",
+        "title": "17.11 Memory Debugging with Valgrind",
+        "content": "Valgrind detects memory errors like invalid reads/writes, use of uninitialized memory, and leaks. It works on any executable, including assembly.\n\nUsage:\n\nClarification: Memcheck tracks addressability and definedness but does not know every static-array boundary or custom allocator object. A small overrun inside an otherwise mapped .bss region may be missed. Allocation-aware tests or guard pages are more reliable demonstrations; no-error output does not prove absence of a bug.",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "17.11 Memory Debugging with Valgrind — listing 1",
+            "code": "valgrind ./program",
+            "explanation": "It will report errors with addresses and sometimes stack traces (if symbols available).\n\nFor more detail:"
+          },
+          {
+            "language": "bash",
+            "title": "17.11 Memory Debugging with Valgrind — listing 2",
+            "code": "valgrind --leak-check=full ./program",
+            "explanation": "Note: Valgrind can be slow and may not support all system calls perfectly, but it's excellent for catching memory bugs."
+          },
+          {
+            "language": "nasm",
+            "title": "Allocation-aware Memcheck demonstration",
+            "code": "section .text\nglobal main\nextern malloc, free\nmain:\n    push rbx\n    mov edi, 10\n    call malloc\n    test rax, rax\n    jz .failed\n    mov rbx, rax\n    mov byte [rbx+10], 'A' ; intentional one-byte overrun for Memcheck\n    mov rdi, rbx\n    call free\n    xor eax, eax\n    pop rbx\n    ret\n.failed:\n    mov eax, 1\n    pop rbx\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Build with nasm -f elf64 -g -F dwarf heap.asm -o heap.o and gcc -no-pie heap.o -o heap. Run valgrind --error-exitcode=99 ./heap. This deliberately invalid write should be reported as one byte beyond a ten-byte allocation."
+          }
+        ]
+      },
+      {
+        "id": "sec-17-12",
+        "title": "17.12 Practical Debugging Example",
+        "content": "Let's debug a simple program that intentionally has a bug: it tries to print a string but uses wrong length.\n\nBuggy code (buggy.asm):\n\nClarification: The message has 14 bytes but no null terminator. Use x/14cb $rsi or x/14bx $rsi, not an unbounded x/s, to inspect exactly that object. The failing write length is 9 and prints Hello, Wo. Stop at the write instruction to inspect RDX and then fix the source to len.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "17.12 Practical Debugging Example — listing 1",
+            "code": "section .data\n    msg db 'Hello, World!', 0xA\n    len equ $ - msg       ; correct length\n\nsection .text\nglobal _start\n_start:\n    mov rax, 1\n    mov rdi, 1\n    mov rsi, msg\n    mov rdx, len - 5      ; bug: length too short (should be len)\n    syscall\n\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+            "explanation": "Assemble with debug info:"
+          },
+          {
+            "language": "bash",
+            "title": "17.12 Practical Debugging Example — listing 2",
+            "code": "nasm -f elf64 -g buggy.asm -o buggy.o\nld buggy.o -o buggy"
+          },
+          {
+            "language": "gdb",
+            "title": "Original source debugger commands: Exercise 17.1",
+            "code": "break _start\nrun\nsi\nsi",
+            "explanation": "Run as GDB commands, separately from the NASM source."
+          }
+        ]
+      },
+      {
+        "id": "sec-Debugging",
+        "title": "Debugging Steps in GDB",
+        "content": "1. Start GDB: gdb ./buggy\n2. Set breakpoint at _start: break _start\n3. Run: run\n4. Step through instructions until after the mov rdx, len-5:",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "Debugging Steps in GDB — listing 1",
+            "code": "si\nsi\nsi\nsi",
+            "explanation": "5. Check rdx value: p $rdx (should be 9 instead of 14).\n6. Examine the string: x/s $rsi shows full string.\n7. Realize the length is wrong, fix by using mov rdx, len.\n\nThis simple example illustrates the workflow."
+          }
+        ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-17-1',
-        title: 'Exercise 17.1: Debugging a Buggy String Length',
-        description: 'Assemble buggy program with -g and step through with GDB to identify why length is truncated.',
-        solution: 'gdb ./buggy -> break _start -> run -> stepi -> examine $rdx and $rsi with x/s $rsi.',
-        solutionLanguage: 'gdb'
+        "id": "ex-17-1",
+        "title": "Exercise 17.1: Debug a Segmentation Fault",
+        "description": "Write a program that dereferences a NULL pointer (e.g., mov rax, [0]). Run it under GDB, observe the crash, and use backtrace (if available) and info registers to find the faulting instruction.",
+        "solution": "section .text\nglobal _start\n_start:\n    mov rax, 0\n    mov rax, [rax]   ; dereference NULL -> segfault\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Program:\n\nRun in GDB:\n\nWhen it crashes, GDB shows Cannot access memory at address 0x0. Use p $rip to see the instruction address, and disas $rip-10, $rip+10 to see surroundings. info registers shows rax=0 before fault.\n\nExpected: GDB reports SIGSEGV at the null dereference, not necessarily the quoted memory-examine error. Use x/i $rip and info registers rax rip. An _start program may have no useful caller backtrace. This is deliberately faulty training code."
+      },
+      {
+        "id": "ex-17-2",
+        "title": "Exercise 17.2: Watch a Variable",
+        "description": "Write a program that increments a counter in a loop from 0 to 5, storing it in memory. Use GDB to set a watchpoint on the counter and observe each change.",
+        "solution": "section .bss\n    counter resq 1\nsection .text\nglobal _start\n_start:\n    mov qword [counter], 0\n    mov rcx, 5\nloop:\n    inc qword [counter]\n    dec rcx\n    jnz loop\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "In GDB:\n\nEach continue stops when counter changes.\n\nAssemble with -g -F dwarf. In GDB: break _start; run; watch -l *(unsigned long long *)&counter; continue. Continue five times to observe values 1 through 5. An initialization store of the same value may not trigger a change watchpoint."
+      },
+      {
+        "id": "ex-17-3",
+        "title": "Exercise 17.3: Trace System Calls",
+        "description": "Run any of your previous programs (e.g., file copy) under strace. Identify the system calls used and their arguments. Note any failed calls.",
+        "solution": "strace -e trace=open,openat,read,write,close ./filecopy",
+        "solutionLanguage": "bash",
+        "solutionExplanation": "Use any program from Chapter 16 (file copy). Run strace ./filecopy input.txt output.txt. Observe open, read, write, close calls.\n\nCorrection: Chapter 16 uses fixed input.txt and output.txt names; the extra arguments are ignored. Create test input in a temporary working directory and use the command shown above. Inspect return values as well as arguments."
+      },
+      {
+        "id": "ex-17-4",
+        "title": "Exercise 17.4: Use Valgrind",
+        "description": "Write a program that allocates memory with brk, writes to it, but forgets to deallocate (or writes out of bounds). Run under Valgrind and interpret the error report.",
+        "solution": "section .bss\n    buffer resb 10\nsection .text\nglobal _start\n_start:\n    ; write 20 bytes into 10-byte buffer -> overflow\n    lea rdi, [buffer]\n    mov al, 'A'\n    mov rcx, 20\n    cld\n    rep stosb\n    mov rax, 60\n    xor rdi, rdi\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Program that writes out of bounds:\nRun valgrind ./overflow. Valgrind reports invalid write beyond buffer.\n\nClarification: The original .bss overflow is intentional, but Valgrind may not detect an overrun within mapped static storage. Do not interpret an empty report as proof of correctness. The heap-backed demonstration below gives Memcheck allocation boundaries it can track."
+      },
+      {
+        "id": "ex-17-5",
+        "title": "Exercise 17.5: Disassemble",
+        "description": "Use objdump -d -M intel on a simple program. Identify the machine code for a few instructions (e.g., mov rax, 1). Compare with what you wrote.",
+        "solution": "nasm -f elf64 -g -F dwarf -l program.lst program.asm -o program.o\nld program.o -o program\nobjdump -d -M intel program",
+        "solutionLanguage": "bash",
+        "solutionExplanation": "Use any small program. objdump -d -M intel hello shows:\n400080: b8 01 00 00 00    mov eax,0x1\nCompare with NASM listing (nasm -l listfile).\n\nThe address is illustrative, not fixed. NASM may choose a shorter encoding for a known immediate; inspect the emitted bytes. mov eax,1 zero-extends into RAX."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'What is the difference between stepi and nexti in GDB?',
-        answer: 'stepi executes a single machine instruction, following execution into any function called by call. nexti executes the entire call as a single step and pauses at the instruction following return.'
+        "question": "How do you enable debugging symbols in NASM? Why are they needed?",
+        "answer": "Use nasm -f elf64 -g -F dwarf program.asm -o program.o, then link without stripping. Debug information maps instructions to source locations; labels alone may not supply data types."
+      },
+      {
+        "question": "What is the difference between stepi and nexti in GDB?",
+        "answer": "STEPi executes one instruction and enters a CALL target; NEXTi normally runs a called function until it returns. Breakpoints or signals can interrupt either operation."
+      },
+      {
+        "question": "How do you examine the contents of the stack in GDB? Provide a command.",
+        "answer": "x/4gx $rsp displays four eight-byte stack words in hexadecimal. Use x/16bx $rsp for individual bytes. Inspect only valid memory."
+      },
+      {
+        "question": "What is a watchpoint? How does it differ from a breakpoint?",
+        "answer": "A breakpoint stops at an instruction location. A watchpoint stops when a watched expression changes, commonly a memory value. Hardware memory watchpoints are limited; use explicit widths for untyped assembly labels."
+      },
+      {
+        "question": "How can you disassemble code in GDB? What about outside GDB?",
+        "answer": "Inside GDB: set disassembly-flavor intel; disassemble _start; x/10i $rip. Outside: objdump -d -M intel program. Source interleaving needs debug information."
+      },
+      {
+        "question": "Explain how strace works and what information it provides.",
+        "answer": "strace observes syscall entry/exit and displays numbers as names, arguments, results and errors. It adds overhead and can change timing; it does not trace each user-space instruction."
+      },
+      {
+        "question": "What types of errors does Valgrind detect? Give examples.",
+        "answer": "Memcheck detects many invalid memory accesses, uses of undefined data, and allocation leaks. It may miss intra-object or static-buffer overruns, and custom allocation boundaries need annotations or other verification."
+      },
+      {
+        "question": "How do you set a conditional breakpoint in GDB?",
+        "answer": "break *address if $rax == 5 sets an instruction breakpoint with a condition. Prefer a current symbol-derived address; stale absolute addresses may not correspond to the same code."
+      },
+      {
+        "question": "Describe the purpose of the TUI mode in GDB. How do you enable it?",
+        "answer": "TUI displays source, disassembly and registers in terminal panes. Use layout asm and layout regs or tui enable; toggle with Ctrl-x a. It needs an interactive terminal."
+      },
+      {
+        "question": "What is a core dump? How can you use GDB to analyze one?",
+        "answer": "A core dump captures process state at a failure, subject to system settings. Open gdb ./program corefile, inspect info registers, x/i $rip and bt; use the matching executable and debug information."
       }
     ],
-    summary: ['GDB provides total visibility into CPU registers and memory.', 'strace intercepts and prints system call parameters at runtime.']
+    "summary": [
+      "Debugging assembly requires a deep understanding of machine state; GDB provides the necessary tools.",
+      "Always assemble with -g to include debug symbols.",
+      "Use breakpoints, stepping, register examination, and memory inspection to trace execution.",
+      "Watchpoints are invaluable for detecting memory changes.",
+      "TUI mode offers a more visual debugging experience.",
+      "Command files automate repetitive debugging tasks.",
+      "objdump gives static disassembly; strace traces system calls; valgrind catches memory errors.",
+      "Combining these tools makes assembly development more reliable and efficient.",
+      "In the next chapter, we'll dive deeper into CPU architecture: pipelines, caches, and branch prediction—understanding how the hardware executes your code and how to optimize for it."
+    ]
   }
 ];
