@@ -872,69 +872,490 @@ export const CHAPTERS_LEVEL_4: Chapter[] = [
     ]
   },
   {
-    id: 20,
-    slug: 'chapter-20-inline-assembly-c-integration',
-    level: 4,
-    levelTitle: 'Advanced Assembly',
-    title: 'Chapter 20: Inline Assembly and Integration with C/C++',
-    subtitle: 'GCC Extended Asm: Constraints, Operands, Clobber Lists, and CPUID',
-    learningObjectives: [
-      'Master GCC extended inline assembly syntax: asm volatile ( ... : out : in : clobber ).',
-      'Use operand constraints: "r" (register), "m" (memory), "a" (rax), "cc" (flags).',
-      'Avoid clobbering registers without informing the compiler optimizer.',
-      'Query processor capabilities using the cpuid instruction.'
+    "id": 20,
+    "slug": "chapter-20-inline-assembly-c-integration",
+    "level": 4,
+    "levelTitle": "Advanced Assembly",
+    "title": "Chapter 20: Inline Assembly and Integration with C/C++",
+    "subtitle": "GCC Extended Asm: Constraints, Operands, Clobber Lists, and CPUID",
+    "learningObjectives": [
+      "Understand the purpose and benefits of inline assembly in C/C++ programs.",
+      "Master the GCC extended asm syntax: operands, constraints, clobbers, and volatile.",
+      "Learn how to access and modify C variables from inline assembly.",
+      "Use inline assembly for low-level operations like cpuid, rdtsc, and SIMD instructions.",
+      "Integrate separate assembly source files with C/C++ projects.",
+      "Debug mixed C/assembly programs using GDB.",
+      "Apply best practices to write correct and efficient inline assembly."
     ],
-    prerequisites: ['Chapters 1–19'],
-    keyConcepts: [
-      'Extended asm binds C variables to assembly operands (%0, %1).',
-      'The clobber list tells the compiler which registers or memory are modified.',
-      'volatile prevents the compiler from optimizing away side-effecting code.'
+    "prerequisites": [
+      "Solid understanding of assembly programming, registers, and calling conventions (Chapters 3, 10, 19).",
+      "Familiarity with C/C++ programming and compilation.",
+      "Knowledge of data types, memory layout, and structures (Chapter 13).",
+      "Experience with GDB for debugging (Chapter 17)."
     ],
-    diagramType: 'inline_assembly',
-    sections: [
+    "keyConcepts": [
+      "Inline assembly embeds assembly instructions directly in C/C++ code.",
+      "GCC provides an extended asm syntax that allows specifying operands and constraints.",
+      "Constraints tell the compiler where to place operands (registers, memory, immediates).",
+      "Clobbers list registers that the inline assembly modifies, ensuring the compiler saves/restores them if needed.",
+      "Volatile prevents the compiler from optimizing away or reordering the asm block.",
+      "Separate assembly files can be linked with C/C++ object files, using extern declarations.",
+      "Mixed-language programming requires strict adherence to the ABI."
+    ],
+    "diagramType": "inline_assembly",
+    "sections": [
       {
-        id: 'sec-20-1',
-        title: '20.1 Querying CPU Vendor String with Inline CPUID',
-        content: `Reading CPUID leaf 0 to extract the 12-character vendor string ("GenuineIntel" or "AuthenticAMD"):`,
-        codeSnippets: [
+        "id": "sec-20-1",
+        "title": "20.1 Introduction to Inline Assembly",
+        "content": "Inline assembly allows embedding assembly instructions directly within C or C++ source code. This is useful for:\n- Accessing special CPU instructions not exposed by high-level languages (e.g., cpuid, rdtsc, rdrand).\n- Optimizing performance-critical sections with hand-tuned assembly.\n- Performing low-level hardware or OS interactions.\n\nGCC supports inline assembly through the asm keyword (or __asm__). There are two forms:\n- Basic asm: Just a string of assembly instructions without operands.\n- Extended asm: Allows specifying output operands, input operands, clobbers, and constraints.\n\nWe will focus on extended asm, which is the recommended and more powerful form."
+      },
+      {
+        "id": "sec-20-2",
+        "title": "20.2 Basic Inline Assembly",
+        "content": "The basic form is simple: asm(\"assembly code\");\n\nExample:\n\nClarification: The two basic-asm lines are not a safe x86-64 syscall example: INT 0x80 uses the compatibility syscall interface and the compiler is not told which registers change. Do not use them as an exit sequence inside C. Extended asm and normal C calls are preferable for compiler-visible work.",
+        "codeSnippets": [
           {
-            language: 'c',
-            title: 'cpuid_vendor.c',
-            code: `#include <stdio.h>
-int main() {
-    unsigned int eax, ebx, ecx, edx;
-    char vendor[13];
-    asm volatile ("cpuid"
-                  : "=a"(eax), "=b"(ebx), "=c"(ecx), "=d"(edx)
-                  : "a"(0)
-                  );
-    ((unsigned int*)vendor)[0] = ebx;
-    ((unsigned int*)vendor)[1] = edx;
-    ((unsigned int*)vendor)[2] = ecx;
-    vendor[12] = '\\0';
-    printf("CPU Vendor: %s\\n", vendor);
-    return 0;
-}`
+            "language": "c",
+            "title": "20.2 Basic Inline Assembly — listing 1",
+            "code": "asm(\"movl $1, %eax\");\nasm(\"int $0x80\");",
+            "explanation": "This is rarely used because it assumes a fixed register usage and does not interact safely with C variables. It is generally discouraged in favor of extended asm."
+          }
+        ]
+      },
+      {
+        "id": "sec-20-2-1",
+        "title": "20.2.1 Limitations of Basic Asm",
+        "content": "- No way to specify operands; you must hard-code registers, which may conflict with the compiler's register allocation.\n- The compiler may not know which registers or memory are modified, leading to incorrect code.\n- Cannot be used in functions that need to be optimized safely.\n\nAvoid basic asm in modern code."
+      },
+      {
+        "id": "sec-20-3",
+        "title": "20.3 Extended Inline Assembly Syntax",
+        "content": "The extended asm syntax provides a way to interface with C variables using a template and operand constraints."
+      },
+      {
+        "id": "sec-20-3-1",
+        "title": "20.3.1 General Syntax",
+        "content": "\n\nClarification: The displayed asm [volatile] form is syntax notation, not literal C. The final label list requires asm goto. With no colons a statement is basic asm, whose template rules differ from extended asm.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "20.3.1 General Syntax — listing 1",
+            "code": "asm [volatile] ( \n    assembler template \n    : output operands        /* optional */\n    : input operands         /* optional */\n    : clobbered registers    /* optional */\n    : goto labels            /* optional, for asm goto */\n);",
+            "explanation": "- Assembler template: A string containing assembly instructions with placeholders %0, %1, etc., referring to operands.\n- Output operands: List of C variables that will be written by the asm. Each has a constraint and a variable.\n- Input operands: List of C expressions read by the asm.\n- Clobber list: Registers that the asm modifies, so the compiler knows to preserve them if needed.\n- Goto labels: Used for asm goto, allowing jumps to C labels.\n\nOperands are numbered sequentially: output operands first, then input operands. In the template, %0 refers to the first operand (output 0), %1 to the next, etc. If there are no operands, the colon separators may be omitted."
+          }
+        ]
+      },
+      {
+        "id": "sec-20-3-2",
+        "title": "20.3.2 Example: Add Two Integers",
+        "content": "\n\nClarification: ADD modifies flags; include a cc clobber. A tied input or read-write operand states the dependency explicitly. A simpler version is int result=a; __asm__(\"addl %1,%0\" : \"+r\"(result) : \"r\"(b) : \"cc\");",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "20.3.2 Example: Add Two Integers — listing 1",
+            "code": "int a = 10, b = 20, result;\nasm (\"addl %%ebx, %%eax\"\n     : \"=a\" (result)        // output: result in eax\n     : \"a\" (a), \"b\" (b)     // inputs: a in eax, b in ebx\n     );",
+            "explanation": "Explanation:\n- \"addl %%ebx, %%eax\" is the instruction. %% is used because % is special in format strings.\n- \"=a\" (result) means output in eax (a constraint), and the result is stored in result.\n- \"a\" (a) means input a is placed in eax.\n- \"b\" (b) means input b is placed in ebx.\n- The compiler will generate code to load a into eax, b into ebx, execute addl, and store eax into result.\n\nNote: The addl instruction expects source and destination. Here, eax holds a initially, and ebx holds b. After addl %%ebx, %%eax, eax = a + b. The output constraint \"=a\" tells the compiler that eax is modified and holds the result."
+          }
+        ]
+      },
+      {
+        "id": "sec-20-3-3",
+        "title": "20.3.3 Important: %% vs %",
+        "content": "In C strings, % is used for format specifiers. To include a literal % in the assembly template, you must double it (%%). This is a common source of confusion. Alternatively, you can use the % with a single % if you are using asm with a string literal and not printf? Actually, the compiler treats the template string as a format string, so % has special meaning. Therefore, always use %% for register names.\n\nClarification: Percent escaping is GCC extended-asm template syntax, not C string formatting or printf. Literal AT&T register names use %%eax in extended asm; operands use %0 or %[name]. Basic asm uses a single percent. The examples assume GCC’s default AT&T assembler dialect, not -masm=intel."
+      },
+      {
+        "id": "sec-20-4",
+        "title": "20.4 Operand Constraints",
+        "content": "Constraints specify how operands are assigned to registers, memory, or immediates. Common constraints for x86-64:\n\n\n\nModifiers:\n- = : Write-only output operand.\n- + : Read-write operand (both input and output).\n- & : Early clobber: operand is written before all inputs are read.\n\nClarification: Constraint letters are target-specific. L denotes an immediate 0xff or 0xffff useful for AND zero-extension idioms; MOVZX does not accept an immediate source. Constraints must match legal combinations, not merely list broad alternatives that could create memory-to-memory instructions.",
+        "tableData": {
+          "headers": [
+            "Constraint",
+            "Meaning"
+          ],
+          "rows": [
+            [
+              "r",
+              "General-purpose register"
+            ],
+            [
+              "a",
+              "eax/rax"
+            ],
+            [
+              "b",
+              "ebx/rbx"
+            ],
+            [
+              "c",
+              "ecx/rcx"
+            ],
+            [
+              "d",
+              "edx/rdx"
+            ],
+            [
+              "S",
+              "esi/rsi"
+            ],
+            [
+              "D",
+              "edi/rdi"
+            ],
+            [
+              "m",
+              "Memory operand"
+            ],
+            [
+              "o",
+              "Offsettable memory address"
+            ],
+            [
+              "V",
+              "Memory operand that is not offsettable"
+            ],
+            [
+              "g",
+              "Any register, memory, or immediate"
+            ],
+            [
+              "i",
+              "Immediate integer operand"
+            ],
+            [
+              "n",
+              "Immediate integer operand with known value"
+            ],
+            [
+              "I",
+              "Immediate 0..31 (shift counts)"
+            ],
+            [
+              "J",
+              "Immediate 0..63 (shift counts for 64-bit)"
+            ],
+            [
+              "K",
+              "Immediate signed 8-bit"
+            ],
+            [
+              "L",
+              "Immediate 0xFF or 0xFFFF (for movzx)"
+            ],
+            [
+              "M",
+              "Immediate 0..3"
+            ],
+            [
+              "N",
+              "Immediate 0..255"
+            ],
+            [
+              "X",
+              "Any operand"
+            ],
+            [
+              "0, 1, ...",
+              "Matching constraint: same as specified operand"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-20-4-1",
+        "title": "20.4.1 Register Constraints",
+        "content": "Using specific register constraints can be necessary for instructions that only work with certain registers (e.g., mul, div, shift by cl).\n\nExample: Shift by variable",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "20.4.1 Register Constraints — listing 1",
+            "code": "int value = 100;\nint count = 3;\nasm (\"shll %%cl, %0\"\n     : \"=r\" (value)\n     : \"0\" (value), \"c\" (count)\n     : \"cc\"\n     );",
+            "explanation": "- \"0\" (value) means use the same register as operand 0 (read-write). The compiler will put value in some register (say r8), and count in cl. Then shll %%cl, %0 shifts the register by cl."
+          }
+        ]
+      },
+      {
+        "id": "sec-20-4-2",
+        "title": "20.4.2 Memory Constraints",
+        "content": "If a variable can be in memory, use \"m\". The compiler may choose to allocate the operand in memory and reference it directly.\n\nExample: Increment a memory variable\n\nClarification: INCL changes condition codes; add : : \"cc\" after the +m output. The explicit memory operand describes that object, so a broad memory clobber is not needed merely because memory is used.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "20.4.2 Memory Constraints — listing 1",
+            "code": "int counter = 5;\nasm (\"incl %0\" : \"+m\" (counter));",
+            "explanation": "This tells the compiler that counter is a read-write memory operand. The generated assembly will increment the memory location."
+          }
+        ]
+      },
+      {
+        "id": "sec-20-4-3",
+        "title": "20.4.3 Immediate Constraints",
+        "content": "Some instructions require immediate constants. Use \"i\" or specific range constraints like \"I\", \"J\", etc.\n\nExample: Shift by immediate 1\n\nClarification: The shift modifies flags; use __asm__(\"shll $1,%0\" : \"+r\"(value) : : \"cc\"). Instructions constrain operand width and valid forms; C type and constraints must agree.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "20.4.3 Immediate Constraints — listing 1",
+            "code": "int value = 10;\nasm (\"shll $1, %0\" : \"+r\" (value));",
+            "explanation": "Here $1 is an immediate; no input operand needed for the constant."
+          }
+        ]
+      },
+      {
+        "id": "sec-20-5",
+        "title": "20.5 Clobber List",
+        "content": "The clobber list tells the compiler which registers are modified by the inline assembly but not listed as operands. This is crucial for correctness. If the compiler assumes a register is unchanged, it may keep a value in it, causing bugs.\n\nCommon clobbers:\n- \"cc\" : Condition codes (flags) are modified.\n- \"memory\" : The asm reads or writes memory in ways not specified by operands. This acts as a memory barrier.\n- Register names (e.g., \"eax\", \"xmm0\") : These registers are clobbered.\n\nExample: Using cpuid\n\nClarification: A memory clobber is a compiler memory barrier, not a CPU fence and not synchronization for C data races. CPUID does not read/write arbitrary memory; use a memory clobber only when compiler memory ordering is part of the intended contract. Outputs already describe their registers; do not also list those registers as clobbers.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "20.5 Clobber List — listing 1",
+            "code": "unsigned int eax, ebx, ecx, edx;\nasm volatile (\"cpuid\"\n              : \"=a\"(eax), \"=b\"(ebx), \"=c\"(ecx), \"=d\"(edx)\n              : \"a\"(0)   // leaf 0\n              : \"memory\");",
+            "explanation": "Here the outputs are in eax, ebx, ecx, edx (via constraints). No separate clobber list needed for those because they are outputs. But cpuid may modify memory? Typically not, but \"memory\" is often added to be safe."
+          }
+        ]
+      },
+      {
+        "id": "sec-20-5-1",
+        "title": "20.5.1 Volatile",
+        "content": "Adding volatile to the asm statement prevents the compiler from optimizing it away or moving it relative to other volatile operations. Use asm volatile when the instruction has side effects (like I/O, cpuid, rdtsc) and must not be eliminated.\n\nExample:\n\nClarification: Volatile prevents deletion of an asm operation that must execute, but it does not prohibit every motion relative to unrelated code and is not a full ordering barrier. Express data dependencies and memory effects. RDTSC is not serializing, and TSC ticks are not necessarily current core cycles.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "20.5.1 Volatile — listing 1",
+            "code": "asm volatile (\"rdtsc\" : \"=a\"(lo), \"=d\"(hi));"
+          }
+        ]
+      },
+      {
+        "id": "sec-20-6",
+        "title": "20.6 Using Inline Assembly with C Variables",
+        "content": ""
+      },
+      {
+        "id": "sec-20-6-1",
+        "title": "20.6.1 Accessing C Variables",
+        "content": "You can directly reference C variables in the operand list. The compiler ensures the variable is in the correct location (register or memory) based on the constraint."
+      },
+      {
+        "id": "sec-20-6-2",
+        "title": "20.6.2 Multiple Instructions",
+        "content": "You can include multiple assembly instructions in the template, separated by \\n\\t or ;.\n\nClarification: Add the cc clobber for ADD. When a multi-instruction template writes an output before consuming every input, use an early-clobber output such as =&r or restructure with a scratch output. Never modify a pure input operand without describing it as an output/read-write operand.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "20.6.2 Multiple Instructions — listing 1",
+            "code": "asm (\"movl %1, %%eax\\n\\t\"\n     \"addl %2, %%eax\\n\\t\"\n     \"movl %%eax, %0\"\n     : \"=r\"(result)\n     : \"r\"(a), \"r\"(b)\n     : \"eax\"\n     );"
+          }
+        ]
+      },
+      {
+        "id": "sec-20-6-3",
+        "title": "20.6.3 Labels in Inline Assembly",
+        "content": "You can use labels inside the template, but they must be unique across the whole program if not using special syntax. To avoid conflicts, use local labels (numbers) or %= to generate a unique number.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "20.6.3 Labels in Inline Assembly — listing 1",
+            "code": "asm (\"1: ... ; jmp 1b\" : : : );"
+          }
+        ]
+      },
+      {
+        "id": "sec-20-7",
+        "title": "20.7 Integration with C/C++ at File Level",
+        "content": "Besides inline assembly, you can write entire functions in separate .asm files and link them with C code. This is often cleaner for larger assembly routines."
+      },
+      {
+        "id": "sec-20-7-1",
+        "title": "20.7.1 Assembly Function Definition",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "myfunc.asm",
+            "code": "; myfunc.asm\nglobal myfunc\n\n; int myfunc(int a, int b)\nmyfunc:\n    mov eax, edi\n    add eax, esi\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-20-7-2",
+        "title": "20.7.2 C Declaration and Use",
+        "content": "\n\nClarification: The source main needs #include <stdio.h> before calling printf. For C++ use extern \"C\" int myfunc(int,int); to match the assembly symbol rather than C++ name mangling.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "20.7.2 C Declaration and Use — listing 1",
+            "code": "// main.c\nextern int myfunc(int a, int b);\nint main() {\n    int result = myfunc(5, 7);\n    printf(\"%d\\n\", result);\n    return 0;\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-20-7-3",
+        "title": "20.7.3 Build",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "20.7.3 Build — listing 1",
+            "code": "nasm -f elf64 myfunc.asm -o myfunc.o\ngcc -c main.c -o main.o\ngcc main.o myfunc.o -o program"
+          }
+        ]
+      },
+      {
+        "id": "sec-20-7-4",
+        "title": "20.7.4 Makefile Integration",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "make",
+            "title": "20.7.4 Makefile Integration — listing 1",
+            "code": "all: program\n\nprogram: main.o myfunc.o\n\tgcc main.o myfunc.o -o program\n\nmain.o: main.c\n\tgcc -c main.c -o main.o\n\nmyfunc.o: myfunc.asm\n\tnasm -f elf64 myfunc.asm -o myfunc.o\n\nclean:\n\trm -f *.o program"
+          }
+        ]
+      },
+      {
+        "id": "sec-20-8",
+        "title": "20.8 Debugging Mixed C/Assembly",
+        "content": "GDB can debug both C and assembly simultaneously if both are compiled with debug info.\n\n- Compile C with -g.\n- Assemble ASM with -g.\n\nThen use break on function names or line numbers, and stepi to step through assembly.\n\nExample:",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "20.8 Debugging Mixed C/Assembly — listing 1",
+            "code": "nasm -f elf64 -g myfunc.asm -o myfunc.o\ngcc -g -c main.c -o main.o\ngcc main.o myfunc.o -o program\ngdb ./program\nbreak myfunc\nrun\nstepi"
+          }
+        ]
+      },
+      {
+        "id": "sec-20-9",
+        "title": "20.9 Best Practices and Pitfalls",
+        "content": "- Always use extended asm, not basic asm.\n- Specify all clobbers: If you modify a register not listed as an output, include it in the clobber list, or use a constraint that makes it an operand.\n- Use volatile for side-effecting instructions to prevent elimination.\n- Be careful with %% in the template string.\n- Prefer separate assembly files for large functions; use inline asm for small snippets.\n- Respect the ABI: When calling C functions from inline asm, ensure correct register usage.\n- Test thoroughly: Inline asm is error-prone; use GDB to verify.\n\nClarification: Hidden CALL instructions in inline asm require modeling all call clobbers, stack alignment, red-zone use and memory effects. Prefer an ordinary C declaration and a separate assembly function for calls. A correct register list alone does not make an arbitrary inline call safe.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 20.1",
+            "code": "#include <stdio.h>\nint main() {\n    int a = 10, b = 20, result;\n    asm (\"addl %%ebx, %%eax\"\n         : \"=a\"(result)\n         : \"a\"(a), \"b\"(b)\n         );\n    printf(\"Sum: %d\\n\", result);\n    return 0;\n}",
+            "explanation": "Original source retained for comparison; use the corrected exercise solution and its build instructions."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 20.2",
+            "code": "#include <stdio.h>\nint main() {\n    unsigned int eax, ebx, ecx, edx;\n    char vendor[13];\n    asm volatile (\"cpuid\"\n                  : \"=a\"(eax), \"=b\"(ebx), \"=c\"(ecx), \"=d\"(edx)\n                  : \"a\"(0)\n                  );\n    ((unsigned int*)vendor)[0] = ebx;\n    ((unsigned int*)vendor)[1] = edx;\n    ((unsigned int*)vendor)[2] = ecx;\n    vendor[12] = '\\0';\n    printf(\"Vendor: %s\\n\", vendor);\n    return 0;\n}",
+            "explanation": "Original source retained for comparison; use the corrected exercise solution and its build instructions."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 20.3",
+            "code": "#include <stdio.h>\n#include <stdint.h>\nint main() {\n    uint64_t start_lo, start_hi, end_lo, end_hi;\n    asm volatile (\"rdtsc\" : \"=a\"(start_lo), \"=d\"(start_hi));\n    // some operation\n    for (int i = 0; i < 1000000; i++);\n    asm volatile (\"rdtsc\" : \"=a\"(end_lo), \"=d\"(end_hi));\n    uint64_t start = (start_hi << 32) | start_lo;\n    uint64_t end = (end_hi << 32) | end_lo;\n    printf(\"Cycles: %lu\\n\", end - start);\n    return 0;\n}",
+            "explanation": "Original source retained for comparison; use the corrected exercise solution and its build instructions."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 20.4",
+            "code": "#include <stdio.h>\nint main() {\n    float a[4] = {1.0, 2.0, 3.0, 4.0};\n    float b[4] = {5.0, 6.0, 7.0, 8.0};\n    float result[4];\n    asm volatile (\n        \"movaps %1, %%xmm0\\n\\t\"\n        \"movaps %2, %%xmm1\\n\\t\"\n        \"addps %%xmm1, %%xmm0\\n\\t\"\n        \"movaps %%xmm0, %0\"\n        : \"=m\"(result)\n        : \"m\"(a), \"m\"(b)\n        : \"xmm0\", \"xmm1\"\n    );\n    printf(\"%f %f %f %f\\n\", result[0], result[1], result[2], result[3]);\n    return 0;\n}",
+            "explanation": "Original source retained for comparison; use the corrected exercise solution and its build instructions."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 20.5",
+            "code": "global factorial\n\n; int factorial(int n)\nfactorial:\n    mov eax, 1\n    cmp edi, 0\n    je .done\n    mov ecx, edi\n.loop:\n    imul eax, ecx\n    dec ecx\n    jnz .loop\n.done:\n    ret\n\n#include <stdio.h>\nextern int factorial(int n);\nint main() {\n    int n = 5;\n    printf(\"%d! = %d\\n\", n, factorial(n));\n    return 0;\n}\n\nnasm -f elf64 factorial.asm -o factorial.o\ngcc -c main.c -o main.o\ngcc main.o factorial.o -o fact\n./fact",
+            "explanation": "Original source retained for comparison; use the corrected exercise solution and its build instructions."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-20-1',
-        title: 'Exercise 20.1: Reading Timestamp Counter with RDTSC',
-        description: 'Write inline assembly to read the 64-bit cycle count with rdtsc.',
-        solution: `uint64_t start_lo, start_hi;\nasm volatile ("rdtsc" : "=a"(start_lo), "=d"(start_hi));\nuint64_t cycles = (start_hi << 32) | start_lo;`,
-        solutionLanguage: 'c'
+        "id": "ex-20-1",
+        "title": "Exercise 20.1: Simple Inline Addition",
+        "description": "Write a C program that uses inline assembly to compute the sum of two integers and print the result.",
+        "solution": "#include <stdio.h>\nint main(void) {\n    int a=10, b=20, result=a;\n    __asm__(\"addl %1, %0\" : \"+r\"(result) : \"r\"(b) : \"cc\");\n    printf(\"Sum: %d\\n\",result);\n    return result != 30;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "\n\nSave as add.c; gcc -std=gnu11 -O2 add.c -o add; ./add prints Sum: 30. The +r output and cc clobber express all effects."
+      },
+      {
+        "id": "ex-20-2",
+        "title": "Exercise 20.2: `cpuid` Information",
+        "description": "Use inline assembly to call cpuid with leaf 0 and print the vendor ID string (stored in EBX, EDX, ECX as 12 characters).",
+        "solution": "#include <stdio.h>\n#include <string.h>\nint main() {\n    unsigned int eax, ebx, ecx, edx;\n    char vendor[13];\n    asm volatile (\"cpuid\"\n                  : \"=a\"(eax), \"=b\"(ebx), \"=c\"(ecx), \"=d\"(edx)\n                  : \"a\"(0)\n                  );\n    memcpy(vendor, &ebx, 4);\n    memcpy(vendor+4, &edx, 4);\n    memcpy(vendor+8, &ecx, 4);\n    vendor[12] = '\\0';\n    printf(\"Vendor: %s\\n\", vendor);\n    return 0;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "\n\nSave as vendor.c; gcc -std=gnu11 -O2 vendor.c -o vendor. memcpy avoids misalignment and strict-aliasing violations from casting the char buffer to unsigned int*. The vendor string is environment-dependent."
+      },
+      {
+        "id": "ex-20-3",
+        "title": "Exercise 20.3: `rdtsc` Timing",
+        "description": "Use rdtsc in a C program to measure the number of cycles taken by a simple function or loop.",
+        "solution": "#include <stdio.h>\n#include <stdint.h>\n#include <inttypes.h>\nstatic uint64_t ticks(void) {\n    uint32_t lo,hi;\n    __asm__ volatile(\"lfence\\n\\trdtsc\\n\\tlfence\"\n                     : \"=a\"(lo), \"=d\"(hi) : : \"memory\");\n    return ((uint64_t)hi<<32)|lo;\n}\nint main(void) {\n    volatile uint64_t sum=0;\n    uint64_t begin=ticks();\n    for(uint64_t i=0;i<1000000;i++) sum+=i;\n    uint64_t end=ticks();\n    printf(\"TSC ticks: %\" PRIu64 \"; sum: %\" PRIu64 \"\\n\",end-begin,sum);\n    return sum != UINT64_C(499999500000);\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "\n\nThe volatile accumulator gives observable work, and compiler memory barriers keep those memory accesses inside the interval. On targets where LFENCE provides execution ordering, the fences bound RDTSC; verify the target’s documented ordering behavior. This measures TSC ticks including loop loads/stores and fence overhead, not a universal core-cycle count. Pinning and repeated trials reduce scheduling noise."
+      },
+      {
+        "id": "ex-20-4",
+        "title": "Exercise 20.4: Inline SIMD",
+        "description": "Use inline assembly with SSE to add two 4-element float arrays and store result. Use movaps and addps with constraints.",
+        "solution": "#include <stdio.h>\nint main() {\n    _Alignas(16) float a[4] = {1.0, 2.0, 3.0, 4.0};\n    _Alignas(16) float b[4] = {5.0, 6.0, 7.0, 8.0};\n    _Alignas(16) float result[4];\n    asm volatile (\n        \"movaps %1, %%xmm0\\n\\t\"\n        \"movaps %2, %%xmm1\\n\\t\"\n        \"addps %%xmm1, %%xmm0\\n\\t\"\n        \"movaps %%xmm0, %0\"\n        : \"=m\"(result)\n        : \"m\"(a), \"m\"(b)\n        : \"xmm0\", \"xmm1\"\n    );\n    printf(\"%f %f %f %f\\n\", result[0], result[1], result[2], result[3]);\n    return 0;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "\n\nSave as simd.c; gcc -std=gnu11 -O2 simd.c -o simd. Explicit alignment makes MOVAPS legal. Array memory operands describe all 16 bytes and XMM clobbers describe the scratch registers. Expected output: 6, 8, 10, 12."
+      },
+      {
+        "id": "ex-20-5",
+        "title": "Exercise 20.5: Separate Assembly File",
+        "description": "Write a function in a separate assembly file that computes the factorial of an integer. Call it from C and print result.",
+        "solution": "; File: factorial.asm\nsection .text\nglobal factorial\n\n; int factorial(int n)\nfactorial:\n    test edi, edi\n    js .invalid\n    cmp edi, 12\n    ja .invalid\n    mov eax, 1\n    cmp edi, 0\n    je .done\n    mov ecx, edi\n.loop:\n    imul eax, ecx\n    dec ecx\n    jnz .loop\n.done:\n    ret\n.invalid:\n    mov eax, -1\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits\n\n; File: main.c\n#include <stdio.h>\nextern int factorial(int n);\nint main() {\n    int n = 5;\n    printf(\"%d! = %d\\n\", n, factorial(n));\n    return 0;\n}",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "factorial.asm\n\n\nmain.c\n\n\nBuild:\n\nSave each File block separately. nasm -f elf64 factorial.asm -o factorial.o; gcc main.c factorial.o -o fact; ./fact prints 5! = 120. Corrected int API accepts 0 through 12 and returns -1 for negative or overflowing inputs, avoiding an enormous negative-input loop."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why do you need to write %% in GCC extended asm strings?',
-        answer: 'Because % introduces operand placeholders like %0 or %1. To reference a literal hardware register like %%eax, you must escape the percent sign with %%.'
+        "question": "What is the difference between basic and extended inline assembly in GCC?",
+        "answer": "Basic asm is just a template with no operand contract. Extended asm lists inputs, outputs and clobbers so the compiler can allocate registers and model effects. Use it when exchanging data with C."
+      },
+      {
+        "question": "Why do you need to double the % in inline assembly templates?",
+        "answer": "In extended asm, percent introduces operand references or template escapes, so literal AT&T register names use double percent. It is not a printf rule; basic asm uses single-percent register syntax."
+      },
+      {
+        "question": "Explain the purpose of the clobber list. What happens if you omit a clobbered register?",
+        "answer": "Clobbers describe modifications not represented by operands. Omitting one can let the compiler keep a live value in a register that the asm destroys. Describe flags with cc and actual memory effects with operands or memory."
+      },
+      {
+        "question": "What does volatile do in an asm statement? When should you use it?",
+        "answer": "Volatile tells GCC the asm must not be discarded merely because outputs are unused. It does not order all unrelated code or provide a hardware fence; model dependencies and memory accesses explicitly."
+      },
+      {
+        "question": "How do you specify a read-write operand in extended asm? Provide an example.",
+        "answer": "int result=a; __asm__(\"addl %1,%0\" : \"+r\"(result) : \"r\"(b) : \"cc\"); The plus constraint says the operand is both read and written."
+      },
+      {
+        "question": "What is the \"memory\" clobber? When is it necessary?",
+        "answer": "A memory clobber tells the compiler that memory beyond the explicit operands may be accessed. It constrains compiler memory optimization but is not an atomic operation or CPU memory fence. Precise memory operands are preferable when possible."
+      },
+      {
+        "question": "Can inline assembly reference C variables directly? How?",
+        "answer": "Use input/output operand lists such as \"r\"(a), \"+r\"(a), or \"+m\"(counter). GCC substitutes the allocated location. Do not reference a C local by an assumed assembler label or silently modify input-only operands."
+      },
+      {
+        "question": "What are the advantages of using separate assembly files over inline assembly?",
+        "answer": "Separate functions have explicit ABI boundaries, can be debugged and assembled independently, and avoid complex inline constraints for larger routines. Calls add overhead, but correctness and maintainability often favor this design."
+      },
+      {
+        "question": "How do you link an assembly object file with a C program?",
+        "answer": "Assemble NASM with -f elf64, compile the C source, and link both objects with GCC for runtime/library support. Match symbols, signatures and ABI; use extern \"C\" in C++ and appropriate PIE-compatible addressing."
+      },
+      {
+        "question": "Write an inline assembly snippet that multiplies two integers and stores the result in a C variable, using only constraints and no explicit register names.",
+        "answer": "int result=a;\n__asm__(\"imull %1,%0\" : \"+r\"(result) : \"r\"(b) : \"cc\");\nThis uses compiler-chosen registers and returns the low 32 bits. Use inputs whose intended signed product fits when signed mathematical semantics are required."
       }
     ],
-    summary: ['Extended asm integrates assembly into high-level C programs.', 'Constraints and clobber lists maintain register state correctness.']
+    "summary": [
+      "Inline assembly embeds assembly code in C/C++, useful for special instructions and performance.",
+      "GCC extended asm syntax provides operands with constraints, clobbers, and volatile qualifier.",
+      "Constraints map operands to registers, memory, or immediates.",
+      "Clobber list informs the compiler of modified registers; \"memory\" is a memory barrier.",
+      "Volatile prevents optimization of side-effecting instructions.",
+      "Separate assembly files can be linked with C code, using extern declarations.",
+      "Mixed-language debugging is supported by GDB with debug symbols.",
+      "Always follow ABI and best practices to avoid subtle bugs.",
+      "In the next chapter, we'll explore performance optimization techniques, building on these foundations."
+    ]
   },
   {
     id: 21,
