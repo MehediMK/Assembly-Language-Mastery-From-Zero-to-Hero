@@ -2304,48 +2304,432 @@ ldrb r0, [r1]        ; load only 8 bits`
     title: 'Chapter 39: Bootloaders and Firmware Development',
     subtitle: 'Flash Memory Partitioning, VTOR Relocation, CRC Integrity, and Jump to App',
     learningObjectives: [
+      'Understand the purpose and architecture of bootloaders in embedded systems.',
       'Design flash memory layouts separating bootloader and application zones.',
       'Relocate the vector table to application space using the VTOR register.',
       'Set the Main Stack Pointer (MSR MSP) and branch to application reset handler.',
-      'Verify firmware binary integrity with CRC32 before execution.'
+      'Verify firmware binary integrity with CRC32 before execution.',
+      'Understand firmware update mechanisms and safety considerations.',
+      'Implement basic bootloader with application jump and CRC verification.'
     ],
     prerequisites: ['Chapters 1–38'],
     keyConcepts: [
+      'Bootloader: Small program that runs at startup, checks for updates, and jumps to application.',
       'VTOR (0xE000ED08) relocates the vector table from 0x08000000 to the app offset.',
       'The jump sequence sets MSP to the application stack and branches to app Reset_Handler.',
-      'Firmware headers include magic numbers, version, size, and checksums.'
+      'Firmware headers include magic numbers, version, size, and checksums.',
+      'Flash memory must be partitioned to prevent bootloader overwrite.',
+      'CRC32 provides error detection for firmware integrity verification.',
+      'Safe firmware update: validate new firmware before erasing old one.',
+      'Dual-bank flash enables atomic firmware updates (A/B partitioning).',
+      'Watchdog timer can recover from failed firmware updates.'
     ],
     diagramType: 'bootloaders',
     sections: [
       {
         id: 'sec-39-1',
-        title: '39.1 Bootloader Jump to Application Sequence',
-        content: `Assembly routine jumping from bootloader to application at 0x08004000:`,
+        title: '39.1 Why Bootloaders?',
+        content: `A bootloader is a small program that runs when the MCU powers up. Its primary purposes are:
+
+### Bootloader Functions
+1. **Firmware Update**: Receive new firmware via UART, USB, SPI, or other interface
+2. **Integrity Check**: Verify firmware is valid before executing
+3. **Application Selection**: Choose which application to run (dual-bank)
+4. **Recovery Mode**: Enter recovery if application is corrupted
+5. **Diagnostics**: Run self-tests or report system status
+
+### Boot Process
+1. MCU reset → Bootloader starts at 0x08000000
+2. Check if update is requested (button, magic number, etc.)
+3. If update: receive new firmware, verify, write to flash
+4. If no update: verify existing firmware integrity
+5. Jump to application at defined offset
+
+### Flash Memory Partitioning
+Typical layout for 512 KB flash:
+| Region | Address | Size | Purpose |
+|--------|---------|------|---------|
+| Bootloader | 0x08000000 | 16 KB | Bootloader code |
+| Application | 0x08004000 | 496 KB | User application |
+| Backup (optional) | - | 496 KB | Previous firmware |
+
+### Safety Considerations
+• Never erase bootloader while running from it
+• Verify firmware before erasing old one
+• Use backup/restore for critical applications
+• Implement watchdog for recovery
+• Consider power failure during update
+
+### Common Bootloader Protocols
+• XMODEM: Simple, widely supported
+• YMODEM: Improved XMODEM with 1K blocks
+• ST-Link: STM32 specific, fast
+• DFU (Device Firmware Upgrade): USB-based
+• Custom: Application-specific protocols`,
+        codeSnippets: []
+      },
+      {
+        id: 'sec-39-2',
+        title: '39.2 Flash Memory Layout and Protection',
+        content: `### Flash Memory Characteristics
+• Non-volatile: Retains data without power
+• Erase before write: Must erase sector/block before programming
+• Limited writes: Typically 10,000-100,000 erase cycles
+• Sector erase: STM32F4 has sectors of 16KB, 64KB, 128KB
+• Write protection: Can protect bootloader from accidental erasure
+
+### Flash Programming Sequence
+1. Unlock flash (if write-protected)
+2. Erase sector(s)
+3. Program word/byte
+4. Verify (optional)
+5. Lock flash
+
+### Flash Registers (STM32F4)
+| Register | Address | Purpose |
+|----------|---------|---------|
+| FLASH_ACR | 0x40023C00 | Access control (latency, prefetch) |
+| FLASH_KEYR | 0x40023C04 | Unlock key |
+| FLASH_SR | 0x40023C0C | Status register |
+| FLASH_CR | 0x40023C10 | Control register (erase, program) |
+| FLASH_OPTCR | 0x40023C14 | Option control (write protection) |
+
+### Write Protection
+STM32 provides sector-level write protection:
+• Read-out protection (ROP): Prevents debug access
+• Write protection (WRP): Prevents sector erasure/programming
+• Option bytes: Configured at boot or via debugger
+
+### Dual-Bank Flash
+Some MCUs support dual-bank flash:
+• Bank A: Current firmware
+• Bank B: New firmware (or backup)
+• Can erase one bank while running from other
+• Enables atomic firmware updates
+
+### Flash Erase Considerations
+• Erase time: 1-8 seconds per sector (depending on size)
+• Power consumption: High during erase
+• Risk of power loss: Can corrupt data
+• Mitigation: Checksum, journaling, dual-bank`,
         codeSnippets: [
           {
             language: 'arm',
-            title: 'bootloader_jump.s',
+            title: 'Flash Unlock and Erase',
+            code: `.equ FLASH_KEYR, 0x40023C04
+.equ FLASH_SR,   0x40023C0C
+.equ FLASH_CR,   0x40023C10
+
+flash_unlock:
+    ldr r0, =FLASH_KEYR
+    ldr r1, =0x45670123    ; KEY1
+    str r1, [r0]
+    ldr r1, =0xCDEF89AB    ; KEY2
+    str r1, [r0]
+    bx lr
+
+flash_erase_sector:
+    ; R0 = sector number (0-7 for STM32F407)
+    ldr r1, =FLASH_CR
+wait_bsy:
+    ldr r2, =FLASH_SR
+    ldr r3, [r2]
+    tst r3, #(1<<16)       ; BSY flag
+    bne wait_bsy
+
+    ldr r3, [r1]
+    orr r3, r3, #(1<<13)   ; SER (sector erase)
+    orr r3, r3, r0, lsl #3 ; sector number
+    str r3, [r1]
+
+    ; Start erase
+    ldr r3, [r1]
+    orr r3, r3, #(1<<16)   ; STRT
+    str r3, [r1]
+
+    ; Wait for completion
+wait_bsy2:
+    ldr r2, =FLASH_SR
+    ldr r3, [r2]
+    tst r3, #(1<<16)
+    bne wait_bsy2
+
+    ; Clear flags
+    ldr r3, [r1]
+    bic r3, r3, #(1<<13)
+    str r3, [r1]
+    bx lr`
+          }
+        ]
+      },
+      {
+        id: 'sec-39-3',
+        title: '39.3 CRC32 Firmware Verification',
+        content: `CRC32 (Cyclic Redundancy Check) is commonly used to verify firmware integrity.
+
+### CRC32 Algorithm
+CRC32 computes a 32-bit checksum based on polynomial division:
+• Polynomial: 0x04C11DB7 (standard) or 0xEDB88320 (reversed)
+• Initial value: 0xFFFFFFFF
+• Final XOR: 0xFFFFFFFF
+
+### Why CRC32?
+• Fast to compute (can be hardware-accelerated)
+• Good error detection (detects 99.9999% of errors)
+• Simple implementation
+• Well-understood and widely supported
+
+### Firmware Header Structure
+A firmware header contains metadata for verification:
+| Field | Size | Purpose |
+|-------|------|---------|
+| Magic | 4 bytes | Identifies valid firmware (e.g., 0xDEADBEEF) |
+| Version | 4 bytes | Firmware version number |
+| Size | 4 bytes | Firmware size in bytes |
+| CRC32 | 4 bytes | CRC32 of firmware data |
+| Entry | 4 bytes | Reset handler address |
+| Reserved | 4 bytes | Future use |
+
+### CRC32 Implementation in Assembly
+CRC32 can be implemented efficiently using:
+1. Table-based: Pre-computed 256-entry table (fast)
+2. Bitwise: Compute one bit at a time (slow, small code)
+3. Hardware: Use CRC peripheral if available (fastest)
+
+### Verification Process
+1. Read firmware header from flash
+2. Verify magic number
+3. Compute CRC32 over firmware data
+4. Compare with stored CRC32
+5. If match: valid firmware, jump to application
+6. If mismatch: invalid firmware, stay in bootloader`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'CRC32 Table-Based Implementation',
+            code: `.section .data
+crc32_table:
+    .word 0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA
+    .word 0x076DC419, 0x706AF48F, 0xE963A535, 0x9E6495A3
+    ; ... (256 entries total)
+
+.section .text
+; R0 = data pointer, R1 = data length
+; Returns R0 = CRC32 value
+crc32_calc:
+    push {r4-r7, lr}
+    ldr r2, =0xFFFFFFFF    ; initial CRC
+    ldr r3, =crc32_table
+
+crc_loop:
+    ldrb r4, [r0], #1      ; load byte, increment pointer
+    eor r5, r2, r4         ; CRC ^ byte
+    and r6, r5, #0xFF      ; index = (CRC ^ byte) & 0xFF
+    ldr r7, [r3, r6, lsl #2]  ; table[index]
+    lsr r2, r2, #8         ; CRC >> 8
+    eor r2, r2, r7         ; (CRC >> 8) ^ table[index]
+    subs r1, r1, #1
+    bne crc_loop
+
+    eor r0, r2, #0xFFFFFFFF  ; final XOR
+    pop {r4-r7, pc}`
+          }
+        ]
+      },
+      {
+        id: 'sec-39-4',
+        title: '39.4 Bootloader Jump to Application',
+        content: `The critical bootloader function is jumping to the application. This requires careful setup.
+
+### Jump Sequence
+1. Disable all interrupts (CPSID i)
+2. Update VTOR to application vector table
+3. Load application stack pointer from vector table
+4. Load application reset handler address
+5. Branch to application reset handler
+
+### VTOR (Vector Table Offset Register)
+Address: 0xE000ED08
+Purpose: Relocates the vector table from default (0x00000000) to any 256-byte aligned address
+
+### Stack Pointer Setup
+The application's initial stack pointer is stored at offset 0 in its vector table. The bootloader must load this value and set MSP.
+
+### Important Considerations
+• Disable all peripherals before jump (prevent spurious interrupts)
+• Clear pending interrupts in NVIC
+• Disable SysTick (it may conflict with application)
+• Ensure clock configuration is compatible
+• Consider reset vs. jump (some peripherals need reset)
+
+### Failed Jump Recovery
+If application fails to start (e.g., invalid code), bootloader should:
+1. Detect failure (watchdog, timeout, or return)
+2. Log the failure
+3. Attempt recovery (re-flash, enter recovery mode)
+4. Never get stuck in an infinite loop
+
+### Application Requirements
+For the application to work after bootloader jump:
+1. Must have valid vector table at expected address
+2. Must handle its own clock configuration
+3. Must initialize its own peripherals
+4. Should not assume any specific startup state`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'Complete Bootloader Jump',
             code: `.equ APP_BASE, 0x08004000
 .equ VTOR,     0xE000ED08
+.equ NVIC_ICPR0, 0xE000E280   ; Interrupt Clear-Pending
 
 JumpToApplication:
-    ; Disable interrupts
+    ; Step 1: Disable all interrupts
     cpsid i
 
-    ; Set VTOR to application vector table base
+    ; Step 2: Disable SysTick
+    ldr r0, =0xE000E010       ; SysTick_CSR
+    mov r1, #0
+    str r1, [r0]
+
+    ; Step 3: Clear all NVIC pending interrupts
+    ldr r0, =NVIC_ICPR0
+    ldr r1, =0xFFFFFFFF
+    str r1, [r0]              ; Clear 0-31
+    add r0, r0, #4
+    str r1, [r0]              ; Clear 32-63
+    ; ... continue for all NVIC registers
+
+    ; Step 4: Update VTOR
     ldr r0, =APP_BASE
     ldr r1, =VTOR
     str r0, [r1]
 
-    ; Load initial Stack Pointer from first word of app vector table
-    ldr r2, [r0]
+    ; Step 5: Load initial stack pointer
+    ldr r2, [r0]              ; first word = initial SP
     msr msp, r2
 
-    ; Load Reset Handler address from second word
-    ldr r3, [r0, #4]
+    ; Step 6: Load reset handler address
+    ldr r3, [r0, #4]          ; second word = reset handler
 
-    ; Jump to application!
-    bx r3`
+    ; Step 7: Jump to application
+    bx r3
+
+    ; Should never reach here
+    b .`
+          }
+        ]
+      },
+      {
+        id: 'sec-39-5',
+        title: '39.5 Firmware Update Protocol',
+        content: `A robust firmware update protocol ensures reliable field updates.
+
+### Update States
+1. **Idle**: No update in progress
+2. **Receiving**: Downloading new firmware
+3. **Validating**: Verifying CRC32 and other checks
+4. **Flashing**: Writing to flash memory
+5. **Verifying**: Reading back and comparing
+6. **Complete**: Update successful
+7. **Failed**: Update failed, restore backup
+
+### Simple UART Update Protocol
+1. Host sends "UPDATE" command
+2. Bootloader enters receive mode
+3. Host sends firmware size (4 bytes)
+4. Host sends firmware data (N bytes)
+5. Host sends CRC32 (4 bytes)
+6. Bootloader verifies CRC
+7. If valid: erase old firmware, write new, verify
+8. If invalid: reject, stay in bootloader
+
+### Packet Structure
+| Field | Size | Purpose |
+|-------|------|---------|
+| Sync | 2 bytes | 0xAA55 synchronization |
+| Command | 1 byte | 0x01=Write, 0x02=Verify, 0x03=Jump |
+| Length | 2 bytes | Payload length |
+| Payload | N bytes | Data |
+| CRC16 | 2 bytes | CRC16 of packet |
+
+### Error Handling
+• Timeout: If no data for N seconds, abort
+• CRC mismatch: Request retransmission
+• Flash error: Retry, then abort
+• Power loss: Dual-bank prevents corruption
+• Communication error: Retry with backoff
+
+### Security Considerations
+• Authenticate firmware (HMAC, digital signature)
+• Encrypt firmware (prevent reverse engineering)
+• Prevent downgrade attacks (version checking)
+• Secure boot chain (root of trust)`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'Simple Firmware Update Handler',
+            code: `; UART-based firmware update
+; Assumes USART2 already initialized
+
+uart_update_handler:
+    push {r4-r7, lr}
+
+    ; Wait for "UPDATE" command
+    bl uart_receive_string
+    ldr r0, =update_cmd
+    bl strcmp
+    cmp r0, #0
+    bne .not_update
+
+    ; Send "OK" response
+    ldr r0, =ok_msg
+    bl uart_send_string
+
+    ; Receive firmware size (4 bytes)
+    bl uart_receive_word      ; R0 = size
+    mov r4, r0               ; R4 = firmware size
+
+    ; Receive firmware data
+    ldr r5, =APP_BASE
+    mov r6, #0               ; R6 = bytes received
+
+.receive_loop:
+    cmp r6, r4
+    beq .receive_done
+    bl uart_receive_byte
+    strb r0, [r5, r6]
+    add r6, r6, #1
+    b .receive_loop
+
+.receive_done:
+    ; Receive CRC32
+    bl uart_receive_word
+    mov r7, r0               ; R7 = expected CRC
+
+    ; Calculate CRC32 over received data
+    mov r0, r5               ; data pointer
+    mov r1, r4               ; data length
+    bl crc32_calc
+
+    ; Compare CRCs
+    cmp r0, r7
+    bne .crc_error
+
+    ; CRC OK - verify and jump
+    bl verify_firmware
+    cmp r0, #0
+    bne .verify_error
+
+    ; Update successful
+    ldr r0, =success_msg
+    bl uart_send_string
+    b JumpToApplication
+
+.crc_error:
+.verify_error:
+.not_update:
+    pop {r4-r7, pc}`
           }
         ]
       }
@@ -2357,14 +2741,71 @@ JumpToApplication:
         description: 'Write the assembly jump sequence for an application located at 0x08010000.',
         solution: `ldr r0, =0x08010000\nldr r1, =0xE000ED08\nstr r0, [r1]\nldr r2, [r0]\nmsr msp, r2\nldr r3, [r0, #4]\nbx r3`,
         solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-39-2',
+        title: 'Exercise 39.2: Flash Erase Implementation',
+        description: 'Write a function to erase flash sector 5 (0x08020000-0x0803FFFF) on STM32F4.',
+        solution: 'Unlock flash (write KEY1=0x45670123, KEY2=0xCDEF89AB to FLASH_KEYR). Wait for BSY clear. Set SER bit and sector number in FLASH_CR. Set STRT bit. Wait for BSY clear.',
+        solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-39-3',
+        title: 'Exercise 39.3: CRC32 Verification',
+        description: 'Implement CRC32 calculation for a 1KB firmware image at 0x08004000.',
+        solution: 'Use table-based CRC32 algorithm. Initialize CRC=0xFFFFFFFF. For each byte, XOR with CRC, use as index into 256-entry table, update CRC. Final XOR with 0xFFFFFFFF.',
+        solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-39-4',
+        title: 'Exercise 39.4: Bootloader Header Structure',
+        description: 'Design a firmware header with magic number, version, size, CRC32, and entry point.',
+        solution: 'Offset 0: Magic (0xDEADBEEF), Offset 4: Version, Offset 8: Size, Offset 12: CRC32, Offset 16: Entry point. Total 20 bytes. Application starts at offset 32 (20-byte header + 12 bytes padding for alignment).',
+        solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-39-5',
+        title: 'Exercise 39-5: Dual-Bank Update Logic',
+        description: 'Design a dual-bank bootloader that can update firmware without power loss risk.',
+        solution: 'Bank A (0x08000000): Current firmware. Bank B (0x08040000): Backup/New firmware. On update: receive new firmware to Bank B, verify CRC, swap banks by updating VTOR. If power loss during update, old firmware in Bank A remains valid.',
+        solutionLanguage: 'arm'
       }
     ],
     practiceQuestions: [
       {
         question: 'Why is it necessary to update VTOR before jumping to an application?',
-        answer: 'If VTOR is not updated, hardware interrupts occurring in the application would look up handler addresses in the bootloader\'s vector table at 0x08000000, causing crashes or unintended bootloader execution.'
+        answer: 'If VTOR is not updated, hardware interrupts occurring in the application would look up handler addresses in the bootloader\'s vector table at 0x08000000, causing crashes or unintended bootloader execution. VTOR tells the NVIC where the application\'s vector table is located.'
+      },
+      {
+        question: 'What is the purpose of a magic number in a firmware header?',
+        answer: 'A magic number (e.g., 0xDEADBEEF) is a unique identifier that validates the firmware header. If the magic number is incorrect, the bootloader knows the firmware is invalid or corrupted. It prevents jumping to random data that might look like a valid vector table.'
+      },
+      {
+        question: 'Why should you verify firmware before erasing the old one?',
+        answer: 'If you erase the old firmware first and the new firmware is invalid, the device becomes bricked (no working firmware). By verifying first, you ensure the new firmware is valid before destroying the old one, allowing fallback if something goes wrong.'
+      },
+      {
+        question: 'What is the difference between a reset and a jump to application?',
+        answer: 'A reset reinitializes all peripherals and starts from the reset vector. A jump only sets VTOR, MSP, and branches to the application. Jump is faster but leaves peripherals in unknown state. Reset is safer but slower and may affect external hardware.'
+      },
+      {
+        question: 'How does dual-bank flash improve firmware update reliability?',
+        answer: 'Dual-bank flash has two independent flash banks. The bootloader can write new firmware to the unused bank while running from the used bank. If power loss occurs during the update, the old firmware remains intact. After successful verification, the bootloader can swap banks or update VTOR.'
+      },
+      {
+        question: 'What security considerations are important for bootloaders?',
+        answer: 'Key security considerations: 1) Authenticate firmware (HMAC/signature) to prevent malicious code. 2) Encrypt firmware to prevent reverse engineering. 3) Prevent downgrade attacks with version checking. 4) Secure boot chain with root of trust. 5) Write protection for bootloader flash sectors.'
       }
     ],
-    summary: ['Bootloaders enable safe firmware field updates.', 'VTOR relocation and MSP re-initialization ensure seamless application execution.']
+    summary: [
+      'Bootloaders enable safe firmware field updates and recovery.',
+      'VTOR relocation and MSP re-initialization ensure seamless application execution.',
+      'Flash memory must be carefully partitioned and protected.',
+      'CRC32 provides reliable firmware integrity verification.',
+      'Dual-bank flash enables atomic updates without power loss risk.',
+      'Firmware headers contain metadata for validation and versioning.',
+      'Safe update protocols verify before erasing old firmware.',
+      'Security considerations include authentication, encryption, and anti-downgrade.'
+    ]
   }
 ];
