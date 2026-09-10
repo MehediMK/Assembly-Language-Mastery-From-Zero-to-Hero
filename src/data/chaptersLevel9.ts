@@ -9,28 +9,81 @@ export const CHAPTERS_LEVEL_9: Chapter[] = [
     title: 'Chapter 45: ARM Assembly Essentials',
     subtitle: '64-Bit ARM (AArch64), Three-Operand Syntax, CSEL, and Linux System Calls',
     learningObjectives: [
+      'Understand ARM architecture fundamentals and its RISC design principles.',
       'Master the ARM64 (AArch64) register set: x0–x30, SP, and zero register XZR.',
       'Write three-operand instructions: add x0, x1, x2.',
       'Understand ARM64 load/store addressing modes (pre/post-index, register offset).',
       'Use CSEL (Conditional Select) for branchless conditional assignments.',
-      'Invoke Linux ARM64 system calls using SVC #0 (syscall number in x8).'
+      'Invoke Linux ARM64 system calls using SVC #0 (syscall number in x8).',
+      'Compare ARM64 with x86-64 architecture.',
+      'Understand ARM64 calling convention (AAPCS64).'
     ],
     prerequisites: ['Chapters 1–22'],
     keyConcepts: [
-      'ARM is a RISC load/store architecture with 31 general registers.',
-      'Instructions are fixed 32-bit words.',
-      'SVC #0 enters the Linux kernel with syscall number in x8.'
+      'ARM: Advanced RISC Machine - dominant mobile/embedded architecture.',
+      'RISC load/store architecture: Only load/store access memory.',
+      '31 general-purpose registers (X0-X30) + SP + XZR.',
+      'Fixed 32-bit instruction width (except Thumb mode).',
+      'Conditional execution via predication (CSEL, CCMP).',
+      'SVC #0: Supervisor Call (system call instruction).',
+      'AAPCS64: ARM64 Procedure Call Standard.',
+      'Little-endian by default (configurable).'
     ],
     diagramType: 'arm_assembly',
     sections: [
       {
         id: 'sec-45-1',
-        title: '45.1 Linux ARM64 Hello World & Conditional Select',
-        content: `Complete runnable ARM64 Linux program and branchless CSEL usage:`,
+        title: '45.1 ARM64 Architecture Overview',
+        content: `ARM64 (AArch64) is the 64-bit execution state of ARM architecture.
+
+### Why ARM64?
+• Dominant in mobile devices (smartphones, tablets)
+• Growing in servers (AWS Graviton, Apple M-series)
+• Power-efficient design
+• Strong performance per watt
+
+### ARM64 Register Set
+| Register | Purpose | Description |
+|----------|---------|-------------|
+| X0-X7 | Arguments/Results | Function arguments, return values |
+| X8 | Indirect Result | Structure return address |
+| X9-X15 | Temporary | Caller-saved |
+| X16-X17 | Intra-procedure | Linker scratch registers |
+| X18 | Platform | Reserved for OS |
+| X19-X28 | Callee-saved | Must be preserved |
+| X29 (FP) | Frame Pointer | Stack frame management |
+| X30 (LR) | Link Register | Return address |
+| SP | Stack Pointer | Stack pointer (not general purpose) |
+| XZR | Zero Register | Always reads as 0, writes discarded |
+
+### Key Differences from x86-64
+| Feature | x86-64 | ARM64 |
+|---------|--------|-------|
+| Register count | 16 | 31 |
+| Instruction size | Variable (1-15 bytes) | Fixed 32-bit |
+| Operand format | 2-operand | 3-operand |
+| Zero register | None (use XOR) | XZR |
+| Memory access | Any instruction | Load/Store only |
+| Condition codes | RFLAGS | PSTATE (NZCV) |
+
+### ARM64 Calling Convention (AAPCS64)
+• X0-X7: Arguments/return values
+• X8: Indirect result (struct return)
+• X9-X15: Temporary (caller-saved)
+• X19-X28: Callee-saved
+• X29 (FP): Frame pointer
+• X30 (LR): Return address
+
+### Instruction Categories
+1. **Data Processing**: ADD, SUB, AND, ORR, EOR
+2. **Load/Store**: LDR, STR, LDP, STP
+3. **Branch**: B, BL, BR, BLR, RET
+4. **System**: SVC, MRS, MSR
+5. **SIMD/FP**: FMLA, FADD, LD1, ST1`,
         codeSnippets: [
           {
             language: 'arm',
-            title: 'hello_arm64.s',
+            title: 'ARM64 Hello World',
             code: `.section .data
 msg:
     .ascii "Hello, World!\\n"
@@ -51,14 +104,397 @@ _start:
     mov x0, #0          // status = 0
     mov x8, #93         // syscall number for exit on ARM64
     svc #0`
-          },
+          }
+        ]
+      },
+      {
+        id: 'sec-45-2',
+        title: '45.2 ARM64 Instruction Set',
+        content: `ARM64 uses fixed-length 32-bit instructions with 3-operand format.
+
+### Data Processing Instructions
+```arm
+// Arithmetic
+add x0, x1, x2        // x0 = x1 + x2
+sub x0, x1, x2        // x0 = x1 - x2
+add x0, x1, #42       // x0 = x1 + 42 (immediate)
+
+// Logical
+and x0, x1, x2        // x0 = x1 & x2
+orr x0, x1, x2        // x0 = x1 | x2
+eor x0, x1, x2        // x0 = x1 ^ x2
+
+// Shift
+lsl x0, x1, #3        // x0 = x1 << 3
+lsr x0, x1, #3        // x0 = x1 >> 3 (logical)
+asr x0, x1, #3        // x0 = x1 >> 3 (arithmetic)
+
+// Multiply
+mul x0, x1, x2        // x0 = x1 * x2
+madd x0, x1, x2, x3   // x0 = x1 * x2 + x3
+```
+
+### Load/Store Instructions
+```arm
+// Basic load/store
+ldr x0, [x1]          // Load 64-bit from [x1]
+ldr w0, [x1]          // Load 32-bit from [x1]
+str x0, [x1]          // Store 64-bit to [x1]
+
+// Immediate offset
+ldr x0, [x1, #8]      // Load from [x1 + 8]
+str x0, [x1, #8]      // Store to [x1 + 8]
+
+// Register offset
+ldr x0, [x1, x2]      // Load from [x1 + x2]
+ldr x0, [x1, x2, LSL #3]  // Load from [x1 + x2*8]
+
+// Pre-indexed (update address)
+ldr x0, [x1, #8]!     // x1 = x1 + 8, then load
+
+// Post-indexed (update after)
+ldr x0, [x1], #8      // Load, then x1 = x1 + 8
+
+// Pair load/store (efficient)
+ldp x0, x1, [sp]      // Load x0 from [sp], x1 from [sp+8]
+stp x0, x1, [sp, #-16]!  // sp = sp-16, store x0, x1
+```
+
+### Branch Instructions
+```arm
+// Unconditional
+b label               // Branch to label
+bl label              // Branch with link (call)
+br x0                 // Branch to address in x0
+blr x0                // Branch with link to x0
+
+// Conditional
+cbz x0, label         // Branch if x0 == 0
+cbnz x0, label        // Branch if x0 != 0
+b.eq label            // Branch if equal (Z=1)
+b.ne label            // Branch if not equal (Z=0)
+b.lt label            // Branch if less than
+b.ge label            // Branch if greater or equal
+
+// Return
+ret                   // Return (branch to x30/LR)
+```
+
+### Conditional Select (CSEL)
+Branchless conditional assignments:
+```arm
+// max(x0, x1) -> x0
+cmp x0, x1
+csel x0, x0, x1, ge  // if x0 >= x1, x0 = x0; else x0 = x1
+
+// min(x0, x1) -> x0
+cmp x0, x1
+csel x0, x0, x1, le  // if x0 <= x1, x0 = x0; else x0 = x1
+
+// abs(x0) -> x0
+cmp x0, #0
+csel x0, x0, x0, ge  // if x0 >= 0, keep; else negate
+cneg x0, x0, lt      // Conditional negate
+```
+
+### Bit Manipulation
+```arm
+// Count leading zeros
+clz x0, x1           // x0 = number of leading zeros in x1
+
+// Bit field insert
+bfi x0, x1, #0, #8   // Insert bits [7:0] of x1 into x0
+
+// Reverse bits
+rbit x0, x1          // Reverse all bits in x1
+rev x0, x1           // Reverse bytes (endian swap)
+````,
+        codeSnippets: [
           {
             language: 'arm',
-            title: 'arm64_csel.s (Branchless Maximum)',
-            code: `// max: x0 = a, x1 = b, returns max in x0
-max:
-    cmp w0, w1
-    csel w0, w0, w1, ge   // if w0 >= w1, w0 = w0; else w0 = w1
+            title: 'ARM64 Instruction Examples',
+            code: `.section .text
+.global _start
+
+_start:
+    // Data processing
+    mov x0, #10
+    mov x1, #20
+    add x2, x0, x1     // x2 = 30
+    sub x3, x1, x0     // x3 = 10
+    mul x4, x0, x1     // x4 = 200
+    
+    // Logical operations
+    and x5, x0, x1     // Bitwise AND
+    orr x6, x0, x1     // Bitwise OR
+    eor x7, x0, x1     // Bitwise XOR
+    
+    // Shift operations
+    lsl x0, x0, #2     // Left shift by 2
+    lsr x1, x1, #1     // Right shift by 1
+    
+    // Conditional select
+    cmp x0, x1
+    csel x2, x0, x1, ge  // x2 = max(x0, x1)
+    
+    // Load/Store
+    adr x3, data       // Get address
+    ldr x4, [x3]       // Load value
+    add x4, x4, #1     // Increment
+    str x4, [x3]       // Store back
+    
+    // Branch
+    b compare
+    
+compare:
+    cmp x0, x1
+    b.eq equal
+    b.gt greater
+    b.lt less
+    
+equal:
+    // x0 == x1
+    b done
+    
+greater:
+    // x0 > x1
+    b done
+    
+less:
+    // x0 < x1
+    
+done:
+    // Exit
+    mov x0, #0
+    mov x8, #93
+    svc #0
+
+.section .data
+data:
+    .quad 42`
+          }
+        ]
+      },
+      {
+        id: 'sec-45-3',
+        title: '45.3 ARM64 System Calls and Calling Convention',
+        content: `Linux ARM64 system calls use SVC #0 instruction.
+
+### System Call Convention
+| Register | Purpose |
+|----------|---------|
+| X8 | System call number |
+| X0-X5 | Arguments |
+| X0 | Return value |
+
+### Common System Calls
+| Number | Name | Arguments |
+|--------|------|-----------|
+| 64 | write | X0=fd, X1=buf, X2=count |
+| 63 | read | X0=fd, X1=buf, X2=count |
+| 93 | exit | X0=status |
+| 56 | openat | X0=dirfd, X1=pathname, X2=flags |
+| 57 | close | X0=fd |
+| 220 | getpid | None |
+
+### Function Call Convention (AAPCS64)
+```arm
+// Caller-saved (temporary) registers
+// X0-X7: Arguments/return values
+// X9-X15: Temporary
+
+// Callee-saved registers
+// X19-X28: Must be preserved
+
+// Stack frame
+// X29 (FP): Frame pointer
+// X30 (LR): Return address
+```
+
+### Function Prologue/Epilogue
+```arm
+// Prologue
+func:
+    stp x29, x30, [sp, #-16]!  // Save FP and LR
+    mov x29, sp                 // Set frame pointer
+    stp x19, x20, [sp, #-16]!  // Save callee-saved regs
+    
+    // ... function body ...
+    
+    // Epilogue
+    ldp x19, x20, [sp], #16    // Restore callee-saved regs
+    ldp x29, x30, [sp], #16    // Restore FP and LR
+    ret                         // Return
+```
+
+### Structure Passing
+```arm
+// Small structures: passed in registers
+// Large structures: passed by pointer
+
+// Return small struct in X0-X1
+struct ret_small() {
+    return {.a = 1, .b = 2};
+}
+// Result: X0=1, X1=2
+
+// Return large struct via X8 pointer
+struct ret_large() {
+    static struct result;
+    result.a = 1;
+    result.b = 2;
+    return result;
+}
+// X8 = pointer to result
+```
+
+### Stack Alignment
+ARM64 requires 16-byte stack alignment:
+```arm
+// Allocate stack frame (must be multiple of 16)
+sub sp, sp, #32     // 32 is multiple of 16
+// ... use stack ...
+add sp, sp, #32     // Restore stack
+````,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'ARM64 System Call Examples',
+            code: `.section .text
+.global _start
+
+_start:
+    // write(1, "Hello\\n", 6)
+    mov x0, #1              // fd = stdout
+    adr x1, msg             // buffer address
+    mov x2, #6              // count
+    mov x8, #64             // sys_write = 64
+    svc #0                  // syscall
+
+    // read(0, buf, 100)
+    mov x0, #0              // fd = stdin
+    adr x1, buf             // buffer address
+    mov x2, #100            // max count
+    mov x8, #63             // sys_read = 63
+    svc #0                  // syscall
+    // X0 = bytes read
+
+    // exit(0)
+    mov x0, #0              // status
+    mov x8, #93             // sys_exit = 93
+    svc #0
+
+.section .data
+msg:
+    .ascii "Hello, World!\\n"
+
+.section .bss
+buf:
+    .skip 100`
+          }
+        ]
+      },
+      {
+        id: 'sec-45-4',
+        title: '45.4 ARM64 vs x86-64 Comparison',
+        content: `Key differences between ARM64 and x86-64 architectures.
+
+### Instruction Set Philosophy
+| Aspect | x86-64 | ARM64 |
+|--------|--------|-------|
+| Design | CISC (complex) | RISC (simple) |
+| Instruction size | Variable (1-15 bytes) | Fixed (4 bytes) |
+| Instruction count | 1000+ | ~200 base |
+| Decoder complexity | High | Low |
+| Power consumption | Higher | Lower |
+
+### Register Usage
+| Feature | x86-64 | ARM64 |
+|---------|--------|-------|
+| General registers | 16 | 31 |
+| Zero register | None | XZR |
+| Argument registers | RDI, RSI, RDX, RCX, R8, R9 | X0-X7 |
+| Callee-saved | RBX, RBP, R12-R15 | X19-X28 |
+| Return address | Stack | X30 (LR) |
+
+### Memory Access
+| Feature | x86-64 | ARM64 |
+|---------|--------|-------|
+| Addressing modes | Many (base+idx*scale+disp) | Few (base+offset) |
+| Memory operands | In any instruction | Load/Store only |
+| Alignment | Not required | Recommended |
+| Atomic operations | LOCK prefix | LDXR/STXR |
+
+### Control Flow
+| Feature | x86-64 | ARM64 |
+|---------|--------|-------|
+| Condition codes | RFLAGS (all instructions) | PSTATE (compare only) |
+| Conditional move | CMOV | CSEL |
+| Indirect jump | JMP [addr] | BR x0 |
+| Function call | CALL (pushes RIP) | BL (stores in LR) |
+| Return | RET (pops RIP) | RET (branches to LR) |
+
+### System Calls
+| Feature | x86-64 (Linux) | ARM64 (Linux) |
+|---------|----------------|---------------|
+| Instruction | syscall | svc #0 |
+| Number register | RAX | X8 |
+| Arguments | RDI, RSI, RDX, R10, R8, R9 | X0-X5 |
+| Return | RAX | X0 |
+
+### Code Density Example
+x86-64: `add rax, [rbx+rcx*8+16]` (4 bytes)
+ARM64:
+```arm
+add x9, x1, x2, LSL #3    // x9 = x2 * 8
+ldr x0, [x9, #16]          // Load from x9 + 16
+// 8 bytes total
+```
+
+### When to Use Which?
+| Use Case | Recommended |
+|----------|-------------|
+| Desktop/Server | x86-64 (compatibility) |
+| Mobile/Embedded | ARM64 (power efficiency) |
+| Cloud servers | ARM64 (power/cost) |
+| Legacy support | x86-64 |
+| Battery life critical | ARM64 |`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'ARM64 vs x86-64 Side-by-Side',
+            code: `// Function: int add(int a, int b) { return a + b; }
+
+// x86-64
+add:
+    lea eax, [rdi+rsi]
+    ret
+
+// ARM64
+add:
+    add w0, w0, w1
+    ret
+
+// strlen function
+
+// x86-64
+strlen:
+    xor eax, eax
+.loop:
+    cmp byte [rdi+rax], 0
+    je .done
+    inc eax
+    jmp .loop
+.done:
+    ret
+
+// ARM64
+strlen:
+    mov x2, x0
+.loop:
+    ldrb w1, [x2], #1
+    cbnz w1, .loop
+    sub x0, x2, x0
     ret`
           }
         ]
@@ -71,15 +507,62 @@ max:
         description: 'Sum an array of 10 words using indexed addressing LDR W1, [X0, X2, LSL #2].',
         solution: `sum_array:\n    mov w3, #0\n    mov w4, #0\n.loop:\n    cmp w4, w2; b.ge .done\n    ldr w5, [x0, x4, lsl #2]\n    add w3, w3, w5\n    add w4, w4, #1\n    b .loop\n.done:\n    mov w0, w3\n    ret`,
         solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-45-2',
+        title: 'Exercise 45.2: ARM64 Factorial',
+        description: 'Write a recursive factorial function in ARM64 assembly.',
+        solution: 'Use X0 for argument/return, save X30 (LR) on stack for recursion. Base case: n<=1 return 1. Recursive: save n, call factorial(n-1), multiply n*result.'
+      },
+      {
+        id: 'ex-45-3',
+        title: 'Exercise 45.3: CSEL Implementation',
+        description: 'Implement absolute value function using CSEL.',
+        solution: 'cmp x0, #0; csel x0, x0, x0, ge; cneg x0, x0, lt (or use conditional negate). This avoids branch instructions.'
+      },
+      {
+        id: 'ex-45-4',
+        title: 'Exercise 45.4: ARM64 String Copy',
+        description: 'Write a strcpy function in ARM64 assembly.',
+        solution: 'Loop: ldrb w2, [x1], #1; strb w2, [x0], #1; cbnz w2, loop. Uses post-indexed addressing for efficient pointer advancement.'
       }
     ],
     practiceQuestions: [
       {
         question: 'What is the role of the XZR register in ARM64?',
-        answer: 'XZR (and 32-bit WZR) is a dedicated zero register that always evaluates to 0 when read, and discards all data written to it, eliminating the need to zero registers with xor.'
+        answer: 'XZR (and 32-bit WZR) is a dedicated zero register that always evaluates to 0 when read, and discards all data written to it, eliminating the need to zero registers with xor. It simplifies many operations like moving immediates and comparing with zero.'
+      },
+      {
+        question: 'How does ARM64 conditional execution differ from x86-64?',
+        answer: 'ARM64 uses PSTATE flags (NZCV) set by CMP instructions, then CSEL/conditional branches. x86-64 uses RFLAGS set by any instruction, with CMOV for conditional moves. ARM64 requires explicit comparison before conditional operation, while x86-64 can test during any instruction.'
+      },
+      {
+        question: 'Why is ARM64 more power-efficient than x86-64?',
+        answer: 'ARM64 uses fixed-length instructions (simpler decoder), load/store architecture (fewer memory accesses), and cleaner RISC design (less silicon). x86-64 variable instructions require complex decoding, and memory operands in ALU instructions increase memory traffic.'
+      },
+      {
+        question: 'What is the ARM64 calling convention (AAPCS64)?',
+        answer: 'AAPCS64 defines: X0-X7 for arguments/returns, X8 for indirect result, X9-X15 as caller-saved temporaries, X19-X28 as callee-saved, X29 as frame pointer, X30 as link register (return address). Stack must be 16-byte aligned.'
+      },
+      {
+        question: 'How do ARM64 system calls differ from x86-64?',
+        answer: 'ARM64 uses SVC #0 instruction with syscall number in X8 and arguments in X0-X5. x86-64 uses syscall instruction with number in RAX and arguments in RDI, RSI, RDX, R10, R8, R9. Different syscall numbers on Linux (e.g., write: ARM64=64, x86-64=1).'
+      },
+      {
+        question: 'What is CSEL and why is it useful?',
+        answer: 'CSEL (Conditional Select) performs branchless conditional assignment: CSEL Xd, Xn, Xm, cond selects Xn if condition true, Xm if false. It avoids branch penalties in simple conditionals like max/min/abs functions, improving performance on pipelined processors.'
       }
     ],
-    summary: ['ARM64 is the world\'s leading mobile and power-efficient server architecture.', 'Three-operand format and CSEL eliminate branch penalties.']
+    summary: [
+      'ARM64 is the world\'s leading mobile and power-efficient server architecture.',
+      'Three-operand format and CSEL eliminate branch penalties.',
+      'Fixed 32-bit instructions simplify decoding and improve power efficiency.',
+      'Load/store architecture reduces memory access complexity.',
+      'AAPCS64 defines register usage and calling conventions.',
+      'SVC #0 is the ARM64 system call instruction.',
+      'ARM64 excels in power-constrained and mobile environments.',
+      'Understanding ARM64 is essential for modern systems programming.'
+    ]
   },
   {
     id: 46,
