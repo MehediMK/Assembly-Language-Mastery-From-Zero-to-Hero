@@ -1122,46 +1122,432 @@ STR R1, [R0]
     title: 'Chapter 37: Interrupt Handling and Real-Time Constraints',
     subtitle: 'NVIC, Hardware Stacking, Priority Preemption, Tail-Chaining, and ISRs',
     learningObjectives: [
-      'Understand the ARM Cortex-M Nested Vectored Interrupt Controller (NVIC).',
+      'Understand what interrupts are and how they enable responsive embedded systems.',
+      'Learn the interrupt architecture of ARM Cortex-M: vector table, NVIC, priority levels.',
+      'Master the ARM Cortex-M Nested Vectored Interrupt Controller (NVIC).',
+      'Write interrupt service routines (ISRs) in assembly, handling register stacking and proper return.',
       'Master hardware automatic stacking of R0-R3, R12, LR, PC, and xPSR.',
       'Implement interrupt service routines (ISRs) returning via EXC_RETURN.',
+      'Configure peripheral interrupts (e.g., UART receive, timer update) and enable them through the NVIC.',
+      'Manage shared data between ISRs and main code safely (volatile, critical sections).',
+      'Analyze real-time constraints: interrupt latency, priority inversion, and deadline miss.',
+      'Implement a simple interrupt-driven UART echo and timer-based LED toggling.',
       'Analyze tail-chaining, interrupt latency, and priority preemption.'
     ],
     prerequisites: ['Chapters 1–36'],
     keyConcepts: [
+      'Interrupt: An asynchronous event that causes the CPU to suspend current execution and jump to a handler.',
+      'Interrupt Service Routine (ISR): The function that runs in response to an interrupt.',
+      'Vector table: A table of function pointers for each exception/interrupt number.',
+      'NVIC (Nested Vectored Interrupt Controller): Hardware that manages interrupt priorities and enabling.',
+      'Priority levels: Higher priority interrupts preempt lower ones; Cortex-M supports 0-255.',
+      'Exception entry/exit: Hardware automatically stacks registers (R0-R3, R12, LR, PC, xPSR) and unstacks on return.',
       'Hardware automatically pushes 8 registers to the stack on interrupt entry in 12 cycles.',
+      'Tail-chaining: Back-to-back interrupts skip unnecessary state restore/save, reducing latency.',
       'Tail-chaining allows back-to-back interrupts without unstacking/restacking.',
+      'Interrupt latency: Time from interrupt request to execution of the first ISR instruction.',
+      'Critical section: Code region where interrupts are disabled to protect shared data.',
+      'Real-time constraint: A deadline that must be met; violation may cause system failure.',
       'ISRs must clear peripheral interrupt flags to avoid infinite re-entry.'
     ],
     diagramType: 'interrupts_nvic',
     sections: [
       {
         id: 'sec-37-1',
-        title: '37.1 Interrupt-Driven UART Receiver ISR',
-        content: `Handling incoming serial characters in an ISR:`,
+        title: '37.1 Introduction to Interrupts',
+        content: `In embedded systems, polling peripherals (continuously checking status flags) wastes CPU cycles and makes the system unresponsive. Interrupts provide a mechanism for hardware to notify the CPU when an event occurs (e.g., byte received, timer expired). The CPU suspends the current task, executes an Interrupt Service Routine (ISR), then returns to the interrupted code.
+
+### Polling vs Interrupts
+| Aspect | Polling | Interrupts |
+|--------|---------|------------|
+| CPU Usage | Continuous checking (wastes cycles) | Sleep until event (efficient) |
+| Response Time | Variable (depends on loop) | Deterministic (interrupt latency) |
+| Complexity | Simple | More complex (ISR design) |
+| Power | Higher (CPU always active) | Lower (CPU can sleep) |
+| Real-time | Poor (unbounded latency) | Excellent (bounded latency) |
+
+### When to Use Polling
+• Very high-frequency events (>1 MHz)
+• Simple systems with no other tasks
+• When interrupt latency is too high
+• Debugging and testing
+
+### When to Use Interrupts
+• Low-frequency events (button presses, UART)
+• Power-sensitive applications
+• Real-time systems with deadlines
+• Multi-tasking systems`,
+        codeSnippets: []
+      },
+      {
+        id: 'sec-37-2',
+        title: '37.2 ARM Cortex-M Interrupt Architecture',
+        content: `### Vector Table
+The vector table contains addresses of exception and interrupt handlers. For Cortex-M4:
+• Entries 0-15: System exceptions (NMI, HardFault, SysTick, etc.)
+• Entries 16+: Device-specific interrupts (GPIO, UART, TIM, etc.)
+
+### NVIC (Nested Vectored Interrupt Controller)
+The NVIC manages interrupt enabling, prioritization, and nesting.
+
+Key NVIC Registers:
+| Register | Address | Purpose |
+|----------|---------|---------|
+| ISER0-7 | 0xE000E100 | Interrupt Set-Enable (write 1 to enable) |
+| ICER0-7 | 0xE000E180 | Interrupt Clear-Enable (write 1 to disable) |
+| ISPR0-7 | 0xE000E200 | Interrupt Set-Pending |
+| ICPR0-7 | 0xE000E280 | Interrupt Clear-Pending |
+| IABR0-7 | 0xE000E300 | Interrupt Active Bit (read-only) |
+| IP0-239 | 0xE000E400 | Interrupt Priority (byte-accessible) |
+
+### Priority and Preemption
+• Higher priority = lower priority number (0 is highest)
+• If BIR> in BASEPRI, interrupts with priority ≥ BIR are masked
+• Higher priority interrupt can preempt lower priority ISR
+• Same priority cannot nest (must finish before another same-priority can run)
+
+### Exception Entry Sequence (Hardware Automatic)
+1. Stacking: Push R0-R3, R12, LR, PC, xPSR to stack (8 registers, 32 bytes)
+2. Fetch: Load handler address from vector table
+3. Execute: Jump to handler
+
+Total entry time: 12 cycles (minimum)
+
+### EXC_RETURN
+When an ISR finishes, it executes BX LR where LR contains a special EXC_RETURN value:
+• 0xFFFFFFF1: Return to Thread mode using MSP
+• 0xFFFFFFF9: Return to Thread mode using PSP
+• 0xFFFFFFFD: Return to Thread mode using PSP, handshake pending exception
+
+### Tail-Chaining
+If a second interrupt is pending when the first ISR completes, the CPU skips restoring stacked registers and immediately enters the second ISR. This reduces transition latency to just 6 cycles.
+
+### Interrupt Latency
+The time from interrupt request to execution of first ISR instruction:
+• Minimum: 12 cycles (exception entry)
+• With tail-chaining: 6 cycles (back-to-back)
+• With late-arriving: 12 cycles (higher priority arrives during stacking)`,
         codeSnippets: [
           {
             language: 'arm',
-            title: 'uart_isr.s',
+            title: 'NVIC Enable Interrupt Example',
+            code: `; Enable USART2 interrupt (IRQ 38)
+; NVIC_ISER1 covers IRQs 32-63
+; IRQ 38 - 32 = bit 6 in ISER1
+
+LDR R0, =0xE000E104   ; NVIC_ISER1
+MOV R1, #(1 << 6)     ; bit 6 = IRQ 38
+STR R1, [R0]
+
+; Set priority (optional, default is 0)
+LDR R0, =0xE000E426   ; NVIC_IPR9 (IRQ 38 / 4 = 9.5 -> byte 38)
+MOV R1, #0x80         ; priority 128 (mid-range)
+STRB R1, [R0]
+
+; Enable global interrupts
+CPSIE i`
+          }
+        ]
+      },
+      {
+        id: 'sec-37-3',
+        title: '37.3 Writing Interrupt Service Routines',
+        content: `### ISR Structure
+An ISR must:
+1. Be in the vector table (or use dynamic vector if VTOR allows)
+2. Save any registers it modifies (unless using AAPCS-compliant code)
+3. Clear the peripheral interrupt flag (critical!)
+4. Return with BX LR (EXC_RETURN)
+
+### Critical: Clear Interrupt Flag
+If you don't clear the interrupt flag, the ISR will be called repeatedly in an infinite loop!
+
+### Saving Context
+Cortex-M hardware saves R0-R3, R12, LR, PC, xPSR automatically. If your ISR uses R4-R11, you must save/restore them manually:
+
+Push {r4-r11}    ; save
+; ... ISR code ...
+Pop {r4-r11}     ; restore
+
+### ISR Best Practices
+1. Keep ISRs short and fast
+2. Clear interrupt flags as early as possible
+3. Don't use blocking operations (while loops)
+4. Use volatile for shared variables
+5. Consider using a ring buffer for UART receive
+6. Avoid function calls that might re-enter
+
+### ISR Example: UART Receive
+When a byte is received, store it in a buffer or echo back immediately.`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'UART Receive ISR',
             code: `.thumb_func
 .global USART2_IRQHandler
 USART2_IRQHandler:
-    ; Check RXNE
-    ldr r0, =USART2_SR
-    ldr r1, [r0]
-    tst r1, #(1 << 5)
-    beq .exit
+    ; Check RXNE flag
+    LDR R0, =USART2_SR
+    LDR R1, [R0]
+    TST R1, #(1 << 5)    ; RXNE
+    BEQ .exit
 
-    ; Read byte (reading DR automatically clears RXNE flag!)
-    ldr r0, =USART2_DR
-    ldr r2, [r0]
+    ; Read byte (clears RXNE automatically!)
+    LDR R0, =USART2_DR
+    LDR R2, [R0]
 
-    ; Store byte in ring buffer or echo back
-    ldr r0, =USART2_DR
-    str r2, [r0]
+    ; Echo back
+    LDR R0, =USART2_DR
+    STR R2, [R0]
 
 .exit:
-    bx lr             ; hardware returns from exception via EXC_RETURN`
+    BX LR                ; Return via EXC_RETURN
+
+; Timer ISR example
+.thumb_func
+.global TIM2_IRQHandler
+TIM2_IRQHandler:
+    PUSH {r4-r11}        ; Save callee-saved registers
+
+    ; Toggle LED
+    LDR R0, =GPIOD_ODR
+    LDR R1, [R0]
+    EOR R1, R1, #(1<<12)
+    STR R1, [R0]
+
+    ; Clear update flag
+    LDR R0, =TIM2_SR
+    MOV R1, #0
+    STR R1, [R0]
+
+    POP {r4-r11}         ; Restore registers
+    BX LR`
+          }
+        ]
+      },
+      {
+        id: 'sec-37-4',
+        title: '37.4 Shared Data and Critical Sections',
+        content: `When ISRs and main code access shared variables, race conditions can occur.
+
+### The Problem
+Main code reads a 32-bit variable. Between reading the low and high halves, an ISR modifies it. The result is corrupted.
+
+### Solution: Disable Interrupts
+CPSID i          ; disable interrupts
+; critical section
+; ... access shared data ...
+CPSIE i          ; enable interrupts
+
+### Solution: Use Atomic Operations
+For single-bit or single-word updates, use LDREX/STREX (exclusive load/store) or atomic registers like BSRR.
+
+### Volatile Keyword
+Variables modified by ISRs must be declared volatile in C. In assembly, this means:
+• Always reload from memory before use
+• Always store back immediately after modification
+• Don't cache in registers across function calls
+
+### Priority-Based Critical Sections
+To only mask lower-priority interrupts:
+MOV R0, #0x80    ; priority threshold
+MSR BASEPRI, R0  ; only interrupts with priority >= 0x80 are masked
+; ... critical section ...
+MOV R0, #0
+MSR BASEPRI, R0  ; unmask all
+
+This allows higher-priority interrupts to still preempt!`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'Critical Section Examples',
+            code: `; Example 1: Disable all interrupts
+CPSID i
+LDR R0, =shared_var
+LDR R1, [R0]
+ADD R1, R1, #1
+STR R1, [R0]
+CPSIE i
+
+; Example 2: Priority-based masking
+MOV R0, #0x80
+MSR BASEPRI, R0   ; mask low-priority interrupts
+; ... access shared data ...
+MOV R0, #0
+MSR BASEPRI, R0   ; unmask all
+
+; Example 3: Atomic increment using LDREX/STREX
+retry:
+    LDREX R0, [R1]     ; exclusive load
+    ADD R0, R0, #1
+    STREX R2, R0, [R1] ; exclusive store
+    CMP R2, #0
+    BNE retry            ; retry if store failed`
+          }
+        ]
+      },
+      {
+        id: 'sec-37-5',
+        title: '37.5 Complete Example: Interrupt-Driven UART Echo',
+        content: `We'll create a complete interrupt-driven UART echo system. The main loop can sleep or do other work while UART receive is handled in the background.
+
+### System Architecture
+1. UART receive interrupt triggers on each byte received
+2. ISR stores byte in a ring buffer
+3. Main loop reads from buffer and echoes back
+4. Uses circular buffer to prevent data loss
+
+### Ring Buffer Implementation
+A ring buffer uses two pointers: head (write position) and tail (read position).
+• When head == tail: buffer empty
+• When (head+1) % SIZE == tail: buffer full
+• Head advances on write, tail advances on read
+
+### Advantages over Polling
+• CPU can sleep or do other work while waiting
+• No bytes lost even if main loop is busy
+• Deterministic response time
+• Lower power consumption`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'Interrupt-Driven UART with Ring Buffer',
+            code: `.equ BUFFER_SIZE, 64
+.equ BUFFER_MASK, 63
+
+.section .bss
+rx_head: .space 4
+rx_tail: .space 4
+rx_buffer: .space BUFFER_SIZE
+
+.section .text
+.thumb_func
+.global USART2_IRQHandler
+USART2_IRQHandler:
+    PUSH {r4-r7, lr}
+
+    ; Check RXNE
+    LDR R0, =USART2_SR
+    LDR R1, [R0]
+    TST R1, #(1<<5)
+    BEQ .exit
+
+    ; Read byte
+    LDR R0, =USART2_DR
+    LDRB R4, [R0]
+
+    ; Store in ring buffer
+    LDR R5, =rx_head
+    LDR R6, [R5]
+    LDR R7, =rx_buffer
+    STRB R4, [R7, R6]
+
+    ; Advance head
+    ADD R6, R6, #1
+    AND R6, R6, #BUFFER_MASK
+    STR R6, [R5]
+
+.exit:
+    POP {r4-r7, pc}
+
+; Main: echo bytes from buffer
+.global main
+main:
+    LDR r4, =rx_tail
+    LDR r5, =rx_head
+    LDR r6, =rx_buffer
+
+.loop:
+    CPSIE i            ; enable interrupts
+    WFI                ; sleep until interrupt
+
+    ; Check if buffer has data
+    LDR r0, [r4]       ; tail
+    LDR r1, [r5]       ; head
+    CMP r0, r1
+    BEQ .loop          ; empty, sleep again
+
+    ; Read byte from buffer
+    LDRB r2, [r6, r0]
+    ADD r0, r0, #1
+    AND r0, r0, #BUFFER_MASK
+    STR r0, [r4]
+
+    ; Echo back
+    CPSID i
+    LDR r7, =USART2_SR
+.wait_tx:
+    LDR r3, [r7]
+    TST r3, #(1<<7)
+    BEQ .wait_tx
+    LDR r7, =USART2_DR
+    STR r2, [r7]
+    CPSIE i
+
+    B .loop`
+          }
+        ]
+      },
+      {
+        id: 'sec-37-6',
+        title: '37.6 Debugging Interrupt-Driven Code',
+        content: `Debugging ISRs can be challenging. Common issues and solutions:
+
+### Common ISR Bugs
+1. Not clearing interrupt flag → infinite ISR loop
+2. Stack overflow in ISR (too many local variables)
+3. Race conditions with shared data
+4. Priority inversion (low-priority holds resource, high-priority waits)
+5. Interrupt storm (too many interrupts, CPU never returns to main)
+
+### Debugging Techniques
+1. Toggle an LED at ISR entry/exit to verify it's being called
+2. Use a counter variable to count ISR invocations
+3. Check HardFault status registers for crash analysis
+4. Use logic analyzer to verify interrupt timing
+5. Enable only one interrupt at a time during development
+
+### HardFault Analysis
+When a HardFault occurs, check:
+• CFSR (Configurable Fault Status Register): Shows fault type
+• HFSR (HardFault Status Register): Shows hard fault source
+• MMFAR (MemManage Fault Address): Shows faulting address
+• BFAR (Bus Fault Address): Shows faulting address
+
+Common causes:
+• Stack overflow (corrupts other memory)
+• Jumping to invalid address
+• Accessing peripheral without clock enabled
+• Unaligned access (on Cortex-M0)`,
+        codeSnippets: [
+          {
+            language: 'arm',
+            title: 'HardFault Handler with LED Indicator',
+            code: `.thumb_func
+.global HardFault_Handler
+HardFault_Handler:
+    ; Turn on red LED (PD14) to indicate fault
+    LDR R0, =0x40020C18   ; GPIOD_BSRR
+    MOV R1, #(1<<14)      ; set bit 14
+    STR R1, [R0]
+
+    ; Read fault registers for debugging
+    LDR R0, =0xE000ED28   ; CFSR
+    LDR R1, [R0]
+    LDR R2, =0xE000ED2C   ; HFSR
+    LDR R3, [R2]
+
+    ; Loop forever (infinite loop for debugger)
+    B .
+
+; Usage Fault Handler
+.thumb_func
+.global UsageFault_Handler
+UsageFault_Handler:
+    LDR R0, =0x40020C18
+    MOV R1, #(1<<15)      ; PD15
+    STR R1, [R0]
+    B .`
           }
         ]
       }
@@ -1171,7 +1557,48 @@ USART2_IRQHandler:
         id: 'ex-37-1',
         title: 'Exercise 37.1: Enable IRQ in NVIC',
         description: 'Enable USART2 (IRQ 38) in NVIC_ISER1.',
-        solution: `LDR R0, =0xE000E104   ; NVIC_ISER1\nMOV R1, #(1 << 6)      ; 38 - 32 = bit 6\nSTR R1, [R0]`,
+        solution: `LDR R0, =0xE000E104   ; NVIC_ISER1
+MOV R1, #(1 << 6)     ; 38 - 32 = bit 6
+STR R1, [R0]`,
+        solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-37-2',
+        title: 'Exercise 37.2: Timer Interrupt',
+        description: 'Write the ISR for TIM2 update interrupt. Toggle PD12 and clear the UIF flag.',
+        solution: `TIM2_IRQHandler:
+    LDR R0, =GPIOD_ODR
+    LDR R1, [R0]
+    EOR R1, R1, #(1<<12)
+    STR R1, [R0]
+    LDR R0, =TIM2_SR
+    MOV R1, #0
+    STR R1, [R0]
+    BX LR`,
+        solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-37-3',
+        title: 'Exercise 37.3: Priority Configuration',
+        description: 'Set USART2 interrupt priority to 64 (higher than default 128).',
+        solution: `; NVIC_IPR9 (IRQ 38 is byte 38 in priority register space)
+LDR R0, =0xE000E426
+MOV R1, #64           ; priority 64
+STRB R1, [R0]`,
+        solutionLanguage: 'arm'
+      },
+      {
+        id: 'ex-37-4',
+        title: 'Exercise 37.4: Nested Interrupts',
+        description: 'Explain what happens when a higher-priority interrupt occurs during a lower-priority ISR.',
+        solution: 'The higher-priority interrupt preempts the lower-priority ISR. Hardware saves additional context, and the higher-priority ISR executes. When it completes, the lower-priority ISR resumes. This is called interrupt nesting.',
+        solutionLanguage: 'text'
+      },
+      {
+        id: 'ex-37-5',
+        title: 'Exercise 37.5: Ring Buffer Design',
+        description: 'Design a ring buffer for UART receive with 128-byte capacity. Show the head/tail update logic.',
+        solution: 'Use head (write pointer) and tail (read pointer). On receive: buffer[head] = byte; head = (head + 1) & 127. On read: byte = buffer[tail]; tail = (tail + 1) & 127. Empty when head == tail.',
         solutionLanguage: 'arm'
       }
     ],
@@ -1179,9 +1606,38 @@ USART2_IRQHandler:
       {
         question: 'What is tail-chaining in ARM Cortex-M?',
         answer: 'Tail-chaining is a hardware optimization where if a second interrupt is pending while an ISR finishes, the CPU skips restoring the stacked registers and immediately enters the second ISR, reducing transition latency to just 6 cycles.'
+      },
+      {
+        question: 'What is the difference between polling and interrupts?',
+        answer: 'Polling requires the CPU to continuously check status flags in a loop, wasting cycles. Interrupts allow the hardware to signal the CPU when an event occurs, enabling efficient, deterministic response with lower latency and power consumption.'
+      },
+      {
+        question: 'Why must ISRs clear the interrupt flag?',
+        answer: 'If the interrupt flag is not cleared, the NVIC will immediately re-enter the ISR after it returns, creating an infinite loop that prevents the main code from executing and wastes CPU time.'
+      },
+      {
+        question: 'What is EXC_RETURN and why is it used?',
+        answer: 'EXC_RETURN is a special value loaded into the Link Register (LR) during exception entry. When the ISR executes BX LR, the hardware recognizes the EXC_RETURN value and automatically restores the stacked registers, returning to the interrupted code.'
+      },
+      {
+        question: 'How do you protect shared data between ISR and main code?',
+        answer: 'Methods include: 1) Disable interrupts (CPSID i/CPSIE i). 2) Use priority-based masking (BASEPRI). 3) Use atomic operations (LDREX/STREX). 4) Use hardware atomic registers (BSRR). 5) Use a ring buffer with proper synchronization.'
+      },
+      {
+        question: 'What happens during a HardFault?',
+        answer: 'A HardFault occurs for serious errors like invalid memory access, stack overflow, or executing invalid instructions. The CPU pushes registers to the stack, jumps to HardFault_Handler, and sets fault status registers (CFSR, HFSR) for debugging.'
       }
     ],
-    summary: ['ISRs provide microsecond responsiveness to asynchronous hardware events.', 'The NVIC manages preemption and deterministic prioritization.']
+    summary: [
+      'ISRs provide microsecond responsiveness to asynchronous hardware events.',
+      'The NVIC manages preemption and deterministic prioritization.',
+      'Hardware stacking/unstacking reduces ISR overhead.',
+      'Tail-chaining enables efficient back-to-back interrupt handling.',
+      'Always clear interrupt flags to prevent infinite ISR loops.',
+      'Use critical sections to protect shared data.',
+      'Keep ISRs short and non-blocking for best performance.',
+      'Debug ISRs with LED indicators and fault register analysis.'
+    ]
   },
   {
     id: 38,
