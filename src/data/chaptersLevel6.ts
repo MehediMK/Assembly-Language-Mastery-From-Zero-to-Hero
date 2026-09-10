@@ -1468,102 +1468,368 @@ export const CHAPTERS_LEVEL_6: Chapter[] = [
     ]
   },
   {
-    id: 32,
-    slug: 'chapter-32-project-5-integrating-assembly-with-c',
-    level: 6,
-    levelTitle: 'Advanced Projects',
-    title: 'Chapter 32: Project 5: Integrating Assembly with C',
-    subtitle: 'Fast Math Library: Calling C from Assembly & Assembly Kernels in C Programs',
-    learningObjectives: [
-      'Build a cohesive mixed-language C and Assembly software architecture.',
-      'Call assembly functions from C using matching headers and ABI prototypes.',
-      'Invoke C library routines (printf) directly from pure assembly.',
-      'Set up multi-target Makefiles with GCC linking.'
+    "id": 32,
+    "slug": "chapter-32-project-5-integrating-assembly-with-c",
+    "level": 6,
+    "levelTitle": "Advanced Projects",
+    "title": "Chapter 32: Project 5: Integrating Assembly with C",
+    "subtitle": "Fast Math Library: Calling C from Assembly & Assembly Kernels in C Programs",
+    "learningObjectives": [
+      "Understand how to integrate assembly language with C programs at the file and function level.",
+      "Master the process of writing assembly functions that follow the System V AMD64 ABI and can be called from C.",
+      "Learn how to call C library functions (like printf) from assembly.",
+      "Use header files to declare external functions and share constants between C and assembly.",
+      "Build and link mixed C/assembly projects using gcc and a Makefile.",
+      "Debug mixed-language programs using GDB with source-level breakpoints and assembly stepping.",
+      "Apply integration techniques to create a high-performance library with assembly kernels and C orchestration."
     ],
-    prerequisites: ['Chapters 1–31'],
-    keyConcepts: [
-      'C headers declare extern functions with matching prototypes.',
-      'Variadic functions like printf require al=0 to indicate zero floating-point registers.',
-      'gcc -no-pie links assembly object files with the standard C runtime.'
+    "prerequisites": [
+      "Solid understanding of x86-64 assembly, registers, and instructions (Chapters 1–13).",
+      "Mastery of calling conventions, stack frames, and the ABI (Chapters 10, 19).",
+      "Familiarity with C programming and compilation.",
+      "Knowledge of inline assembly basics (Chapter 20).",
+      "Experience with modular programming and linking (Chapter 15)."
     ],
-    diagramType: 'project_c_integration',
-    sections: [
+    "keyConcepts": [
+      "Mixed-language programming combines assembly and C, leveraging C for high-level logic and assembly for performance-critical or hardware-specific code.",
+      "The System V AMD64 ABI defines how functions pass arguments (first six in rdi, rsi, rdx, rcx, r8, r9) and return values (rax for integers).",
+      "Caller-saved registers can be freely modified; callee-saved registers must be preserved.",
+      "When calling C from assembly, link with gcc and declare external symbols using extern.",
+      "Header files (.h for C, .inc for assembly) provide consistent declarations.",
+      "Alignment of the stack (16-byte before call) is mandatory.",
+      "Variadic functions like printf require al set to the number of vector registers used (usually 0 for integer-only calls).",
+      "GDB can debug both C and assembly simultaneously when both are compiled with -g."
+    ],
+    "diagramType": "project_c_integration",
+    "sections": [
       {
-        id: 'sec-32-1',
-        title: '32.1 Fast Math Library Integration',
-        content: `Implementing assembly kernels and calling them from a C driver:`,
-        codeSnippets: [
+        "id": "sec-32-1",
+        "title": "32.1 Introduction to Integrating Assembly with C",
+        "content": "C is the lingua franca of systems programming, but sometimes you need the low-level control or performance of assembly. Integrating the two allows you to write most of the program in C for productivity, while isolating hot spots or hardware-specific code in assembly. This chapter presents a complete project that demonstrates the typical workflow.\n\nWhy mix?\n- Performance: Hand-optimized assembly can outperform compiler-generated code for critical kernels (e.g., SIMD, bit manipulation).\n- Hardware access: Instructions like cpuid, rdtsc, and in/out are not directly available in C without inline assembly or intrinsics.\n- Learning: Understanding how C constructs map to assembly improves your low-level skills.\n\nApproaches:\n1. Separate assembly files: Write assembly functions in .asm files, assemble with NASM, and link with C object files.\n2. Inline assembly: Embed assembly in C using GCC extended asm (covered in Chapter 20).\n3. Compiler intrinsics: Use built-in functions that map to single instructions (not covered here).\n\nThis chapter focuses on separate assembly files, which is the cleanest and most scalable method for substantial assembly code.\n\nClarification: Assembly is not automatically faster than optimized C, and separate calls can add overhead. Privileged port I/O instructions still require suitable OS permission; putting them in assembly does not bypass privilege checks."
+      },
+      {
+        "id": "sec-32-2",
+        "title": "32.2 Review of ABI and Calling Conventions",
+        "content": "To interface correctly, both sides must agree on:\n\n- Argument passing: first six integer/pointer arguments in rdi, rsi, rdx, rcx, r8, r9; additional on stack.\n- Return value: rax for integer/pointer; xmm0 for floating-point.\n- Callee-saved registers: rbx, rbp, r12–r15. The assembly function must preserve these if it modifies them.\n- Caller-saved registers: rax, rcx, rdx, rsi, rdi, r8–r11 can be freely modified.\n- Stack alignment: Before a call, rsp must be 16-byte aligned. At function entry, rsp is 8 mod 16.\n- Variadic functions: For functions like printf, al must be set to the number of vector registers used to pass arguments (0 if no floating-point arguments).\n\nWhen writing assembly functions called from C, we follow these rules exactly.\n\nClarification: The first-six rule concerns ordinary integer/pointer arguments. Floating arguments use XMM registers, and aggregates follow ABI classification. AL communicates the vector-register argument count (or allowed upper bound), not the total number of printf arguments."
+      },
+      {
+        "id": "sec-32-3",
+        "title": "32.3 Project Overview: Fast Math Library",
+        "content": "We'll build a small library of assembly functions that perform operations that are either tedious or not directly expressible in C, and then call them from a C main program.\n\nFunctions to implement in assembly:\n\n1. int fast_abs(int x) – returns absolute value without branching.\n2. int max_of_three(int a, int b, int c) – returns maximum of three integers.\n3. int sum_array(int *arr, int len) – sums an array of integers.\n4. int popcount64(unsigned long long x) – counts set bits in a 64-bit integer.\n5. void swap_int(int *a, int *b) – swaps two integers in memory.\n6. int is_power_of_two(unsigned int x) – returns 1 if x is a power of two, 0 otherwise.\n\nC program (main.c) calls these functions, prints results using printf, and verifies correctness.\n\nWe'll also create a header file fastmath.h with prototypes for C, and an assembly header fastmath.inc with extern declarations and constants."
+      },
+      {
+        "id": "sec-32-4",
+        "title": "32.4 Writing the Assembly Functions",
+        "content": "We'll create fastmath.asm with global symbols for each function."
+      },
+      {
+        "id": "sec-32-4-1",
+        "title": "32.4.1 fast_abs",
+        "content": "Branchless absolute value using sign mask.\n\nClarification: The positive absolute value of INT_MIN is not representable in int. This routine returns the unchanged INT_MIN bit pattern for that one input; its contract explicitly documents the result rather than claiming a representable mathematical absolute value. Use a wider or unsigned return type for the full magnitude.",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'fastmath.asm',
-            code: `global fast_abs, max_of_three, sum_array, is_power_of_two
-
-section .text
-fast_abs:
-    mov eax, edi
-    cdq
-    xor eax, edx
-    sub eax, edx
-    ret
-
-max_of_three:
-    mov eax, edi
-    cmp esi, eax; cmovg eax, esi
-    cmp edx, eax; cmovg eax, edx
-    ret
-
-sum_array:
-    xor eax, eax
-    test esi, esi; jle .done
-    xor ecx, ecx
-.loop:
-    add eax, [rdi + rcx*4]
-    inc ecx
-    cmp ecx, esi; jl .loop
-.done:
-    ret
-
-is_power_of_two:
-    test edi, edi; jz .no
-    lea eax, [rdi - 1]
-    test edi, eax; jz .yes
-.no: xor eax, eax; ret
-.yes: mov eax, 1; ret`
+            "language": "nasm",
+            "title": "32.4.1 fast_abs — listing 1",
+            "code": "global fast_abs\n; int fast_abs(int x)\nfast_abs:\n    mov eax, edi\n    cdq                 ; sign-extend eax into edx (edx = 0 if positive, -1 if negative)\n    xor eax, edx        ; if negative, invert bits\n    sub eax, edx        ; if negative, add 1\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-32-4-2",
+        "title": "32.4.2 max_of_three",
+        "content": "Use conditional moves.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "32.4.2 max_of_three — listing 1",
+            "code": "global max_of_three\n; int max_of_three(int a, int b, int c)\nmax_of_three:\n    mov eax, edi\n    cmp esi, eax\n    cmovg eax, esi\n    cmp edx, eax\n    cmovg eax, edx\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-32-4-3",
+        "title": "32.4.3 sum_array",
+        "content": "Sum array of 32-bit integers.\n\nClarification: sum_array returns a modulo-2^32 sum and zero for nonpositive lengths. Its assembly wrapping behavior should not be compared with a C reference that invokes signed overflow.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "32.4.3 sum_array — listing 1",
+            "code": "global sum_array\n; int sum_array(int *arr, int len)\nsum_array:\n    xor eax, eax\n    test esi, esi\n    jle .done\n    xor ecx, ecx\n.loop:\n    add eax, [rdi + rcx*4]\n    inc ecx\n    cmp ecx, esi\n    jl .loop\n.done:\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-32-4-4",
+        "title": "32.4.4 popcount64",
+        "content": "Use the popcnt instruction if available (guaranteed on modern x86-64). We'll implement with a fallback loop, but we can use popcnt directly.\n\nClarification: POPCNT is not guaranteed by baseline x86-64. The complete library checks CPUID leaf 1 ECX bit 23 before using it, preserving RBX, and otherwise uses a software loop. The software symbol is exported separately for testing; checking CPUID on every call is simple but adds measurable overhead.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "32.4.4 popcount64 — listing 1",
+            "code": "global popcount64\n; int popcount64(unsigned long long x)\npopcount64:\n    popcnt rax, rdi\n    ret",
+            "explanation": "If you want a software fallback (for older CPUs), we can write a loop, but we'll assume modern CPU."
+          }
+        ]
+      },
+      {
+        "id": "sec-32-4-5",
+        "title": "32.4.5 swap_int",
+        "content": "Swap two integers in memory using xchg or load/store.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "32.4.5 swap_int — listing 1",
+            "code": "global swap_int\n; void swap_int(int *a, int *b)\nswap_int:\n    mov eax, [rdi]\n    mov ecx, [rsi]\n    mov [rdi], ecx\n    mov [rsi], eax\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-32-4-6",
+        "title": "32.4.6 is_power_of_two",
+        "content": "Check if exactly one bit set.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "32.4.6 is_power_of_two — listing 1",
+            "code": "global is_power_of_two\n; int is_power_of_two(unsigned int x)\nis_power_of_two:\n    test edi, edi\n    jz .no\n    lea eax, [rdi - 1]\n    test edi, eax\n    jz .yes\n.no:\n    xor eax, eax\n    ret\n.yes:\n    mov eax, 1\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-32-5",
+        "title": "32.5 Creating the C Program",
+        "content": "We'll write main.c that includes fastmath.h and calls these functions.\n\nfastmath.h:",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "32.5 Creating the C Program — listing 1",
+            "code": "#ifndef FASTMATH_H\n#define FASTMATH_H\n\nint fast_abs(int x);\nint max_of_three(int a, int b, int c);\nint sum_array(int *arr, int len);\nint popcount64(unsigned long long x);\nvoid swap_int(int *a, int *b);\nint is_power_of_two(unsigned int x);\n\n#endif",
+            "explanation": "main.c:"
           },
           {
-            language: 'c',
-            title: 'main.c',
-            code: `#include <stdio.h>
-#include "fastmath.h"
-
-int main() {
-    printf("fast_abs(-42) = %d\\n", fast_abs(-42));
-    printf("max_of_three(12, 99, 45) = %d\\n", max_of_three(12, 99, 45));
-    int arr[] = {10, 20, 30, 40};
-    printf("sum_array = %d\\n", sum_array(arr, 4));
-    printf("is_power_of_two(64) = %d\\n", is_power_of_two(64));
-    return 0;
-}`
+            "language": "c",
+            "title": "32.5 Creating the C Program — listing 2",
+            "code": "#include <stdio.h>\n#include \"fastmath.h\"\n\nint main() {\n    // Test fast_abs\n    printf(\"fast_abs(-5) = %d\\n\", fast_abs(-5));\n\n    // Test max_of_three\n    printf(\"max_of_three(3, 9, 7) = %d\\n\", max_of_three(3, 9, 7));\n\n    // Test sum_array\n    int arr[] = {1, 2, 3, 4, 5};\n    printf(\"sum_array = %d\\n\", sum_array(arr, 5));\n\n    // Test popcount64\n    printf(\"popcount64(0xF0F0) = %d\\n\", popcount64(0xF0F0));\n\n    // Test swap_int\n    int a = 10, b = 20;\n    swap_int(&a, &b);\n    printf(\"swap_int: a=%d, b=%d\\n\", a, b);\n\n    // Test is_power_of_two\n    printf(\"is_power_of_two(16) = %d\\n\", is_power_of_two(16));\n    printf(\"is_power_of_two(18) = %d\\n\", is_power_of_two(18));\n\n    return 0;\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-32-6",
+        "title": "32.6 Assembly Header File (Optional)",
+        "content": "Create fastmath.inc for use in other assembly files (if needed):",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "32.6 Assembly Header File (Optional) — listing 1",
+            "code": "extern fast_abs\nextern max_of_three\nextern sum_array\nextern popcount64\nextern swap_int\nextern is_power_of_two",
+            "explanation": "This is optional for this project but demonstrates good practice."
+          }
+        ]
+      },
+      {
+        "id": "sec-32-7",
+        "title": "32.7 Build Process",
+        "content": "We'll use nasm to assemble fastmath.asm into an object file, then compile main.c with gcc, and link everything with gcc (which automatically links libc and the C runtime).\n\nCommands:",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "32.7 Build Process — listing 1",
+            "code": "nasm -f elf64 fastmath.asm -o fastmath.o\ngcc -c main.c -o main.o\ngcc main.o fastmath.o -o fastmath_test\n./fastmath_test",
+            "explanation": "We can automate with a Makefile:"
+          },
+          {
+            "language": "make",
+            "title": "32.7 Build Process — listing 2",
+            "code": "ASM = nasm\nASMFLAGS = -f elf64\nCC = gcc\nCFLAGS = -Wall -Wextra -O2\n\nTARGET = fastmath_test\nOBJS = main.o fastmath.o\n\nall: $(TARGET)\n\n$(TARGET): $(OBJS)\n\t$(CC) $(OBJS) -o $(TARGET)\n\nmain.o: main.c fastmath.h\n\t$(CC) $(CFLAGS) -c main.c -o main.o\n\nfastmath.o: fastmath.asm\n\t$(ASM) $(ASMFLAGS) fastmath.asm -o fastmath.o\n\nclean:\n\trm -f $(OBJS) $(TARGET)",
+            "explanation": "Build and run:"
+          },
+          {
+            "language": "bash",
+            "title": "32.7 Build Process — listing 3",
+            "code": "make\n./fastmath_test",
+            "explanation": "Expected output:"
+          },
+          {
+            "language": "text",
+            "title": "32.7 Build Process — listing 4",
+            "code": "fast_abs(-5) = 5\nmax_of_three(3, 9, 7) = 9\nsum_array = 15\npopcount64(0xF0F0) = 8\nswap_int: a=20, b=10\nis_power_of_two(16) = 1\nis_power_of_two(18) = 0"
+          },
+          {
+            "language": "nasm",
+            "title": "Complete portable-baseline fastmath.asm",
+            "code": "default rel\nsection .text\nglobal fast_abs\n; int fast_abs(int x)\nfast_abs:\n    mov eax, edi\n    cdq                 ; sign-extend eax into edx (edx = 0 if positive, -1 if negative)\n    xor eax, edx        ; if negative, invert bits\n    sub eax, edx        ; if negative, add 1\n    ret\nglobal max_of_three\n; int max_of_three(int a, int b, int c)\nmax_of_three:\n    mov eax, edi\n    cmp esi, eax\n    cmovg eax, esi\n    cmp edx, eax\n    cmovg eax, edx\n    ret\nglobal sum_array\n; int sum_array(int *arr, int len)\nsum_array:\n    xor eax, eax\n    test esi, esi\n    jle .done\n    xor ecx, ecx\n.loop:\n    add eax, [rdi + rcx*4]\n    inc ecx\n    cmp ecx, esi\n    jl .loop\n.done:\n    ret\nglobal swap_int\n; void swap_int(int *a, int *b)\nswap_int:\n    mov eax, [rdi]\n    mov ecx, [rsi]\n    mov [rdi], ecx\n    mov [rsi], eax\n    ret\nglobal is_power_of_two\n; int is_power_of_two(unsigned int x)\nis_power_of_two:\n    test edi, edi\n    jz .no\n    lea eax, [rdi - 1]\n    test edi, eax\n    jz .yes\n.no:\n    xor eax, eax\n    ret\n.yes:\n    mov eax, 1\n    ret\nglobal popcount64,popcount64_soft\npopcount64:\n    push rbx\n    mov eax,1\n    xor ecx,ecx\n    cpuid\n    bt ecx,23\n    pop rbx\n    jnc popcount64_soft\n    popcnt rax,rdi\n    ret\npopcount64_soft:\n    xor eax,eax\n.loop:\n    test rdi,rdi\n    jz .done\n    lea rdx,[rdi-1]\n    and rdi,rdx\n    inc eax\n    jmp .loop\n.done:\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Save alongside the original fastmath.h and main.c. All original six public APIs and expected outputs remain available; software popcount provides a baseline fallback."
+          }
+        ]
+      },
+      {
+        "id": "sec-32-8",
+        "title": "32.8 Calling C Functions from Assembly",
+        "content": "Sometimes you need to call C library functions (like printf) from assembly. This requires:\n\n1. Declare the C function with extern.\n2. Follow the ABI for arguments.\n3. For variadic functions, set al to the number of vector registers used (usually 0 for integer-only).\n\nExample: Assembly program using printf\n\nClarification: For default PIE linking, use default rel for local data and call printf wrt ..plt. The original -no-pie command intentionally supports its absolute-address version. A normal gcc link already provides _start through runtime startup objects; user code defines main.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "print_hello.asm",
+            "code": "; print_hello.asm\nsection .data\n    fmt db 'Hello, %s!', 0xA, 0\n    name db 'World', 0\n\nsection .text\nglobal main\nextern printf\n\nmain:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16          ; align stack for call (after push rbp, rsp is 16-aligned; sub 16 keeps it)\n    lea rdi, [fmt]\n    lea rsi, [name]\n    xor eax, eax         ; no vector registers\n    call printf\n    xor eax, eax         ; return 0\n    leave\n    ret",
+            "explanation": "Assemble and link with gcc:"
+          },
+          {
+            "language": "bash",
+            "title": "32.8 Calling C Functions from Assembly — listing 2",
+            "code": "nasm -f elf64 print_hello.asm -o print_hello.o\ngcc print_hello.o -o print_hello -no-pie\n./print_hello",
+            "explanation": "Note: If linking with gcc and using main as entry, the C runtime initializes and calls main. We must use main instead of _start because the C runtime expects main. If we used _start, we'd bypass the C runtime and printf might not work without initialization. So for C library functions, use main and link with gcc."
+          }
+        ]
+      },
+      {
+        "id": "sec-32-9",
+        "title": "32.9 Debugging Mixed C/Assembly",
+        "content": "GDB can debug both languages if compiled with debug info:\n\n- Assemble with -g for NASM.\n- Compile C with -g.\n\nExample:\n\nClarification: Use -g -F dwarf with NASM for explicit debug format. Prefer GDB disassemble /s over deprecated /m. Breakpoints by function name are more reproducible than copied line numbers.",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "32.9 Debugging Mixed C/Assembly — listing 1",
+            "code": "nasm -f elf64 -g fastmath.asm -o fastmath.o\ngcc -g -c main.c -o main.o\ngcc main.o fastmath.o -o fastmath_test\ngdb ./fastmath_test",
+            "explanation": "In GDB:\n- Set breakpoints at C lines: break main.c:10\n- Set breakpoints at assembly functions: break fast_abs\n- Step through assembly with stepi when inside assembly.\n- Use disassemble /m to see source and assembly interleaved.\n- Examine registers and variables.\n\nThis mixed debugging is powerful for understanding how assembly integrates with C."
+          }
+        ]
+      },
+      {
+        "id": "sec-32-10",
+        "title": "32.10 Performance Considerations",
+        "content": "When integrating assembly for performance:\n\n- Keep assembly functions small and focused; let C handle high-level logic.\n- Follow the ABI exactly; any violation can cause subtle bugs.\n- Use callee-saved registers only if needed, and save/restore them properly.\n- Avoid unnecessary stack adjustments; use the red zone if the function is a leaf and doesn't call other functions.\n- Use -O2 or -O3 for C code to avoid pessimizing the overall program.\n- Benchmark with perf to ensure the assembly actually improves performance."
+      },
+      {
+        "id": "sec-32-11",
+        "title": "32.11 Possible Extensions",
+        "content": "- Add SIMD functions using SSE/AVX for array processing.\n- Implement a function that uses cpuid to query CPU features and returns a string.\n- Create a more complex example: an assembly matrix multiplication kernel called from C.\n- Call C functions from assembly to allocate memory (malloc) and use it in assembly.\n- Build a shared library (.so) from assembly and C, and use dlopen to load it dynamically.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 32.2",
+            "code": "section .data\n    fmt db '%d', 0xA, 0\nsection .text\nglobal print_int\nextern printf\n\nprint_int:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16\n    lea rdi, [fmt]\n    mov esi, edi        ; integer argument in esi\n    xor eax, eax\n    call printf\n    leave\n    ret",
+            "explanation": "Original source Solution 32.2; see the corrected complete exercise below."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 32.3",
+            "code": "sum_array_unrolled:\n    xor eax, eax\n    xor ecx, ecx\n    xor edx, edx\n    mov r8d, esi\n    shr r8d, 2          ; number of 4-element blocks\n    test r8d, r8d\n    jz .remainder\n.loop:\n    add eax, [rdi + rcx*4]\n    add edx, [rdi + rcx*4 + 4]\n    add eax, [rdi + rcx*4 + 8]\n    add edx, [rdi + rcx*4 + 12]\n    add ecx, 4\n    dec r8d\n    jnz .loop\n    add eax, edx\n.remainder:\n    ; handle remaining elements\n    cmp ecx, esi\n    jge .done\n.rem_loop:\n    add eax, [rdi + rcx*4]\n    inc ecx\n    cmp ecx, esi\n    jl .rem_loop\n.done:\n    ret",
+            "explanation": "Original source Solution 32.3; see the corrected complete exercise below."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 32.4",
+            "code": "my_func:\n    push rbx\n    push r12\n    ; use rbx and r12\n    pop r12\n    pop rbx\n    ret",
+            "explanation": "Original source Solution 32.4; see the corrected complete exercise below."
+          },
+          {
+            "language": "c",
+            "title": "Complete C exercise caller: test_extensions.c",
+            "code": "#define _POSIX_C_SOURCE 200809L\n#include \"fastmath.h\"\n#include <assert.h>\n#include <limits.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <time.h>\nextern long long fast_abs_ll(long long);\nextern void print_int(int);\nextern int sum_array_unrolled(int*,int),popcount64_soft(unsigned long long);\nextern unsigned long long my_func(unsigned long long);\nstatic double now(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return t.tv_sec+t.tv_nsec*1e-9;}\nint main(void) {\n    assert(fast_abs(INT_MIN)==INT_MIN && fast_abs(-5)==5);\n    assert(fast_abs_ll(LLONG_MIN)==LLONG_MIN && fast_abs_ll(-5000000000LL)==5000000000LL);\n    assert(max_of_three(INT_MIN,0,INT_MAX)==INT_MAX);\n    assert(popcount64(0)==0 && popcount64(~0ULL)==64 && popcount64_soft(~0ULL)==64);\n    for(unsigned i=0;i<64;i++)assert(popcount64(1ULL<<i)==1 && popcount64_soft(1ULL<<i)==1);\n    assert(my_func(11)==40);int x=3,y=7;swap_int(&x,&y);assert(x==7&&y==3);swap_int(&x,&x);assert(x==7);\n    assert(is_power_of_two(0)==0 && is_power_of_two(0x80000000u)==1);\n    int a[10000];for(int i=0;i<10000;i++)a[i]=(i%101)-50;\n    for(int n=-1;n<10;n++){uint32_t expected=0;for(int i=0;i<n;i++)expected+=(uint32_t)a[i];assert((uint32_t)sum_array(a,n)==expected && (uint32_t)sum_array_unrolled(a,n)==expected);}\n    for(int mode=0;mode<2;mode++){uint32_t total=0;double start=now();for(int i=0;i<10000;i++)total+=(uint32_t)(mode?sum_array_unrolled(a,10000):sum_array(a,10000));printf(\"mode=%d seconds=%.6f checksum=%u\\n\",mode,now()-start,total);}\n    print_int(-123);print_int(0);\n    return 0;\n}",
+            "explanation": "Save exercise solutions 1–4 as abs_ll.asm, print_int.asm, unrolled.asm and saved.asm; link with the core library using the next build commands. Both popcount paths are value-tested without assuming POPCNT availability."
+          },
+          {
+            "language": "bash",
+            "title": "Build and run all extension exercises",
+            "code": "nasm -f elf64 fastmath.asm -o fastmath.o\nfor name in abs_ll print_int unrolled saved; do\n    nasm -f elf64 \"$name.asm\" -o \"$name.o\"\ndone\ngcc -O2 -Wall -Wextra test_extensions.c fastmath.o abs_ll.o print_int.o unrolled.o saved.o -o test_extensions\n./test_extensions\n# Optional: perf stat -e cycles,instructions ./test_extensions",
+            "explanation": "The benchmark prints observed durations and checksums; repeat on the intended CPU before making speed claims. Performance-counter permission is not required for its monotonic-clock timing."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-32-1',
-        title: 'Exercise 32.1: Calling printf from Assembly',
-        description: 'Write an assembly program that calls printf with a format string.',
-        solution: `section .data\n    fmt db 'Result: %d', 0xA, 0\nsection .text\n    global main\n    extern printf\nmain:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16\n    lea rdi, [fmt]\n    mov rsi, 42\n    xor eax, eax   ; al = 0 (no vector registers)\n    call printf\n    xor eax, eax\n    leave\n    ret`,
-        solutionLanguage: 'nasm'
+        "id": "ex-32-1",
+        "title": "Exercise 32.1: Add `fast_abs` for 64-bit",
+        "description": "Modify fast_abs to work on 64-bit integers (long long). Change the prototype to long long fast_abs_ll(long long x) and implement using cqo and 64-bit registers. Update the C program to test it.",
+        "solution": "section .text\nglobal fast_abs_ll\n; long long fast_abs_ll(long long x)\nfast_abs_ll:\n    mov rax, rdi\n    cqo                 ; sign-extend rax into rdx\n    xor rax, rdx\n    sub rax, rdx\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "C prototype: long long fast_abs_ll(long long x); As with int, LLONG_MIN has no positive long long representation; the routine returns LLONG_MIN for that input by explicit contract. The test below verifies this without calling C llabs on LLONG_MIN."
+      },
+      {
+        "id": "ex-32-2",
+        "title": "Exercise 32.2: Assembly Function Calling C",
+        "description": "Write an assembly function print_int that takes an integer argument and prints it using printf from C library. The function should be declared in C and called from a C main. Ensure proper stack alignment and al setting.",
+        "solution": "default rel\nsection .rodata\nfmt db '%d',10,0\nsection .text\nglobal print_int\nextern printf\nprint_int:\n    mov esi,edi             ; preserve input before replacing RDI\n    lea rdi,[fmt]\n    sub rsp,8               ; entry RSP=8 mod 16 -> call aligned\n    xor eax,eax\n    call printf wrt ..plt\n    add rsp,8\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "C declaration: void print_int(int x); The original loads the format address into RDI before copying EDI, so it prints address bits instead of the input. This version moves the input first and links with default PIE. Test print_int(-123) and print_int(0)."
+      },
+      {
+        "id": "ex-32-3",
+        "title": "Exercise 32.3: Array Sum with Unrolling",
+        "description": "Optimize sum_array by unrolling the loop 4 times and using two accumulators. Compare performance with the simple version using perf on a large array.",
+        "solution": "section .text\nglobal sum_array_unrolled\nsum_array_unrolled:\n    xor eax, eax\n    test esi,esi\n    jle .done\n    xor ecx, ecx\n    xor edx, edx\n    mov r8d, esi\n    shr r8d, 2          ; number of 4-element blocks\n    test r8d, r8d\n    jz .remainder\n.loop:\n    add eax, [rdi + rcx*4]\n    add edx, [rdi + rcx*4 + 4]\n    add eax, [rdi + rcx*4 + 8]\n    add edx, [rdi + rcx*4 + 12]\n    add ecx, 4\n    dec r8d\n    jnz .loop\n    add eax, edx\n.remainder:\n    ; handle remaining elements\n    cmp ecx, esi\n    jge .done\n.rem_loop:\n    add eax, [rdi + rcx*4]\n    inc ecx\n    cmp ecx, esi\n    jl .rem_loop\n.done:\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Unrolled sum: Nonpositive lengths must return before converting the count to four-element blocks. The two accumulators are combined after block processing and the tail covers n modulo four. Use unsigned arithmetic for reference checks."
+      },
+      {
+        "id": "ex-32-4",
+        "title": "Exercise 32.4: Use Callee-Saved Registers",
+        "description": "Write an assembly function that uses rbx and r12 as temporaries. Show the necessary prologue and epilogue to preserve them. Call it from C.",
+        "solution": "section .text\nglobal my_func\n; unsigned long long my_func(unsigned long long x): 3*x+7 modulo 2^64\nmy_func:\n    push rbx\n    push r12\n    mov rbx,rdi\n    lea r12,[rbx+rbx*2]\n    lea rax,[r12+7]\n    pop r12\n    pop rbx\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": " The function now actually uses and restores RBX/R12. It is a leaf; if you add a nested call after these two pushes, add an eight-byte alignment pad first. The C harness checks my_func(11)==40."
+      },
+      {
+        "id": "ex-32-5",
+        "title": "Exercise 32.5: Mixed Debugging",
+        "description": "Compile the project with debug info, run in GDB, set breakpoints in both C and assembly, and step through the sum_array function to observe registers and stack.",
+        "solution": "# Shell commands after saving original main.c/header and complete fastmath.asm:\nnasm -f elf64 -g -F dwarf fastmath.asm -o fastmath.o\ngcc -O0 -g -c main.c -o main.o\ngcc main.o fastmath.o -o fastmath_test\ngdb ./fastmath_test\n# Enter these inside GDB:\n# set disassembly-flavor intel\n# break main\n# break sum_array\n# run\n# continue\n# info registers rdi rsi rax rcx rsp\n# x/5dw $rdi\n# disassemble /s sum_array\n# stepi\n# info frame\n# continue",
+        "solutionLanguage": "bash",
+        "solutionExplanation": "Original source guidance: Steps described in text. At sum_array entry RDI points to {1,2,3,4,5}, ESI is 5 and RSP mod 16 is 8. Step through accumulator/index updates; final EAX is 15. The caller resumes its printf call after the assembly returns. Use the original main.c as the predictable debug target."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why must al be cleared to 0 before calling printf in x86-64 assembly?',
-        answer: 'printf is a variadic function. The System V AMD64 ABI requires the caller to place the number of vector (XMM) registers used for argument passing in AL. Passing AL=0 signals that no floating-point arguments are passed.'
+        "question": "How do you call an assembly function from C? What steps are required?",
+        "answer": "Define a global NASM symbol with ABI-compatible arguments and returns, declare its prototype in a C header, assemble as ELF64, compile the C caller, then link both objects with gcc. Use matching types, preserve required registers and add a non-executable GNU-stack note."
+      },
+      {
+        "question": "What is the role of the header file in mixed-language projects?",
+        "answer": "The header states parameter types, return types and the calling contract. It lets the C compiler generate correct calls and diagnose mismatches. NASM extern declarations name symbols but do not perform C type checking."
+      },
+      {
+        "question": "Why must you set al to 0 before calling printf from assembly? What happens if you don't?",
+        "answer": "For an integer-only variadic call, AL=0 declares that no vector argument registers are used. When passing floating arguments, set the appropriate vector-register count or permitted upper bound. Leaving AL arbitrary violates the ABI and may cause incorrect register-save behavior."
+      },
+      {
+        "question": "What is the difference between using _start and main as entry when linking with gcc?",
+        "answer": "_start is the raw process entry; the normal C runtime supplies it and calls main after initialization. Define main and link with gcc to use the normal C runtime. Defining your own _start requires a deliberate startup/link strategy rather than adding it to an ordinary gcc link."
+      },
+      {
+        "question": "Which registers must an assembly function preserve according to the ABI?",
+        "answer": "RBX, RBP and R12–R15 must be restored if changed, and RSP must be restored before RET. SysV XMM registers are caller-saved. DF must be clear on entry/return; additional floating-point control-state rules also apply."
+      },
+      {
+        "question": "How do you debug a mixed C/assembly program in GDB? What commands are useful?",
+        "answer": "Use NASM -g -F dwarf and GCC -g, then break main or break sum_array. Use stepi, nexti, disassemble /s, info registers, info frame and memory examination. Optimized C may inline functions or remove source variables."
+      },
+      {
+        "question": "Explain the importance of stack alignment when calling C functions from assembly.",
+        "answer": "Before an ordinary SysV AMD64 call, RSP must be aligned to 16 bytes; the callee enters with RSP modulo 16 equal to 8. Misalignment can fault in callees using aligned stack operations. Include all pushes, local allocations and outgoing arguments in the calculation."
+      },
+      {
+        "question": "Can you use C library functions like malloc from assembly? How would you declare them?",
+        "answer": "Yes: extern malloc, place the size in RDI, align RSP, call malloc wrt ..plt when appropriate, and check the returned RAX for NULL. Preserve live caller-saved values around the call and release successful allocations with the matching free."
+      },
+      {
+        "question": "What are the advantages of keeping assembly in separate files versus inline assembly?",
+        "answer": "Separate files offer explicit ABI boundaries, reusable symbols and easier isolated assembly/debugging. Inline asm can integrate with compiler allocation but needs correct constraints, clobbers and volatility. External calls may add overhead and prevent compiler inlining."
+      },
+      {
+        "question": "Write a simple assembly function that returns the length of a string and can be called from C. Show the prototype and implementation.",
+        "answer": "C prototype: size_t asm_strlen(const char *s); NASM: global asm_strlen; asm_strlen: xor eax,eax; .loop: cmp byte [rdi+rax],0; je .done; inc rax; jmp .loop; .done: ret. Place each instruction/label on its own line, include <stddef.h> in C, and require a valid terminated string."
       }
     ],
-    summary: ['Assembly kernels provide peak execution performance in C programs.', 'Strict adherence to ABI conventions ensures seamless interoperability.']
+    "summary": [
+      "Integrating assembly with C is straightforward if you follow the ABI.",
+      "Write assembly functions in separate files, declare them global, and link with gcc.",
+      "Use header files to share prototypes.",
+      "Call C functions from assembly by declaring extern and linking with gcc; use main as entry for C runtime.",
+      "Debug mixed programs with GDB using debug symbols for both languages.",
+      "Performance can be improved by writing critical kernels in assembly while keeping high-level logic in C.",
+      "Always respect stack alignment, register conventions, and variadic function requirements."
+    ]
   },
   {
     id: 33,
