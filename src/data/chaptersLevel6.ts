@@ -1832,212 +1832,224 @@ export const CHAPTERS_LEVEL_6: Chapter[] = [
     ]
   },
   {
-    id: 33,
-    slug: 'chapter-33-project-6-mini-virtual-machine',
-    level: 6,
-    levelTitle: 'Advanced Projects',
-    title: 'Chapter 33: Project 6: Mini Virtual Machine',
-    subtitle: 'Building a 32-Bit Instruction Bytecode Interpreter & Virtual CPU',
-    learningObjectives: [
-      'Design a custom Instruction Set Architecture (ISA) with 12 opcodes.',
-      'Implement an efficient fetch-decode-execute loop with a jump table in assembly.',
-      'Model 4 virtual registers (R0–R3), program counter (PC), and 256-byte virtual RAM.',
-      'Execute custom compiled bytecode programs that compute and print results.'
+    "id": 33,
+    "slug": "chapter-33-project-6-mini-virtual-machine",
+    "level": 6,
+    "levelTitle": "Advanced Projects",
+    "title": "Chapter 33: Project 6: Mini Virtual Machine",
+    "subtitle": "Building a 32-Bit Instruction Bytecode Interpreter & Virtual CPU",
+    "learningObjectives": [
+      "Design a simple virtual machine (VM) with its own instruction set architecture (ISA), registers, and memory.",
+      "Implement a fetch-decode-execute loop in x86-64 assembly.",
+      "Encode instructions as 32-bit words and interpret them from a program array.",
+      "Demonstrate the VM running a small program that computes and prints a result.",
+      "Understand how higher-level language interpreters and emulators work at a low level.",
+      "Apply modular design, system calls for output, and efficient control flow in assembly.",
+      "Extend the VM to support more complex programs (loops, memory operations)."
     ],
-    prerequisites: ['Chapters 1–32'],
-    keyConcepts: [
-      'A virtual machine interprets custom software instructions in a continuous loop.',
-      'Jump tables provide O(1) instruction dispatching based on the opcode.',
-      'Instruction bit-packing stores opcode, destination register, source, and 16-bit immediate in one 32-bit dword.'
+    "prerequisites": [
+      "Mastery of x86-64 assembly: registers, memory, addressing modes (Chapters 1–13).",
+      "Solid understanding of control flow, procedures, and calling conventions (Chapters 8, 10).",
+      "Knowledge of system calls for I/O (Chapter 16).",
+      "Familiarity with arrays and memory operations (Chapter 9).",
+      "Experience with modular programming and debugging (Chapters 15, 17)."
     ],
-    diagramType: 'project_mini_vm',
-    sections: [
+    "keyConcepts": [
+      "Virtual machine (VM): A software emulation of a computer system, executing its own instruction set.",
+      "Instruction Set Architecture (ISA): The set of instructions and their binary encoding.",
+      "Fetch-decode-execute cycle: The core of any CPU or VM: read instruction, determine operation, perform action, advance program counter.",
+      "Program counter (PC): A pointer to the next instruction to execute.",
+      "Registers: Small, fast storage locations within the VM.",
+      "Memory: Array of data words (e.g., dwords) used by VM instructions.",
+      "Bytecode: The binary representation of VM instructions, often produced by a compiler or assembler for the VM.",
+      "Interpreter loop: A loop in the host assembly that repeatedly fetches and dispatches instructions."
+    ],
+    "diagramType": "project_mini_vm",
+    "sections": [
       {
-        id: 'sec-33-1',
-        title: '33.1 Complete Virtual Machine: vm.asm',
-        content: `Complete runnable Virtual Machine written in x86-64 NASM assembly:`,
-        codeSnippets: [
+        "id": "sec-33-1",
+        "title": "33.1 Introduction to Virtual Machines",
+        "content": "A virtual machine is a software program that simulates a computer system. It defines its own instruction set, registers, memory, and execution model. Virtual machines are used in many contexts:\n\n- Emulators: Run software from another platform (e.g., NES emulator).\n- Language runtimes: Java Virtual Machine (JVM), Python bytecode interpreter.\n- Sandboxes: Isolated execution environments.\n\nIn this project, we will build a tiny virtual machine in x86-64 assembly. Our VM will have:\n\n- 4 general-purpose registers (R0–R3), each 32 bits.\n- A data memory of 64 dwords (256 bytes).\n- A program memory (array of instructions).\n- A program counter (PC).\n\nThe VM executes a small program written in its own machine code (bytecode). We'll define a simple ISA with instructions for arithmetic, data movement, control flow, and output."
+      },
+      {
+        "id": "sec-33-2",
+        "title": "33.2 Instruction Set Architecture (ISA) Design",
+        "content": "We'll design a fixed-length 32-bit instruction format for simplicity. Each instruction is one dword. The format is:\n\nClarification: The final format uses opcode bits 0–7, register 1 bits 8–15, and either register 2 bits 16–23 or immediate bits 16–31. Earlier byte-sized-immediate alternatives are design discussion. LOAD interprets imm16 as signed; the corrected VM uses nonnegative unsigned 16-bit instruction indices for jump targets.",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'vm.asm',
-            code: `; vm.asm - Mini Virtual Machine
-; Opcode constants
-%define OP_HALT     0
-%define OP_LOAD     1
-%define OP_ADD      2
-%define OP_SUB      3
-%define OP_MUL      4
-%define OP_DIV      5
-%define OP_STORE    6
-%define OP_LOAD_MEM 7
-%define OP_JUMP     8
-%define OP_JZ       9
-%define OP_JNZ      10
-%define OP_PRINT    11
-%define NUM_REGS    4
-%define MEM_SIZE    64
-
-section .data
-    program:
-        dd (OP_LOAD) | (0 << 8) | (5 << 16)       ; LOAD R0, 5
-        dd (OP_LOAD) | (1 << 8) | (10 << 16)      ; LOAD R1, 10
-        dd (OP_ADD)  | (0 << 8) | (1 << 8)        ; ADD R0, R1
-        dd (OP_PRINT) | (0 << 8)                  ; PRINT R0
-        dd OP_HALT                                ; HALT
-    program_len equ ($ - program) / 4
-    newline db 0xA
-
-section .bss
-    vm_regs resd NUM_REGS
-    vm_mem  resd MEM_SIZE
-    outbuf  resb 32
-
-section .text
-    global _start
-
-itoa:
-    push rbx; push rcx; push rdx; push rdi
-    mov ebx, 10; mov ecx, eax; xor r8d, r8d
-    test eax, eax; jns .pos
-    neg eax; mov byte [rdi], '-'; inc rdi; inc r8d
-.pos:
-    test eax, eax; jnz .conv
-    mov byte [rdi], '0'; inc rdi; inc r8d; jmp .finish
-.conv:
-    sub rsp, 32; mov rsi, rsp; xor edx, edx
-.dloop:
-    xor edx, edx; div ebx; add dl, '0'; mov [rsi], dl; inc rsi; inc r8d
-    test eax, eax; jnz .dloop
-    mov rcx, rsi; sub rcx, rsp; dec rsi
-.cloop:
-    mov al, [rsi]; mov [rdi], al; inc rdi; dec rsi; dec rcx; jnz .cloop
-    add rsp, 32
-.finish:
-    mov byte [rdi], 0; mov eax, r8d
-    pop rdi; pop rdx; pop rcx; pop rbx; ret
-
-_start:
-    lea rsi, [program]
-    xor ebx, ebx        ; PC = 0
-
-.fetch:
-    cmp ebx, program_len; jge .exit
-    mov r8d, [rsi + rbx*4]
-    inc ebx
-
-    movzx ecx, r8b      ; opcode
-    lea rdx, [dispatch_table]
-    cmp ecx, OP_PRINT; ja .exit
-    mov rax, [rdx + rcx*8]
-    jmp rax
-
-dispatch_table:
-    dq .op_halt, .op_load, .op_add, .op_sub, .op_mul, .op_div
-    dq .op_store, .op_load_mem, .op_jump, .op_jz, .op_jnz, .op_print
-
-.op_halt: jmp .exit
-
-.op_load:
-    mov ecx, r8d; shr ecx, 8; movzx edx, cl; shr ecx, 8
-    movsx eax, cx       ; 16-bit immediate
-    lea rdi, [vm_regs + rdx*4]
-    mov [rdi], eax
-    jmp .fetch
-
-.op_add:
-    mov ecx, r8d; shr ecx, 8; movzx r9d, cl; shr ecx, 8; movzx r10d, cl
-    lea rdi, [vm_regs + r9*4]; mov eax, [rdi]
-    lea rdi, [vm_regs + r10*4]; mov edx, [rdi]
-    add eax, edx
-    lea rdi, [vm_regs + r9*4]; mov [rdi], eax
-    jmp .fetch
-
-.op_sub:
-    mov ecx, r8d; shr ecx, 8; movzx r9d, cl; shr ecx, 8; movzx r10d, cl
-    lea rdi, [vm_regs + r9*4]; mov eax, [rdi]
-    lea rdi, [vm_regs + r10*4]; mov edx, [rdi]
-    sub eax, edx
-    lea rdi, [vm_regs + r9*4]; mov [rdi], eax
-    jmp .fetch
-
-.op_mul:
-    mov ecx, r8d; shr ecx, 8; movzx r9d, cl; shr ecx, 8; movzx r10d, cl
-    lea rdi, [vm_regs + r9*4]; mov eax, [rdi]
-    lea rdi, [vm_regs + r10*4]; mov edx, [rdi]
-    imul eax, edx
-    lea rdi, [vm_regs + r9*4]; mov [rdi], eax
-    jmp .fetch
-
-.op_div:
-    mov ecx, r8d; shr ecx, 8; movzx r9d, cl; shr ecx, 8; movzx r10d, cl
-    lea rdi, [vm_regs + r9*4]; mov eax, [rdi]
-    lea rdi, [vm_regs + r10*4]; mov ecx, [rdi]
-    cdq; idiv ecx
-    lea rdi, [vm_regs + r9*4]; mov [rdi], eax
-    jmp .fetch
-
-.op_store:
-    mov ecx, r8d; shr ecx, 8; movzx r9d, cl; shr ecx, 8; movzx r10d, cl
-    lea rdi, [vm_regs + r9*4]; mov eax, [rdi]
-    lea rdi, [vm_regs + r10*4]; mov edx, [rdi]
-    cmp edx, MEM_SIZE; jae .exit
-    lea rdi, [vm_mem + rdx*4]; mov [rdi], eax
-    jmp .fetch
-
-.op_load_mem:
-    mov ecx, r8d; shr ecx, 8; movzx r9d, cl; shr ecx, 8; movzx r10d, cl
-    lea rdi, [vm_regs + r10*4]; mov edx, [rdi]
-    cmp edx, MEM_SIZE; jae .exit
-    lea rdi, [vm_mem + rdx*4]; mov eax, [rdi]
-    lea rdi, [vm_regs + r9*4]; mov [rdi], eax
-    jmp .fetch
-
-.op_jump:
-    mov eax, r8d; shr eax, 16; movsx eax, ax
-    mov ebx, eax; jmp .fetch
-
-.op_jz:
-    mov ecx, r8d; shr ecx, 8; movzx r9d, cl
-    lea rdi, [vm_regs + r9*4]; mov eax, [rdi]
-    test eax, eax; jnz .fetch
-    mov eax, r8d; shr eax, 16; movsx eax, ax; mov ebx, eax; jmp .fetch
-
-.op_jnz:
-    mov ecx, r8d; shr ecx, 8; movzx r9d, cl
-    lea rdi, [vm_regs + r9*4]; mov eax, [rdi]
-    test eax, eax; jz .fetch
-    mov eax, r8d; shr eax, 16; movsx eax, ax; mov ebx, eax; jmp .fetch
-
-.op_print:
-    mov ecx, r8d; shr ecx, 8; movzx r9d, cl
-    lea rdi, [vm_regs + r9*4]; mov eax, [rdi]
-    lea rdi, [outbuf]; call itoa
-    mov edx, eax; mov eax, 1; mov rdi, 1; lea rsi, [outbuf]; syscall
-    mov eax, 1; mov rdi, 1; lea rsi, [newline]; mov rdx, 1; syscall
-    jmp .fetch
-
-.exit:
-    mov rax, 60; xor rdi, rdi; syscall`
+            "language": "text",
+            "title": "33.2 Instruction Set Architecture (ISA) Design — listing 1",
+            "code": "Byte 0: Opcode\nByte 1: Destination register (0-3)\nByte 2: Source register or address (0-3 or memory index)\nByte 3: Immediate value or unused (for some opcodes)",
+            "explanation": "However, for immediates larger than a byte, we can use a different encoding. For simplicity, we'll use dword-sized instructions but pack fields manually. Actually, we can define each instruction as a dword with the following layout:\n\n- Bits 0-7: Opcode\n- Bits 8-15: Reg1 (destination)\n- Bits 16-23: Reg2 (source) or address\n- Bits 24-31: Immediate (signed 8-bit) or high part of address\n\nBut we need to support 32-bit immediates for LOAD. A simpler approach: use variable-length? Or we can use a structure where some instructions take a second dword as immediate. To keep it simple, we'll define each instruction as a dword, and for LOAD immediate, we'll use the whole dword: opcode in low byte, reg in next byte, and the high 16 bits as a signed immediate (range -32768 to 32767). That's enough for our demo.\n\nAlternatively, we can define a 64-bit instruction: first dword is opcode and operands, second dword is immediate. But fixed 32-bit is cleaner.\n\nWe'll define the following opcodes:\n\n| Opcode | Mnemonic | Description |\n|--------|----------|-------------|\n| 0 | HALT | Stop execution |\n| 1 | LOAD | Load immediate (16-bit signed) into register |\n| 2 | ADD | Reg1 = Reg1 + Reg2 |\n| 3 | SUB | Reg1 = Reg1 - Reg2 |\n| 4 | MUL | Reg1 = Reg1 * Reg2 |\n| 5 | DIV | Reg1 = Reg1 / Reg2 (signed) |\n| 6 | STORE | Store Reg1 to memory at address given by Reg2 |\n| 7 | LOAD_MEM | Load Reg1 from memory at address given by Reg2 |\n| 8 | JUMP | Jump to immediate address (absolute, in instruction) |\n| 9 | JZ | Jump if Reg1 == 0 to immediate address |\n| 10 | JNZ | Jump if Reg1 != 0 |\n| 11 | PRINT | Print value of Reg1 to stdout |\n\nWe'll keep addresses within the program array for jumps (absolute index into program instructions). Memory is separate and accessed via STORE/LOAD_MEM.\n\nInstruction encoding:\n\n- For LOAD: opcode (1), reg (byte1), unused (byte2), immediate high 16 bits (bytes 2-3? Actually we have 32 bits total: byte0=opcode, byte1=reg, bytes2-3 = 16-bit immediate). So we can encode as: (1) | (reg << 8) | (imm16 << 16).\n- For arithmetic: opcode, reg1, reg2, unused.\n- For STORE/LOAD_MEM: opcode, reg1, reg2, unused (address is value in reg2).\n- For JUMP/JZ/JNZ: opcode, reg, unused, immediate (16-bit absolute target). For unconditional JUMP, reg field ignored.\n\nWe'll write a small assembler-like set of macros to define the program in the .data section. We'll use dd to define each instruction as a 32-bit constant.\n\nExample program to compute 5+10 and print:"
+          },
+          {
+            "language": "text",
+            "title": "33.2 Instruction Set Architecture (ISA) Design — listing 2",
+            "code": "LOAD R0, 5\nLOAD R1, 10\nADD R0, R1\nPRINT R0\nHALT",
+            "explanation": "Encoded as dwords."
+          }
+        ]
+      },
+      {
+        "id": "sec-33-3",
+        "title": "33.3 VM Implementation",
+        "content": "The VM consists of:\n\n- Registers: vm_regs in .bss, an array of 4 dwords.\n- Memory: vm_mem in .bss, an array of 64 dwords.\n- Program: program in .data, an array of dwords.\n- Program counter: We'll use a host register ebx (or r12d) to hold the index into program.\n\nThe interpreter loop:\n\nClarification: The source appears twice: an unfinished draft followed by a proposed full implementation. Both remain below. A nonlocal dispatch_table label also changes NASM’s scope for dot-prefixed labels; the completed implementation uses unique handler labels and keeps the fetched instruction separate from its dispatch address.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "33.3 VM Implementation — listing 1",
+            "code": "    lea rsi, [program]      ; base address of program\n    xor ebx, ebx            ; PC = 0\nfetch:\n    mov eax, [rsi + rbx*4]  ; fetch instruction\n    inc ebx                 ; advance PC (will adjust for jumps later)\n    ; decode\n    movzx ecx, al           ; opcode\n    ; dispatch via jump table or if-else chain\n    cmp ecx, OP_HALT\n    je .halt\n    cmp ecx, OP_LOAD\n    je .op_load\n    ...",
+            "explanation": "We'll implement a dispatch using a jump table for efficiency and clarity. The jump table is an array of code addresses for each opcode. We index into it with the opcode.\n\nWe need to extract operands. For most instructions, we need reg1 (byte1) and reg2 (byte2) or immediate (high 16 bits). We'll define macros to extract.\n\nFor PRINT, we need to convert the value in the register to decimal and print using write. We'll reuse a simple itoa routine."
+          }
+        ]
+      },
+      {
+        "id": "sec-33-4",
+        "title": "33.4 Full Source Code",
+        "content": "We'll create vm.asm with the complete VM and a test program.\n\nClarification: The draft is intentionally retained as manuscript history, including its incomplete instructions. Its ADD example shifts both operands by eight; register 2 belongs at bit 16. It also overwrites the fetched instruction with a handler pointer. Do not assemble this draft; use the corrected companion after the second source version.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original manuscript version 1 — unfinished VM draft",
+            "code": "; vm.asm - Mini Virtual Machine\n; Assemble: nasm -f elf64 vm.asm -o vm.o\n; Link:     ld vm.o -o vm\n; Run:      ./vm\n\n; Opcode constants\n%define OP_HALT     0\n%define OP_LOAD     1\n%define OP_ADD      2\n%define OP_SUB      3\n%define OP_MUL      4\n%define OP_DIV      5\n%define OP_STORE    6\n%define OP_LOAD_MEM 7\n%define OP_JUMP     8\n%define OP_JZ       9\n%define OP_JNZ      10\n%define OP_PRINT    11\n\n%define NUM_REGS    4\n%define MEM_SIZE    64\n\nsection .data\n    ; Program: compute 5+10 and print result (15)\n    program:\n        dd (OP_LOAD) | (0 << 8) | (5 << 16)       ; LOAD R0, 5\n        dd (OP_LOAD) | (1 << 8) | (10 << 16)      ; LOAD R1, 10\n        dd (OP_ADD)  | (0 << 8) | (1 << 8)        ; ADD R0, R1\n        dd (OP_PRINT) | (0 << 8)                  ; PRINT R0\n        dd OP_HALT                                  ; HALT\n    program_len equ ($ - program) / 4\n\n    newline db 0xA\n\nsection .bss\n    vm_regs resd NUM_REGS\n    vm_mem  resd MEM_SIZE\n    outbuf  resb 32\n\nsection .text\n    global _start\n\n;----------------------------------------------------------\n; itoa: convert signed 32-bit integer in eax to string at rdi\n; returns length in eax\n;----------------------------------------------------------\nitoa:\n    push rbx\n    push rcx\n    push rdx\n    push rdi\n    mov ebx, 10\n    mov ecx, eax\n    xor r8d, r8d\n    test eax, eax\n    jns .not_neg\n    neg eax\n    mov byte [rdi], '-'\n    inc rdi\n    inc r8d\n.not_neg:\n    test eax, eax\n    jnz .convert\n    mov byte [rdi], '0'\n    inc rdi\n    inc r8d\n    jmp .finish\n.convert:\n    sub rsp, 32\n    mov rsi, rsp\n    xor edx, edx\n.digit_loop:\n    xor edx, edx\n    div ebx\n    add dl, '0'\n    mov [rsi], dl\n    inc rsi\n    inc r8d\n    test eax, eax\n    jnz .digit_loop\n    mov rcx, rsi\n    sub rcx, rsp\n    dec rsi\n.copy_loop:\n    mov al, [rsi]\n    mov [rdi], al\n    inc rdi\n    dec rsi\n    dec rcx\n    jnz .copy_loop\n    add rsp, 32\n.finish:\n    mov byte [rdi], 0\n    mov eax, r8d\n    pop rdi\n    pop rdx\n    pop rcx\n    pop rbx\n    ret\n\n;----------------------------------------------------------\n; _start\n;----------------------------------------------------------\n_start:\n    lea rsi, [program]      ; base of program\n    xor ebx, ebx            ; PC = 0\n\n.fetch:\n    ; Check if PC out of bounds\n    cmp ebx, program_len\n    jge .exit\n\n    mov eax, [rsi + rbx*4]  ; fetch instruction\n    inc ebx                 ; increment PC (may be modified by jumps)\n\n    movzx ecx, al           ; opcode\n    ; dispatch table\n    lea rdx, [dispatch_table]\n    cmp ecx, OP_PRINT       ; ensure opcode in range\n    ja .exit                ; invalid opcode, halt\n    mov rax, [rdx + rcx*8]\n    jmp rax\n\n; Dispatch table\ndispatch_table:\n    dq .op_halt\n    dq .op_load\n    dq .op_add\n    dq .op_sub\n    dq .op_mul\n    dq .op_div\n    dq .op_store\n    dq .op_load_mem\n    dq .op_jump\n    dq .op_jz\n    dq .op_jnz\n    dq .op_print\n\n.op_halt:\n    jmp .exit\n\n.op_load:\n    ; reg = byte1, imm = high 16 bits (signed)\n    movzx edx, ah           ; byte1 (reg) ; ah is bits 8-15\n    movsx eax, word [rsi + rbx*4 - 4 + 2] ? Not exactly. We already have instruction in eax. We need to extract immediate from bits 16-31.\n    ; Better to reload instruction or use shifts. Since we have eax, we can do:\n    mov eax, [rsi + rbx*4 - 4] ; re-fetch? But we already advanced PC. We can just use the current value in eax.\n    ; Actually, eax still holds the full instruction. We can extract fields:\n    ; eax = instruction\n    ; opcode in al, reg in ah, immediate in high 16 bits.\n    ; Let's do:\n    movzx edx, ah           ; reg\n    movsx eax, ax           ; sign-extend low 16 bits? No, we need high 16 bits. Use ror?\n    ; Simplest: we'll re-fetch from memory using PC-1, because we need the whole instruction.\n    ; Or we can save instruction in a register before decoding. Let's restructure: after fetching, store instruction in r8d.\n    ; But that would complicate. Instead, we'll handle each opcode by re-loading instruction when needed.\n    ; For LOAD, we need imm16 from bits 16-31. We can do:\n    mov eax, [rsi + rbx*4 - 4] ; instruction\n    movsx r8d, word [rsi + rbx*4 - 4 + 2] ; sign-extended 16-bit immediate at offset +2\n    ; Better to just use shifts on the fetched value. We have eax. Use:\n    mov edx, eax\n    sar edx, 16             ; high 16 bits with sign extension\n    ; but that shifts all bits, so edx = high 16 bits of eax (sign extended). Actually sar edx,16 shifts arithmetic, so edx = sign-extended high 16 bits.\n    movsx edx, dx? No, that's wrong. Let's do:\n    mov edx, eax\n    shr edx, 16             ; now edx = high 16 bits (unsigned)\n    test eax, 0x80000000    ; check sign bit of original? Not needed for 16-bit immediate? Actually immediate is 16-bit signed in bits 16-31, so we can sign-extend by:\n    movsx edx, dx           ; if dx is low 16 bits of edx after shift? Wait.\n    ; A simpler approach: we know the instruction is 32 bits: bits 0-7 opcode, 8-15 reg, 16-31 immediate (signed). We can extract by:\n    mov eax, [rsi + rbx*4 - 4] ; refetch\n    movzx edx, ah           ; reg\n    movsx eax, ax           ; this sign-extends lower 16 bits, not high. Not right.\n    ; Let's instead store the fetched instruction in a register (say r8d) and use it throughout the opcode handlers.\n    ; I'll modify the fetch loop to keep instruction in r8d.",
+            "explanation": "I realize the code is becoming complex. To simplify, I'll design each instruction as a dword where fields are extracted easily using shifts. I'll store the instruction in r8d after fetch, and use r8d for all field extractions. I'll rewrite the fetch loop accordingly.\n\nLet's produce a clean implementation in the final answer. We'll include the full code with proper extraction.\n\nGiven the length of this response, I'll provide a concise but complete VM implementation. The key is to demonstrate the concept. I'll write the final code with comments and ensure it runs.\n\nWe'll also include a program that uses a loop (e.g., sum from 1 to 5) to show JNZ and memory operations maybe. But for brevity, we can stick with the simple 5+10 example.\n\nLet's craft the final answer with the full code.Below is the complete Chapter 33 content, including the full VM source code, build instructions, and exercises.\n\n\n# Chapter 33: Project 6: Mini Virtual Machine\n\n*(Content as outlined above, with the following full source code.)*"
+          }
+        ]
+      },
+      {
+        "id": "sec-33-5",
+        "title": "Full Source Code: vm.asm",
+        "content": "\n\nClarification: The second original listing still encodes ADD incorrectly, loses the program base in RSI after PRINT, and lacks register validation and division guards. Its signed PC test can accept a negative PC. The complete companion below fixes those issues and preserves program base, PC, register base and memory base across printing. Errors exit nonzero; falling off the program is not HALT.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Original manuscript version 2 — see correctness notes",
+            "code": "; vm.asm - Mini Virtual Machine\n; Assemble: nasm -f elf64 vm.asm -o vm.o\n; Link:     ld vm.o -o vm\n; Run:      ./vm\n\n; Opcode constants\n%define OP_HALT     0\n%define OP_LOAD     1\n%define OP_ADD      2\n%define OP_SUB      3\n%define OP_MUL      4\n%define OP_DIV      5\n%define OP_STORE    6\n%define OP_LOAD_MEM 7\n%define OP_JUMP     8\n%define OP_JZ       9\n%define OP_JNZ      10\n%define OP_PRINT    11\n\n%define NUM_REGS    4\n%define MEM_SIZE    64\n\nsection .data\n    ; Program: compute 5 + 10 and print result (15)\n    program:\n        dd (OP_LOAD) | (0 << 8) | (5 << 16)       ; LOAD R0, 5\n        dd (OP_LOAD) | (1 << 8) | (10 << 16)      ; LOAD R1, 10\n        dd (OP_ADD)  | (0 << 8) | (1 << 8)        ; ADD R0, R1\n        dd (OP_PRINT) | (0 << 8)                  ; PRINT R0\n        dd OP_HALT                                  ; HALT\n    program_len equ ($ - program) / 4\n\n    newline db 0xA\n\nsection .bss\n    vm_regs resd NUM_REGS\n    vm_mem  resd MEM_SIZE\n    outbuf  resb 32\n\nsection .text\n    global _start\n\n;----------------------------------------------------------\n; itoa: convert signed 32-bit integer in eax to string at rdi\n; returns length in eax\n;----------------------------------------------------------\nitoa:\n    push rbx\n    push rcx\n    push rdx\n    push rdi\n    mov ebx, 10\n    mov ecx, eax\n    xor r8d, r8d\n    test eax, eax\n    jns .not_neg\n    neg eax\n    mov byte [rdi], '-'\n    inc rdi\n    inc r8d\n.not_neg:\n    test eax, eax\n    jnz .convert\n    mov byte [rdi], '0'\n    inc rdi\n    inc r8d\n    jmp .finish\n.convert:\n    sub rsp, 32\n    mov rsi, rsp\n    xor edx, edx\n.digit_loop:\n    xor edx, edx\n    div ebx\n    add dl, '0'\n    mov [rsi], dl\n    inc rsi\n    inc r8d\n    test eax, eax\n    jnz .digit_loop\n    mov rcx, rsi\n    sub rcx, rsp\n    dec rsi\n.copy_loop:\n    mov al, [rsi]\n    mov [rdi], al\n    inc rdi\n    dec rsi\n    dec rcx\n    jnz .copy_loop\n    add rsp, 32\n.finish:\n    mov byte [rdi], 0\n    mov eax, r8d\n    pop rdi\n    pop rdx\n    pop rcx\n    pop rbx\n    ret\n\n;----------------------------------------------------------\n; _start\n;----------------------------------------------------------\n_start:\n    lea rsi, [program]      ; base of program\n    xor ebx, ebx            ; PC = 0\n\n.fetch:\n    cmp ebx, program_len\n    jge .exit               ; PC out of range\n\n    mov r8d, [rsi + rbx*4]  ; fetch instruction into r8d\n    inc ebx                 ; advance PC (may be modified by jumps)\n\n    movzx ecx, r8b          ; opcode\n    lea rdx, [dispatch_table]\n    cmp ecx, OP_PRINT\n    ja .exit                ; invalid opcode\n    mov rax, [rdx + rcx*8]\n    jmp rax\n\n; Dispatch table\ndispatch_table:\n    dq .op_halt\n    dq .op_load\n    dq .op_add\n    dq .op_sub\n    dq .op_mul\n    dq .op_div\n    dq .op_store\n    dq .op_load_mem\n    dq .op_jump\n    dq .op_jz\n    dq .op_jnz\n    dq .op_print\n\n.op_halt:\n    jmp .exit\n\n.op_load:\n    ; Extract reg (bits 8-15) and immediate (bits 16-31)\n    movzx edx, r8b          ; not needed\n    mov ecx, r8d\n    shr ecx, 8              ; ecx = bits 8-31\n    movzx edx, cl           ; reg = low 8 bits of that (bits 8-15)\n    shr ecx, 8              ; ecx = bits 16-31\n    ; sign-extend 16-bit immediate in cx\n    movsx eax, cx           ; eax = sign-extended immediate\n    ; Store in vm_regs[edx]\n    lea rdi, [vm_regs + rdx*4]\n    mov [rdi], eax\n    jmp .fetch\n\n.op_add:\n    movzx edx, r8b          ; not needed\n    ; reg1 = bits 8-15, reg2 = bits 16-23\n    mov ecx, r8d\n    shr ecx, 8\n    movzx r9d, cl           ; reg1\n    shr ecx, 8\n    movzx r10d, cl          ; reg2\n    ; load reg1 and reg2\n    lea rdi, [vm_regs + r9*4]\n    mov eax, [rdi]\n    lea rdi, [vm_regs + r10*4]\n    mov edx, [rdi]\n    add eax, edx\n    lea rdi, [vm_regs + r9*4]\n    mov [rdi], eax\n    jmp .fetch\n\n.op_sub:\n    ; similar to add, but subtract\n    mov ecx, r8d\n    shr ecx, 8\n    movzx r9d, cl\n    shr ecx, 8\n    movzx r10d, cl\n    lea rdi, [vm_regs + r9*4]\n    mov eax, [rdi]\n    lea rdi, [vm_regs + r10*4]\n    mov edx, [rdi]\n    sub eax, edx\n    lea rdi, [vm_regs + r9*4]\n    mov [rdi], eax\n    jmp .fetch\n\n.op_mul:\n    mov ecx, r8d\n    shr ecx, 8\n    movzx r9d, cl\n    shr ecx, 8\n    movzx r10d, cl\n    lea rdi, [vm_regs + r9*4]\n    mov eax, [rdi]\n    lea rdi, [vm_regs + r10*4]\n    mov edx, [rdi]\n    imul eax, edx\n    lea rdi, [vm_regs + r9*4]\n    mov [rdi], eax\n    jmp .fetch\n\n.op_div:\n    mov ecx, r8d\n    shr ecx, 8\n    movzx r9d, cl\n    shr ecx, 8\n    movzx r10d, cl\n    lea rdi, [vm_regs + r9*4]\n    mov eax, [rdi]\n    lea rdi, [vm_regs + r10*4]\n    mov ecx, [rdi]\n    cdq\n    idiv ecx\n    lea rdi, [vm_regs + r9*4]\n    mov [rdi], eax\n    jmp .fetch\n\n.op_store:\n    ; STORE reg1, reg2: memory[reg2] = reg1\n    mov ecx, r8d\n    shr ecx, 8\n    movzx r9d, cl          ; reg1\n    shr ecx, 8\n    movzx r10d, cl         ; reg2 (address)\n    ; load reg1 value\n    lea rdi, [vm_regs + r9*4]\n    mov eax, [rdi]\n    ; load address from reg2\n    lea rdi, [vm_regs + r10*4]\n    mov edx, [rdi]\n    ; check address bounds\n    cmp edx, MEM_SIZE\n    jae .exit               ; out of bounds\n    lea rdi, [vm_mem + rdx*4]\n    mov [rdi], eax\n    jmp .fetch\n\n.op_load_mem:\n    ; LOAD_MEM reg1, reg2: reg1 = memory[reg2]\n    mov ecx, r8d\n    shr ecx, 8\n    movzx r9d, cl          ; reg1\n    shr ecx, 8\n    movzx r10d, cl         ; reg2 (address)\n    lea rdi, [vm_regs + r10*4]\n    mov edx, [rdi]\n    cmp edx, MEM_SIZE\n    jae .exit\n    lea rdi, [vm_mem + rdx*4]\n    mov eax, [rdi]\n    lea rdi, [vm_regs + r9*4]\n    mov [rdi], eax\n    jmp .fetch\n\n.op_jump:\n    ; JUMP imm16 (signed)\n    mov eax, r8d\n    shr eax, 16\n    movsx eax, ax           ; sign-extend 16-bit\n    ; set PC = eax (absolute index)\n    mov ebx, eax\n    jmp .fetch\n\n.op_jz:\n    ; JZ reg1, imm16: if reg1==0 jump\n    mov ecx, r8d\n    shr ecx, 8\n    movzx r9d, cl          ; reg1\n    lea rdi, [vm_regs + r9*4]\n    mov eax, [rdi]\n    test eax, eax\n    jnz .no_jump\n    mov eax, r8d\n    shr eax, 16\n    movsx eax, ax\n    mov ebx, eax\n.no_jump:\n    jmp .fetch\n\n.op_jnz:\n    ; JNZ reg1, imm16: if reg1!=0 jump\n    mov ecx, r8d\n    shr ecx, 8\n    movzx r9d, cl\n    lea rdi, [vm_regs + r9*4]\n    mov eax, [rdi]\n    test eax, eax\n    jz .no_jump2\n    mov eax, r8d\n    shr eax, 16\n    movsx eax, ax\n    mov ebx, eax\n.no_jump2:\n    jmp .fetch\n\n.op_print:\n    ; PRINT reg1\n    mov ecx, r8d\n    shr ecx, 8\n    movzx r9d, cl\n    lea rdi, [vm_regs + r9*4]\n    mov eax, [rdi]\n    lea rdi, [outbuf]\n    call itoa\n    mov edx, eax\n    mov eax, 1\n    mov rdi, 1\n    lea rsi, [outbuf]\n    syscall\n    ; print newline\n    mov eax, 1\n    mov rdi, 1\n    mov rsi, newline\n    mov rdx, 1\n    syscall\n    jmp .fetch\n\n.exit:\n    mov rax, 60\n    xor rdi, rdi\n    syscall"
+          },
+          {
+            "language": "nasm",
+            "title": "Complete corrected VM and all exercise handlers",
+            "code": "; vm.asm -- Linux x86-64, 4 signed 32-bit registers, 64 memory words.\n; Base ISA 0..11 retained; extensions 12 MOD,13 DEC,14 STORE_IMM,\n; 15 LOAD_IMM_MEM,16 CALL,17 RET. PRINT bit 15 requests unsigned output.\n; Encodings: opcode | (reg1<<8) | (reg2<<16), or imm16 in bits 16..31.\n; LOAD immediates signed; jump/call targets unsigned instruction indices.\n; Errors: 1 PC/target,2 opcode,3 register,4 memory,5 division,\n; 6 VM stack,7 instruction limit,8 host output. HALT exits 0.\n%ifndef FUEL\n%define FUEL 100000\n%endif\ndefault rel\nsection .rodata\nprogram:\n%ifdef PROGRAM_FILE\n%include PROGRAM_FILE\n%else\n    dd 1 | (0<<8) | (5<<16)\n    dd 1 | (1<<8) | (10<<16)\n    dd 2 | (0<<8) | (1<<16)\n    dd 11\n    dd 0\n%endif\nprogram_len equ ($-program)/4\ndispatch:\n    dq op_halt,op_load,op_add,op_sub,op_mul,op_div\n    dq op_store,op_load_mem,op_jump,op_jz,op_jnz,op_print\n    dq op_mod,op_dec,op_store_imm,op_load_imm_mem,op_call,op_ret\nsection .bss\nvm_regs resd 4\nvm_mem resd 64\nvm_stack resd 64\noutbuf resb 32\nsection .text\nglobal _start\n_start:\n    lea r12,[program]\n    lea r13,[vm_regs]\n    lea r14,[vm_mem]\n    xor r15d,r15d           ; next instruction index\n    mov ebx,FUEL\nfetch:\n    test rbx,rbx\n    jz fuel_error\n    dec rbx\n    cmp r15d,program_len\n    jae pc_error\n    mov r8d,[r12+r15*4]\n    inc r15d\n    movzx eax,r8b\n    cmp eax,17\n    ja opcode_error\n    mov r9d,r8d\n    shr r9d,8\n    and r9d,255\n    mov r10d,r8d\n    shr r10d,16\n    and r10d,255\n    lea rdx,[dispatch]\n    jmp [rdx+rax*8]\nget_r1:\n    cmp r9d,4\n    jae register_error\n    ret\nget_pair:\n    cmp r9d,4\n    jae register_error\n    cmp r10d,4\n    jae register_error\n    mov eax,[r13+r9*4]\n    mov ecx,[r13+r10*4]\n    ret\nop_halt:\n    xor edi,edi\n    jmp exit\nop_load:\n    call get_r1\n    mov eax,r8d\n    sar eax,16\n    jmp store_result\nop_add:\n    call get_pair\n    add eax,ecx             ; explicit modulo-2^32 arithmetic\n    jmp store_result\nop_sub:\n    call get_pair\n    sub eax,ecx\n    jmp store_result\nop_mul:\n    call get_pair\n    imul eax,ecx\n    jmp store_result\nop_div:\n    call get_pair\n    call divide\n    jmp store_result\nop_mod:\n    call get_pair\n    call divide\n    mov eax,edx\n    jmp store_result\ndivide:\n    test ecx,ecx\n    jz division_error\n    cmp eax,0x80000000\n    jne .safe\n    cmp ecx,-1\n    je division_error      ; explicit trap for DIV and MOD exceptional pair\n.safe:\n    cdq\n    idiv ecx\n    ret\nstore_result:\n    mov [r13+r9*4],eax\n    jmp fetch\nop_store:\n    call get_pair\n    cmp ecx,64\n    jae memory_error\n    mov [r14+rcx*4],eax\n    jmp fetch\nop_load_mem:\n    call get_pair\n    cmp ecx,64\n    jae memory_error\n    mov eax,[r14+rcx*4]\n    jmp store_result\nop_jump:\n    mov eax,r8d\n    shr eax,16\n    cmp eax,program_len\n    jae pc_error\n    mov r15d,eax\n    jmp fetch\nop_jz:\n    call get_r1\n    cmp dword [r13+r9*4],0\n    je op_jump\n    jmp fetch\nop_jnz:\n    call get_r1\n    cmp dword [r13+r9*4],0\n    jne op_jump\n    jmp fetch\nop_print:\n    and r9d,127            ; PRINT reserves instruction bit15 as unsigned flag\n    call get_r1\n    mov eax,[r13+r9*4]\n    test r8d,0x8000\n    jnz .ready\n    movsxd rax,eax\n.ready:\n    call print_number      ; persistent VM state stays in R12-R15/RBX\n    jmp fetch\nop_dec:\n    call get_r1\n    dec dword [r13+r9*4]\n    jmp fetch\nop_store_imm:\n    call get_r1\n    cmp r10d,64\n    jae memory_error\n    mov eax,[r13+r9*4]\n    mov [r14+r10*4],eax\n    jmp fetch\nop_load_imm_mem:\n    call get_r1\n    cmp r10d,64\n    jae memory_error\n    mov eax,[r14+r10*4]\n    jmp store_result\nop_call:\n    mov eax,r8d\n    shr eax,16\n    cmp eax,program_len\n    jae pc_error\n    mov ecx,[r13+12]       ; R3 holds VM stack depth, initially zero\n    cmp ecx,64\n    jae stack_error\n    lea rdx,[vm_stack]\n    mov [rdx+rcx*4],r15d\n    inc ecx\n    mov [r13+12],ecx\n    mov r15d,eax\n    jmp fetch\nop_ret:\n    mov ecx,[r13+12]\n    test ecx,ecx\n    jz stack_error\n    cmp ecx,64\n    ja stack_error\n    dec ecx\n    lea rdx,[vm_stack]\n    mov eax,[rdx+rcx*4]\n    cmp eax,program_len\n    jae pc_error\n    mov [r13+12],ecx\n    mov r15d,eax\n    jmp fetch\nprint_number:\n    lea rsi,[outbuf+31]\n    mov byte [rsi],10\n    mov r8,rax\n    test rax,rax\n    jns .magnitude\n    neg rax\n.magnitude:\n    mov r10d,10\n.digit:\n    xor edx,edx\n    div r10\n    add dl,'0'\n    dec rsi\n    mov [rsi],dl\n    test rax,rax\n    jnz .digit\n    test r8,r8\n    jns .length\n    dec rsi\n    mov byte [rsi],'-'\n.length:\n    lea rdx,[outbuf+32]\n    sub rdx,rsi\n.write:\n    mov eax,1\n    mov edi,1\n    syscall\n    cmp rax,-4\n    je .write\n    test rax,rax\n    jle io_error\n    add rsi,rax\n    sub rdx,rax\n    jnz .write\n    ret\npc_error:\n    mov edi,1\n    jmp exit\nopcode_error:\n    mov edi,2\n    jmp exit\nregister_error:\n    mov edi,3\n    jmp exit\nmemory_error:\n    mov edi,4\n    jmp exit\ndivision_error:\n    mov edi,5\n    jmp exit\nstack_error:\n    mov edi,6\n    jmp exit\nfuel_error:\n    mov edi,7\n    jmp exit\nio_error:\n    mov edi,8\nexit:\n    mov eax,60\n    syscall\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Save as vm.asm. The default program prints 15 and HALTs. ADD/SUB/MUL/DEC wrap modulo 2^32; signed DIV/MOD trap on zero or INT32_MIN/-1. Every VM run has a configurable instruction budget. The CALL extension reserves R3 for stack depth and validates both overflow and underflow."
+          }
+        ]
+      },
+      {
+        "id": "sec-33-6",
+        "title": "Build and Test",
+        "content": "\n\nOriginal source solutions placeholder: *(Provide concise solutions for each exercise, including code snippets.)*",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "33.6 Build and Test — listing 1",
+            "code": "nasm -f elf64 vm.asm -o vm.o\nld vm.o -o vm\n./vm",
+            "explanation": "Expected output:"
+          },
+          {
+            "language": "text",
+            "title": "33.6 Build and Test — listing 2",
+            "code": "15"
+          },
+          {
+            "language": "bash",
+            "title": "Build an exercise program",
+            "code": "nasm -f elf64 -DPROGRAM_FILE='\"program.inc\"' vm.asm -o vm.o\nld vm.o -o vm\n./vm\necho $?",
+            "explanation": "Save the selected exercise solution as program.inc. The quoted NASM define expands to a filename string for %include. Build without PROGRAM_FILE to run the original 5+10 demonstration."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-33-1',
-        title: 'Exercise 33.1: Add Modulo Opcode (OP_MOD = 12)',
-        description: 'Extend the dispatch table and add handler for computing reg1 = reg1 % reg2.',
-        solution: `dispatch_table: ... dq .op_mod\n.op_mod:\n    mov ecx, r8d; shr ecx, 8; movzx r9d, cl; shr ecx, 8; movzx r10d, cl\n    lea rdi, [vm_regs + r9*4]; mov eax, [rdi]\n    lea rdi, [vm_regs + r10*4]; mov ecx, [rdi]\n    cdq; idiv ecx\n    lea rdi, [vm_regs + r9*4]; mov [rdi], edx\n    jmp .fetch`,
-        solutionLanguage: 'nasm'
+        "id": "ex-33-1",
+        "title": "Exercise 33.1: Add More Opcodes",
+        "description": "Implement MOD (modulo) instruction (opcode 12) that computes reg1 = reg1 % reg2. Update the dispatch table and add a handler. Write a program to test it.",
+        "solution": " ; MOD: -10 % 3 = -1\n dd 1 | (0<<8) | ((-10 & 0xffff)<<16)\n dd 1 | (1<<8) | (3<<16)\n dd 12 | (0<<8) | (1<<16)\n dd 11 | (0<<8)\n dd 0",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Save this guest bytecode as program.inc and use the section Build and Test commands with the complete corrected vm.asm. All extension handlers are included in that VM; this is guest data, not a standalone host executable. Opcode 12 uses IDIV’s remainder in EDX. The remainder has the dividend’s sign. Expected output: -1. Zero and the exceptional minimum/-1 pair exit 5."
+      },
+      {
+        "id": "ex-33-2",
+        "title": "Exercise 33.2: Looping Program",
+        "description": "Write a VM program that computes the sum of numbers from 1 to 5 using a loop. Use LOAD, ADD, SUB (or a decrement), JNZ, and PRINT. You may need to add a CMP or DEC instruction. Add a DEC opcode (decrement register) and implement it. Then write the program.",
+        "solution": " ; Sum 5+4+3+2+1 = 15; loop begins at instruction index 2.\n dd 1 | (0<<8) | (0<<16)\n dd 1 | (1<<8) | (5<<16)\n dd 2 | (0<<8) | (1<<16)\n dd 13 | (1<<8)\n dd 10 | (1<<8) | (2<<16)\n dd 11 | (0<<8)\n dd 0",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Save this guest bytecode as program.inc and use the section Build and Test commands with the complete corrected vm.asm. All extension handlers are included in that VM; this is guest data, not a standalone host executable. Opcode 13 decrements the selected 32-bit guest register. Each taken JNZ validates its absolute target; PRINT is followed by HALT. Expected output: 15."
+      },
+      {
+        "id": "ex-33-3",
+        "title": "Exercise 33.3: Memory Operations",
+        "description": "Extend the VM to support STORE and LOAD_MEM with an immediate address (instead of register). Add a new opcode STORE_IMM that uses an immediate 8-bit address. Write a program that stores a value to memory and loads it back.",
+        "solution": " ; Store 123 at memory index 7 and load it into R1.\n dd 1 | (0<<8) | (123<<16)\n dd 14 | (0<<8) | (7<<16)\n dd 15 | (1<<8) | (7<<16)\n dd 11 | (1<<8)\n dd 0",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Save this guest bytecode as program.inc and use the section Build and Test commands with the complete corrected vm.asm. All extension handlers are included in that VM; this is guest data, not a standalone host executable. Opcode 14 STORE_IMM and opcode 15 LOAD_IMM_MEM use bits 16–23 as an immediate word index. Both reject indices outside 0..63; the upper byte is unused. Expected output: 123."
+      },
+      {
+        "id": "ex-33-4",
+        "title": "Exercise 33.4: Improve PRINT for Unsigned",
+        "description": "Modify the PRINT handler to print unsigned integers as well. Add a flag in the instruction (e.g., use bit 15 of reg field) to indicate signed vs unsigned. Update itoa accordingly.",
+        "solution": " ; The same 32-bit pattern prints signed -1, then unsigned 4294967295.\n dd 1 | (0<<8) | (0xffff<<16)\n dd 11 | (0<<8)\n dd 11 | (0<<8) | (1<<15)\n dd 0",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Save this guest bytecode as program.inc and use the section Build and Test commands with the complete corrected vm.asm. All extension handlers are included in that VM; this is guest data, not a standalone host executable. Instruction bit 15 is the unsigned flag only for PRINT. Mask it out before validating the register field. Zero-extend the 32-bit value for unsigned printing; sign-extend it otherwise. The two prints also verify that output does not destroy the program base."
+      },
+      {
+        "id": "ex-33-5",
+        "title": "Exercise 33.5: Jumps and Functions",
+        "description": "Implement a CALL and RET instruction using a stack pointer (register R3). Add a stack array. Write a program that calls a subroutine that doubles a value.",
+        "solution": " ; R3 starts at zero and is reserved for the VM call-stack depth.\n dd 1 | (0<<8) | (21<<16)   ; 0 LOAD R0,21\n dd 16 | (4<<16)           ; 1 CALL instruction 4\n dd 11 | (0<<8)            ; 2 PRINT 42 after return\n dd 0                     ; 3 HALT\n dd 2 | (0<<8) | (0<<16)   ; 4 ADD R0,R0\n dd 17                    ; 5 RET",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Save this guest bytecode as program.inc and use the section Build and Test commands with the complete corrected vm.asm. All extension handlers are included in that VM; this is guest data, not a standalone host executable. CALL pushes the already-incremented return index to vm_stack[R3], increments R3 and jumps. RET restores the index after checking depth and target. Stack capacity is 64 entries; the test prints 42."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'How does an interpreter loop emulate a CPU fetch-decode-execute cycle?',
-        answer: 'The interpreter loop maintains a virtual Program Counter (PC), fetches bytecode from memory at PC, decodes the opcode, branches via a dispatch table to the corresponding handler, executes the state update, increments PC, and loops.'
+        "question": "What is a virtual machine? How does it differ from a physical CPU?",
+        "answer": "A VM defines software-visible state and an instruction set, then implements their behavior using host instructions. A physical CPU executes its own hardware ISA directly; this educational interpreter does not emulate a complete operating system or hardware platform."
+      },
+      {
+        "question": "Explain the fetch-decode-execute cycle.",
+        "answer": "Validate PC, fetch the encoded instruction, advance the next-PC, decode fields, dispatch to a checked handler, update guest state, and repeat. HALT and explicit faults stop execution. Branches replace the next-PC rather than changing the host instruction stream arbitrarily."
+      },
+      {
+        "question": "Why is a jump table more efficient than a chain of if-else for dispatching opcodes?",
+        "answer": "A checked jump table selects a handler by index instead of testing every opcode in sequence. Its speed depends on prediction, opcode distribution and host CPU; an indirect branch is not universally faster than a short well-predicted chain."
+      },
+      {
+        "question": "How would you extend the VM to support 64-bit instructions? What changes are needed?",
+        "answer": "Define the new field layout and byte order, change fetch width and PC scaling, revise encoders/decoders and bounds, then decide whether guest registers/memory also widen. A 64-bit instruction format does not automatically imply 64-bit guest arithmetic."
+      },
+      {
+        "question": "In the VM, why is the program counter stored in a host register rather than memory?",
+        "answer": "A host register makes repeated access convenient and avoids explicit memory loads/stores. It must survive helpers and syscalls; the corrected interpreter reserves R15 for PC and R12 for program base. A memory-backed PC can also be correct."
+      },
+      {
+        "question": "How would you implement a call stack for the VM? What data structure is appropriate?",
+        "answer": "Use a bounded array of return instruction indices with a depth pointer. CALL pushes the already-advanced PC, then jumps; RET checks underflow and restores a validated return index. The extension uses R3 as depth, so programs must reserve it while calls are active."
+      },
+      {
+        "question": "What are the security implications of running untrusted bytecode on a VM? How can you sandbox it?",
+        "answer": "Validate opcode, operand registers, memory indices, PC and stack operations before host memory access. Define division errors and instruction budgets. This tiny interpreter is not a hardened security boundary; OS isolation and constrained host interfaces are separate requirements."
+      },
+      {
+        "question": "How does this VM compare to a real CPU in terms of performance? Why?",
+        "answer": "Each guest instruction requires multiple host instructions for decoding, checking and dispatch. Real CPUs decode and execute in hardware with pipelining and speculation. Interpretation overhead dominates simple guest operations; JIT compilation can trade startup work for reduced repeated dispatch."
+      },
+      {
+        "question": "Can you write a VM program that computes factorial of 5 using only the current instruction set? What additions would you need?",
+        "answer": "No new opcode is required: LOAD R0,1; LOAD R1,5; LOAD R2,1; loop: MUL R0,R1; SUB R1,R2; JNZ R1,loop; PRINT R0; HALT computes 120. Encode each register field at its documented bit offset."
+      },
+      {
+        "question": "How would you implement a simple assembler that converts mnemonics (like LOAD R0, 5) into the dword format used by the VM?",
+        "answer": "Tokenize mnemonic/operands, validate register and immediate ranges, assign label instruction indices in a first pass, resolve labels in a second pass, and emit opcode|(r1<<8)|(r2<<16) or a masked imm16<<16. Reject duplicate/undefined labels and malformed instructions."
       }
     ],
-    summary: ['Virtual machines emulate hardware architectures in software.', 'Bytecode interpreters power language runtimes and secure sandboxes.']
+    "summary": [
+      "A virtual machine is implemented as a fetch-decode-execute loop in assembly.",
+      "Fixed-length instructions simplify decoding; fields are extracted using bit shifts.",
+      "A dispatch table (jump table) efficiently routes to opcode handlers.",
+      "VM registers and memory are just arrays in the host's memory.",
+      "The project demonstrates how higher-level languages and emulators work under the hood."
+    ]
   },
   {
     id: 34,
