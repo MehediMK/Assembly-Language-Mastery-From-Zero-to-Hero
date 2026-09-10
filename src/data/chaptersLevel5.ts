@@ -1378,62 +1378,373 @@ export const CHAPTERS_LEVEL_5: Chapter[] = [
     ]
   },
   {
-    id: 26,
-    slug: 'chapter-26-reverse-engineering-fundamentals',
-    level: 5,
-    levelTitle: 'Low-Level Systems and Reverse Engineering',
-    title: 'Chapter 26: Reverse Engineering Fundamentals',
-    subtitle: 'Static & Dynamic Triage, Symbol Stripping, Control Flow Graphs, and Ghidra/radare2',
-    learningObjectives: [
-      'Establish a rigorous reverse engineering workflow from triage to reporting.',
-      'Identify function boundaries and entry points in stripped binaries.',
-      'Reconstruct high-level data structures from memory access offsets.',
-      'Perform dynamic analysis using GDB, radare2, and strace.',
-      'Analyze a compiled keygen to extract hidden passcodes.'
+    "id": 26,
+    "slug": "chapter-26-reverse-engineering-fundamentals",
+    "level": 5,
+    "levelTitle": "Low-Level Systems and Reverse Engineering",
+    "title": "Chapter 26: Reverse Engineering Fundamentals",
+    "subtitle": "Static & Dynamic Triage, Symbol Stripping, Control Flow Graphs, and Ghidra/radare2",
+    "learningObjectives": [
+      "Define reverse engineering and understand its legitimate uses and ethical considerations.",
+      "Set up a reverse engineering environment with appropriate tools.",
+      "Perform static analysis of binaries: file identification, string extraction, symbol inspection, and disassembly.",
+      "Perform dynamic analysis: running under a debugger, setting breakpoints, tracing execution, and monitoring system calls.",
+      "Recognize common high-level constructs translated to assembly (if‑else, loops, switch, functions, data structures).",
+      "Reconstruct data structures and control flow from disassembled code.",
+      "Identify compiler optimizations and strip debug info; handle stripped binaries.",
+      "Apply a systematic methodology to analyze unknown binaries.",
+      "Use Ghidra or radare2 as a high-level reverse engineering framework (introduction)."
     ],
-    prerequisites: ['Chapters 1–25'],
-    keyConcepts: [
-      'Static analysis examines binaries without execution; dynamic analysis observes runtime state.',
-      'Stripped binaries remove symbol tables, requiring heuristic function boundary detection.',
-      'Tracing system calls with strace rapidly exposes file, network, and process behavior.'
+    "prerequisites": [
+      "Solid understanding of x86-64 assembly, registers, and memory addressing (Chapters 1–13).",
+      "Familiarity with stack frames, calling conventions, and ABI details (Chapters 10, 19, 25).",
+      "Proficiency in reading disassembly and compiler-generated assembly (Chapter 24).",
+      "Knowledge of executable formats ELF/PE (Chapter 23).",
+      "Experience with debugging tools like GDB (Chapter 17).",
+      "Basic understanding of system calls and OS interaction (Chapter 16)."
     ],
-    diagramType: 'reverse_engineering',
-    sections: [
+    "keyConcepts": [
+      "Reverse engineering is the process of analyzing a system to understand its design, functionality, or behavior.",
+      "Static analysis examines a binary without executing it (disassembly, strings, headers).",
+      "Dynamic analysis executes the binary in a controlled environment (debugger, sandbox) to observe its behavior.",
+      "Stripped binaries lack symbol tables; the analyst must infer function boundaries and variable names.",
+      "Control flow graphs (CFG) visually represent basic blocks and branches, aiding comprehension.",
+      "Data structure reconstruction involves recognizing memory layouts and access patterns (arrays, structs, linked lists).",
+      "Decompilers (e.g., Ghidra, IDA) attempt to produce C-like pseudocode from machine code.",
+      "Legal and ethical aspects: reverse engineering may be restricted by licenses, laws, and terms; always obtain proper authorization."
+    ],
+    "diagramType": "reverse_engineering",
+    "sections": [
       {
-        id: 'sec-26-1',
-        title: '26.1 Cracking a Keygen via Dynamic Analysis',
-        content: `Setting breakpoints on strcmp in GDB to inspect password arguments:`,
-        codeSnippets: [
+        "id": "sec-26-1",
+        "title": "26.1 Introduction to Reverse Engineering",
+        "content": "Reverse engineering (RE) is the process of taking a compiled binary and understanding its underlying logic, data structures, and algorithms without access to the original source code. It is used in:\n\n- Software interoperability: Understanding file formats or protocols.\n- Security analysis: Finding vulnerabilities, malware analysis, exploit development.\n- Legacy software maintenance: Recovering lost source code or documenting behavior.\n- Competitive analysis: Understanding how a product works (subject to legal constraints).\n- Education: Learning how compilers translate high-level constructs to machine code.\n\nIn this chapter, we focus on the fundamentals: tools, methodologies, and recognition of common patterns. We'll use Linux x86-64 binaries as examples, but the concepts apply to other platforms."
+      },
+      {
+        "id": "sec-26-1-1",
+        "title": "26.1.1 Legal and Ethical Considerations",
+        "content": "Reverse engineering is often legally restricted by End User License Agreements (EULAs), copyright law, and trade secret protections. In some jurisdictions, it may be permissible for interoperability or security research under specific conditions (e.g., the DMCA exemption for security testing). Always ensure you have permission or are operating within legal boundaries. This chapter is for educational purposes only.\n\nClarification: This overview is not a universal statement of permission or prohibition. Specific exceptions, contracts and applicable laws require case-specific review; all runnable exercises here analyze programs created by the learner."
+      },
+      {
+        "id": "sec-26-2",
+        "title": "26.2 Setting Up a Reverse Engineering Environment",
+        "content": "A typical RE environment on Linux includes:\n\n- Disassemblers: objdump, ndisasm, radare2 (r2), Ghidra (GUI), IDA Pro (commercial).\n- Debuggers: gdb (with GEF or pwndbg extensions), radare2 (with debugger), ltrace, strace.\n- Binary analysis tools: readelf, nm, strings, file, ldd, checksec.\n- Hex editors: xxd, hexdump, 010 Editor.\n- Decompilers: Ghidra (free), IDA (commercial), retdec (open source).\n\nInstall common tools:\n\nClarification: Package availability varies by distribution; the combined apt command is illustrative. Check apt-cache policy for your distribution and use the official project installation instructions when packages are absent. The GEF path must point to the actual checked-out gef.py; source a reviewed local file explicitly in GDB before changing persistent configuration.",
+        "codeSnippets": [
           {
-            language: 'gdb',
-            title: 'gdb_keygen_cracking',
-            code: `(gdb) break strcmp
-(gdb) run wrong_pass
-Breakpoint 1, __strcmp_avx2 ()
-(gdb) x/s $rdi
-0x7fffffffe180: "wrong_pass"
-(gdb) x/s $rsi
-0x4006c4: "secret_access_key"    # Secret passcode revealed in second argument!`
+            "language": "bash",
+            "title": "26.2 Setting Up a Reverse Engineering Environment — listing 1",
+            "code": "sudo apt install gdb radare2 ghidra strace ltrace binutils",
+            "explanation": "GEF (GDB Enhanced Features) adds useful commands for RE:"
+          },
+          {
+            "language": "bash",
+            "title": "26.2 Setting Up a Reverse Engineering Environment — listing 2",
+            "code": "git clone https://github.com/hugsy/gef.git\necho \"source /path/to/gef.py\" >> ~/.gdbinit",
+            "explanation": "Pwndbg is another popular GDB extension."
+          }
+        ]
+      },
+      {
+        "id": "sec-26-3",
+        "title": "26.3 Static Analysis Methodology",
+        "content": "Static analysis examines the binary without running it. Steps:\n\n1. Identify file type: file program (ELF, PE, etc.)\n2. Check security properties: checksec --file=program (RELRO, stack canary, NX, PIE)\n3. Extract strings: strings -a program (look for interesting messages, URLs, file names)\n4. List symbols: nm program (if not stripped)\n5. View sections and headers: readelf -S, readelf -l, readelf -d\n6. Disassemble: objdump -d -M intel program\n7. Analyze functions: identify entry point, main, etc. Using a disassembler with function detection (e.g., radare2 with aaa, or Ghidra's auto-analysis).\n8. Reconstruct control flow: draw CFG or use tooling.\n\nClarification: A mitigation report describes binary properties, not proof that a program is secure. Stripping usually removes .symtab/debug data while retaining dynamic symbols required for linking; ordinary strip does not generally remove section headers."
+      },
+      {
+        "id": "sec-26-3-1",
+        "title": "26.3.1 Function Identification",
+        "content": "In stripped binaries, function boundaries are not explicitly marked. Heuristics:\n- Prologue patterns: push rbp; mov rbp, rsp or sub rsp, N.\n- Call targets (addresses that are targets of call instructions).\n- Alignment padding (functions often aligned to 16 bytes).\n- Cross-references: code that jumps to the start of a block likely indicates a function.\nTools like Ghidra/radare2 perform function detection automatically.\n\nClarification: Function detection is heuristic. Tail jumps, shared blocks, omitted prologues and data embedded in executable sections can mislead it. Label inferred functions provisionally and confirm with callers and control flow."
+      },
+      {
+        "id": "sec-26-3-2",
+        "title": "26.3.2 Recognizing the Main Function",
+        "content": "In ELF executables, entry point is _start, which calls __libc_start_main (in dynamically linked programs). The main function address is passed as an argument to __libc_start_main. In stripped binaries, you can locate it via the call to __libc_start_main or by finding the function that receives argc/argv.\n\nExample:\n\nClarification: The startup example is a historical glibc pattern, not a universal ELF requirement. Current builds may pass zero for init/fini; statically linked libc programs can still call __libc_start_main. Custom assembly can use a different entry point entirely.",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "26.3.2 Recognizing the Main Function — listing 1",
+            "code": "_start:\n    xor     ebp, ebp\n    mov     r9, rdx         ; rtld_fini\n    pop     rsi             ; argc\n    mov     rdx, rsp        ; argv\n    and     rsp, -16\n    push    rax\n    push    rsp\n    lea     r8, [__libc_csu_fini]\n    lea     rcx, [__libc_csu_init]\n    lea     rdi, [main]     ; address of main\n    call    __libc_start_main",
+            "explanation": "Here main is passed in rdi."
+          }
+        ]
+      },
+      {
+        "id": "sec-26-4",
+        "title": "26.4 Dynamic Analysis Methodology",
+        "content": "Dynamic analysis involves running the binary and observing its behavior."
+      },
+      {
+        "id": "sec-26-4-1",
+        "title": "26.4.1 Tracing with strace and ltrace",
+        "content": "- strace ./program shows system calls (file opens, network, process creation).\n- ltrace ./program shows library calls (if dynamically linked and using PLT)."
+      },
+      {
+        "id": "sec-26-4-2",
+        "title": "26.4.2 Debugging with GDB",
+        "content": "- Set breakpoints at suspected functions (break *0x4005d0).\n- Run with run, step with si/ni.\n- Examine registers, memory, stack.\n- Use watchpoints to catch data modifications.\n- Dump memory regions (dump memory file start end).\n\nGDB with GEF/Pwndbg provides enhanced views: stack, registers, disassembly, and heap.\n\nClarification: Use dump binary memory file start end for an explicit raw memory dump. Absolute breakpoints must use mapped runtime addresses for PIE; starti and info proc mappings help establish load bias."
+      },
+      {
+        "id": "sec-26-4-3",
+        "title": "26.4.3 Using radare2 for Dynamic Analysis",
+        "content": "radare2 -d ./program starts a debugger. Commands:\n- aaa – analyze all\n- afl – list functions\n- pdf @ main – disassemble main\n- db 0x4005d0 – set breakpoint\n- dc – continue\n- dr – show registers"
+      },
+      {
+        "id": "sec-26-5",
+        "title": "26.5 Recognizing High-Level Constructs in Assembly",
+        "content": ""
+      },
+      {
+        "id": "sec-26-5-1",
+        "title": "26.5.1 Conditional Statements",
+        "content": "If-else:",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "26.5.1 Conditional Statements — listing 1",
+            "code": "cmp eax, ebx\njle .L2\n; if body\njmp .L3\n.L2:\n; else body\n.L3:",
+            "explanation": "Often optimized with cmov for simple assignments."
+          }
+        ]
+      },
+      {
+        "id": "sec-26-5-2",
+        "title": "26.5.2 Loops",
+        "content": "While loop:",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "26.5.2 Loops — listing 1",
+            "code": ".Lloop:\n    test eax, eax\n    jz .Lend\n    ; body\n    jmp .Lloop\n.Lend:",
+            "explanation": "For loop often uses a counter register (ecx, rdi) with inc/dec and conditional jump."
+          }
+        ]
+      },
+      {
+        "id": "sec-26-5-3",
+        "title": "26.5.3 Switch Statements",
+        "content": "Look for jump tables: an array of addresses indexed by the switch expression. Or decision tree (series of comparisons)."
+      },
+      {
+        "id": "sec-26-5-4",
+        "title": "26.5.4 Function Calls",
+        "content": "- Arguments in registers (rdi, rsi, rdx, rcx, r8, r9).\n- Return in eax/rax.\n- Stack alignment: sub rsp, 8 before call if needed."
+      },
+      {
+        "id": "sec-26-5-5",
+        "title": "26.5.5 Data Structures",
+        "content": "- Arrays: indexed addressing [base + index*scale] or pointer increments.\n- Structs: base+offset access, often with offsets like [rdi+8], [rdi+16].\n- Linked lists: pointer chasing mov rax, [rax+8]."
+      },
+      {
+        "id": "sec-26-6",
+        "title": "26.6 Data Structure Reconstruction",
+        "content": "From memory access patterns, you can infer the layout of structures."
+      },
+      {
+        "id": "sec-26-6-1",
+        "title": "26.6.1 Example: Identifying a Struct",
+        "content": "Suppose you see:\n\nClarification: Offsets and operand widths constrain a proposed layout but do not uniquely identify a struct or type. The accesses could also refer to adjacent array elements or a byte buffer.",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "26.6.1 Example: Identifying a Struct — listing 1",
+            "code": "mov eax, [rdi]      ; field at offset 0\nadd eax, [rdi+4]    ; field at offset 4\nmov [rdi+8], eax    ; field at offset 8",
+            "explanation": "You can infer a struct with at least three members, likely of 4-byte sizes (int).\n\nIf offsets are 0, 8, 16, etc., likely 64-bit fields."
+          }
+        ]
+      },
+      {
+        "id": "sec-26-6-2",
+        "title": "26.6.2 Identifying Arrays",
+        "content": "If you see a base pointer in a register and an index multiplied by element size, it's an array.\n\nClarification: Scaled addressing is evidence of repeated-width access, not proof of an int array; a float, uint32_t or packed record can have the same width.",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "26.6.2 Identifying Arrays — listing 1",
+            "code": "mov eax, [rax + rcx*4]   ; array of 4-byte ints",
+            "explanation": "Pointer incrementing by a constant size also indicates array traversal."
+          }
+        ]
+      },
+      {
+        "id": "sec-26-7",
+        "title": "26.7 Dealing with Stripped Binaries",
+        "content": "Many binaries are stripped, removing symbol names and sometimes section headers (for static). You must rely on heuristics.\n\nClarification: Ordinary stripping preserves metadata needed by the loader. Dynamic symbols, relocations, unwind data and strings may remain useful even when local names disappear."
+      },
+      {
+        "id": "sec-26-7-1",
+        "title": "26.7.1 Finding Function Boundaries",
+        "content": "Tools like Ghidra and radare2 use recursive descent and heuristics. Manually, look for:\n- ret instructions followed by alignment padding.\n- Prologue patterns (push rbp, sub rsp, ...).\n- Targets of call instructions."
+      },
+      {
+        "id": "sec-26-7-2",
+        "title": "26.7.2 Identifying Main in Stripped Binary",
+        "content": "As described earlier, locate _start (entry point from ELF header), then trace the call to __libc_start_main. The first argument to that call is main.\n\nOr search for typical main prologue and references to standard library functions like printf, exit, etc."
+      },
+      {
+        "id": "sec-26-7-3",
+        "title": "26.7.3 Renaming Functions and Variables",
+        "content": "During analysis, you can rename functions and variables in Ghidra/radare2 to meaningful names as you understand their purpose."
+      },
+      {
+        "id": "sec-26-8",
+        "title": "26.8 Introduction to Ghidra and radare2",
+        "content": ""
+      },
+      {
+        "id": "sec-26-8-1",
+        "title": "26.8.1 Ghidra",
+        "content": "Ghidra is a free, open-source reverse engineering framework developed by the NSA. It includes:\n- Disassembler and decompiler (produces C pseudocode).\n- Graph view for CFG.\n- Scripting (Java/Python) for automation.\n- Support for many architectures.\n\nBasic workflow:\n1. Create a new project.\n2. Import the binary.\n3. Run auto-analysis.\n4. Explore functions, decompile, rename."
+      },
+      {
+        "id": "sec-26-8-2",
+        "title": "26.8.2 radare2",
+        "content": "radare2 is a command-line driven RE framework with a powerful command set.\n\nCommon commands:\n- r2 -A ./program – analyze all\n- afl – list functions\n- s main – seek to main\n- pdf – print disassembly of current function\n- izz – list strings\n- vv – visual mode\n- ood – reopen in debug mode\n- db – breakpoint"
+      },
+      {
+        "id": "sec-26-9",
+        "title": "26.9 Practical Example: Reverse Engineering a Simple Keygen",
+        "content": "We'll analyze a small program that checks a password and prints \"Access granted\" if correct. We'll find the correct password using static and dynamic analysis.\n\nSource (for reference, unknown to analyst):\n\nClarification: This is a self-created password checker, despite the keygen title. Build with -fno-builtin-strcmp when following the dynamic comparison exercise so the call is retained. strace and ltrace show only paths executed with the selected inputs.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "26.9 Practical Example: Reverse Engineering a Simple Keygen — listing 1",
+            "code": "#include <stdio.h>\n#include <string.h>\nint main(int argc, char **argv) {\n    if (argc != 2) { printf(\"Usage: %s <password>\\n\", argv[0]); return 1; }\n    if (strcmp(argv[1], \"secret\") == 0) {\n        printf(\"Access granted\\n\");\n        return 0;\n    } else {\n        printf(\"Access denied\\n\");\n        return 1;\n    }\n}",
+            "explanation": "Compile stripped:"
+          },
+          {
+            "language": "bash",
+            "title": "26.9 Practical Example: Reverse Engineering a Simple Keygen — listing 2",
+            "code": "gcc -O0 -s keygen.c -o keygen"
+          }
+        ]
+      },
+      {
+        "id": "sec-26-9-1",
+        "title": "26.9.1 Static Analysis with radare2",
+        "content": "\n\nClarification: Enter r2 -A ./keygen in the shell; afl, s main and pdf are radare2 commands. A stripped file may lack a recognized main name; use the inferred address and document how it was found.",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "26.9.1 Static Analysis with radare2 — listing 1",
+            "code": "r2 -A ./keygen\nafl   # list functions\ns main\npdf",
+            "explanation": "We see main's disassembly. Look for comparisons with strings. Use izz to list strings: \"Usage: %s <password>\\n\", \"secret\", \"Access granted\\n\", \"Access denied\\n\". The string \"secret\" is likely the password.\n\nBut suppose strings are not stored in plaintext (e.g., XOR-encoded). We would need dynamic analysis."
+          }
+        ]
+      },
+      {
+        "id": "sec-26-9-2",
+        "title": "26.9.2 Dynamic Analysis with GDB",
+        "content": "Run under GDB, set breakpoint at strcmp (if dynamic linking):\n\nClarification: A strcmp breakpoint can encounter dynamic-loader comparisons before the application call. Inspect the call site and argument strings to confirm the relevant hit; IFUNC implementations may have different symbol names. Use x/s $rdi and x/s $rsi at the confirmed call.",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "26.9.2 Dynamic Analysis with GDB — listing 1",
+            "code": "break strcmp\nrun wrongpassword",
+            "explanation": "Examine arguments: rsi points to \"secret\", rdi points to input. So password is \"secret\".\n\nIf static, break at the comparison location found in disassembly."
+          },
+          {
+            "language": "bash",
+            "title": "Reproducible checker inspection",
+            "code": "gcc -O0 -g -fno-builtin-strcmp keygen.c -o keygen.debug\ncp keygen.debug keygen\nstrip keygen\nreadelf -h keygen\nreadelf -d keygen\nstrings -a keygen\nobjdump -d -M intel keygen",
+            "explanation": "Keep the debug copy as ground truth after the blind analysis. Try no argument, wrongpassword and secret; expected exit statuses are 1,1,0."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-26-1',
-        title: 'Exercise 26.1: Static Triage Workflow',
-        description: 'Run file, checksec, strings, and readelf on an unknown binary.',
-        solution: 'file target && checksec --file=target && strings -a target | grep -E "(pass|key|flag)" && readelf -h target',
-        solutionLanguage: 'bash'
+        "id": "ex-26-1",
+        "title": "Exercise 26.1: Basic Static Analysis",
+        "description": "Create a simple C program (e.g., that prints \"Hello\" and exits). Compile with -O0 -s. Use file, strings, readelf, objdump to analyze. Identify main and the printf call.",
+        "solution": "cat > hello.c <<'C'\n#include <stdio.h>\nint main(void) { printf(\"Hello\\n\"); return 0; }\nC\ngcc -O0 -g -fno-builtin-printf hello.c -o hello.debug\ncp hello.debug hello\nstrip hello\nfile hello\nstrings -a hello\nreadelf -hW hello\nreadelf -dW hello\nobjdump -d -M intel hello\n# Compare your inferred main with the ground truth only after analysis:\nnm -n hello.debug\nobjdump -d -M intel --disassemble=main hello.debug",
+        "solutionExplanation": "\nOriginal source guidance: - file hello: ELF 64-bit LSB executable, x86-64, stripped.\n- strings hello: shows \"Hello\" and possibly other library strings.\n- nm hello: no symbols (stripped).\n- readelf -h: entry point.\n- objdump -d: disassemble _start and find call to __libc_start_main, then find main address. Default GCC may produce PIE (ET_DYN). -fno-builtin-printf retains the requested printf call instead of a puts substitution.",
+        "solutionLanguage": "bash"
+      },
+      {
+        "id": "ex-26-2",
+        "title": "Exercise 26.2: Function Identification",
+        "description": "Strip a binary with multiple functions. Use radare2 or objdump to list functions. Manually identify prologues and epilogues. Count how many functions you can find.",
+        "solution": "cat > functions.c <<'C'\n#include <stdio.h>\n__attribute__((noinline)) int twice(int x) { return x*2; }\n__attribute__((noinline)) int plus_three(int x) { return x+3; }\nint main(void) { printf(\"%d\\n\", plus_three(twice(4))); return 0; }\nC\ngcc -O0 -g -fno-inline functions.c -o functions.debug\ncp functions.debug functions\nstrip functions\nobjdump -d -M intel functions\nreadelf --debug-dump=frames functions\n# Record candidate addresses and evidence before consulting:\nnm -n functions.debug\n# Optional inside r2 -A ./functions: afl",
+        "solutionExplanation": "\nOriginal source guidance: Use objdump -d and look for patterns: push rbp; mov rbp,rsp; ... ret. Note alignment and call targets. radare2 -A with afl will do automatically. The source defines three functions, but the executable also has startup/runtime functions. Report which count you mean and how many candidates were verified; objdump disassembles code but does not reliably recover stripped function names.",
+        "solutionLanguage": "bash"
+      },
+      {
+        "id": "ex-26-3",
+        "title": "Exercise 26.3: Dynamic Tracing",
+        "description": "Use strace on a program that opens a file. Identify the filename and flags from the trace. Use ltrace to see library calls.",
+        "solution": "cat > fileopen.c <<'C'\n#include <stdio.h>\nint main(int argc, char **argv) {\n    if (argc!=2) return 2;\n    FILE *f=fopen(argv[1],\"r\");\n    if (!f) return 1;\n    return fclose(f)!=0;\n}\nC\ngcc -O0 -g fileopen.c -o fileopen\nprintf 'sample\\n' > sample.txt\nstrace -e trace=open,openat,close ./fileopen sample.txt\n# If ltrace is installed:\n# ltrace -e fopen+fclose ./fileopen sample.txt",
+        "solutionLanguage": "bash",
+        "solutionExplanation": "strace ./fileopen myfile.txt shows:\n\nltrace shows fopen if using C library.\nOriginal source guidance: open(\"myfile.txt\", O_RDONLY) = 3 Modern libc commonly implements fopen through openat(AT_FDCWD,...,O_RDONLY). Descriptor 3 is only illustrative; compare the actual trace and distinguish loader file opens from sample.txt."
+      },
+      {
+        "id": "ex-26-4",
+        "title": "Exercise 26.4: Switch Statement Reconstruction",
+        "description": "Write a C function with a switch statement (0-4). Compile with -O2. Disassemble and determine if a jump table is used. Identify the table and its entries.",
+        "solution": "// Save as dispatch.c; gcc -O2 -c dispatch.c -o dispatch.o\n// objdump -dr -M intel dispatch.o\n// objdump -s -j .rodata dispatch.o; readelf -rW dispatch.o\nextern int case0(void),case1(void),case2(void),case3(void),case4(void);\nint dispatch(int x) {\n    switch(x) {\n    case 0: return case0(); case 1: return case1();\n    case 2: return case2(); case 3: return case3();\n    case 4: return case4(); default: return -1;\n    }\n}",
+        "solutionExplanation": "\nOriginal source guidance: Disassemble and look for jmp rax or jmp [table + reg*8]. The table is in .rodata, containing addresses of case handlers. Separate external case functions prevent constant-return arithmetic folding. GCC may choose signed 32-bit relative entries in .rodata rather than eight-byte absolute pointers. Consult relocations before interpreting unlinked table bytes. If no table is emitted, describe the observed decision tree instead.",
+        "solutionLanguage": "c"
+      },
+      {
+        "id": "ex-26-5",
+        "title": "Exercise 26.5: Struct Layout",
+        "description": "Write a C program that defines a struct with fields: int a; char b; double c;. Write a function that returns the value of c. Compile with -O0 and -O2, disassemble, and determine the offset of c in both cases. Explain any differences due to optimization.",
+        "solution": "#include <stddef.h>\n#include <stdio.h>\nstruct S { int a; char b; double c; };\ndouble get_c(struct S *s) { return s->c; }\nint main(void) {\n    struct S s={1,2,3.5};\n    printf(\"offset=%zu size=%zu value=%.1f\\n\",offsetof(struct S,c),sizeof s,get_c(&s));\n    return 0;\n}\n// gcc -O0 -g layout.c -o layout-O0\n// gcc -O2 -g layout.c -o layout-O2\n// objdump -d -M intel --disassemble=get_c layout-O0\n// objdump -d -M intel --disassemble=get_c layout-O2",
+        "solutionExplanation": "\nOriginal source guidance: At -O0, offset likely 16 (int at 0, char at 4, 3 bytes padding to align double at 8, then double at 8, total size 16). At -O2, offset may still be 8 or 16; the compiler may pack if not required, but ABI alignment requires 8 for double, so offset is 8 in both. However, the function might just load from [rdi+8] directly. Correction: ordinary SysV AMD64 layout has c at offset 8 and total size 16 at both optimization levels. Optimization does not silently pack this externally visible structure; the return value is in XMM0.",
+        "solutionLanguage": "c"
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'How do you locate the main function in a stripped Linux ELF binary?',
-        answer: 'Inspect the ELF entry point _start. _start sets up arguments and calls __libc_start_main. The first argument passed in RDI is the address of the user\'s main function.'
+        "question": "What is reverse engineering? What are its legitimate uses?",
+        "answer": "Reverse engineering infers a system’s behavior and design from its artifacts. Uses include interoperability, debugging, recovering undocumented behavior, defensive security analysis and studying compiler output."
+      },
+      {
+        "question": "What is the difference between static and dynamic analysis?",
+        "answer": "Static analysis reads files without running their code; dynamic analysis observes a particular execution. Static results can overestimate reachable paths, while dynamic results cover only exercised paths. Combine both and record evidence."
+      },
+      {
+        "question": "Which tools would you use to identify the entry point of an ELF binary? How about listing dynamic dependencies?",
+        "answer": "readelf -h reports the ELF entry point. readelf -d lists DT_NEEDED direct dependencies without executing the binary; objdump -p also exposes dynamic metadata. ldd reports resolved dependencies but is unsuitable for unfamiliar inputs that could be executed by its implementation."
+      },
+      {
+        "question": "How can you find the main function in a stripped binary?",
+        "answer": "For a conventional glibc-linked program, follow startup code to __libc_start_main and track its first argument, RDI, to the candidate main address. Account for PIE load bias at runtime. Custom startup code need not use libc or main."
+      },
+      {
+        "question": "What are some common prologue patterns, and why are they useful for function identification?",
+        "answer": "push rbp; mov rbp,rsp and sub rsp,N are useful clues, along with call targets and unwind metadata. Optimized functions may omit these sequences or share epilogues; a single pattern does not establish a boundary."
+      },
+      {
+        "question": "How would you reconstruct a switch statement's jump table from disassembly?",
+        "answer": "Identify the index normalization and bounds check, find the table base and entry width, decode absolute addresses or signed relative offsets, and follow each destination. Distinguish a table of return values from a table used for an indirect jump."
+      },
+      {
+        "question": "Describe how to identify a structure's field offsets from memory access instructions.",
+        "answer": "Track accesses from the same object base and record offset, access width, signedness evidence and use. Then propose a layout that fits all observations, including padding. Offsets alone do not prove original field types or names."
+      },
+      {
+        "question": "What is a decompiler? How does it differ from a disassembler?",
+        "answer": "A decompiler infers higher-level pseudocode and types from instructions and control flow. A disassembler decodes instructions. Decompiled output is an analysis aid and may misidentify types, boundaries or control flow."
+      },
+      {
+        "question": "In dynamic analysis, how can you observe system calls? Library calls?",
+        "answer": "strace records system calls; ltrace can record dynamically linked library calls through supported mechanisms. Neither necessarily observes every internal or inlined library operation. GDB breakpoints allow inspection of arguments and results."
+      },
+      {
+        "question": "What are the ethical/legal considerations when reverse engineering software?",
+        "answer": "Work within authorization and applicable rules, respect confidentiality and document scope. Legal exceptions vary by jurisdiction and circumstances; the chapter examples use self-created binaries and are not a general legal determination."
       }
     ],
-    summary: ['Reverse engineering unites static disassembly and live runtime debugging.', 'Always conduct analysis within isolated virtual environments.']
+    "summary": [
+      "Reverse engineering combines static and dynamic analysis to understand binaries.",
+      "Legal and ethical considerations are paramount.",
+      "Essential tools: file, strings, readelf, objdump, gdb, strace, radare2, Ghidra.",
+      "Static analysis reveals structure and patterns; dynamic analysis shows runtime behavior.",
+      "Recognizing high-level constructs (loops, if‑else, switch, structs) from assembly is key.",
+      "Stripped binaries require heuristics and experience.",
+      "Modern frameworks like Ghidra and radare2 greatly aid RE with decompilation and visualization.",
+      "Practice with small, self-created programs to build skills.",
+      "In the next chapter, we'll delve into understanding optimized binaries and basic malware analysis, applying these fundamentals."
+    ]
   },
   {
     id: 27,
