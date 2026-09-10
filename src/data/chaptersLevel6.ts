@@ -1172,129 +1172,300 @@ export const CHAPTERS_LEVEL_6: Chapter[] = [
     ]
   },
   {
-    id: 31,
-    slug: 'chapter-31-project-4-file-io-custom-memory-routines',
-    level: 6,
-    levelTitle: 'Advanced Projects',
-    title: 'Chapter 31: Project 4: File I/O and Custom Memory Routines',
-    subtitle: 'Dynamic Memory Allocator (malloc, free, calloc) & File I/O Wrapper',
-    learningObjectives: [
-      'Wrap Linux file system calls (open, close, read, write, lseek) in a clean API.',
-      'Implement a dynamic heap memory allocator using the brk system call.',
-      'Manage a singly linked free list with 16-byte metadata block headers.',
-      'Enforce strict 16-byte alignment on all allocated heap blocks.'
+    "id": 31,
+    "slug": "chapter-31-project-4-file-io-custom-memory-routines",
+    "level": 6,
+    "levelTitle": "Advanced Projects",
+    "title": "Chapter 31: Project 4: File I/O and Custom Memory Routines",
+    "subtitle": "Dynamic Memory Allocator (malloc, free, calloc) & File I/O Wrapper",
+    "learningObjectives": [
+      "Apply system calls to implement file I/O operations in assembly: open, close, read, write, lseek.",
+      "Build a custom dynamic memory allocator (malloc/free) using the brk system call.",
+      "Manage a free list of memory blocks with headers containing size and next pointer.",
+      "Implement memory allocation strategies: first-fit, splitting, and coalescing.",
+      "Handle file and memory errors gracefully.",
+      "Write a reusable library (fileio.asm, allocator.asm) and a test program.",
+      "Use modular programming, header files, and a Makefile for building.",
+      "Understand how memory allocators work internally and how system calls interact with the heap."
     ],
-    prerequisites: ['Chapters 1–30'],
-    keyConcepts: [
-      'brk expands and contracts the process data segment break boundary.',
-      'Block headers store chunk size and next pointer right before user data.',
-      'First-fit scans the free list for the earliest block satisfying requested size.'
+    "prerequisites": [
+      "Solid understanding of system calls, file descriptors, and I/O (Chapter 16).",
+      "Mastery of memory addressing, pointers, and structures (Chapters 3, 9, 13).",
+      "Knowledge of modular programming and linking (Chapter 15).",
+      "Experience with procedures, calling conventions, and stack frames (Chapter 10).",
+      "Familiarity with arrays and string manipulation (Chapters 9, 29)."
     ],
-    diagramType: 'project_allocator',
-    sections: [
+    "keyConcepts": [
+      "File descriptors are small integers representing open files (0=stdin, 1=stdout, 2=stderr).",
+      "open, read, write, lseek, close are the primary syscalls for file I/O.",
+      "brk adjusts the program break (end of data segment) to allocate or release heap memory.",
+      "Free list is a linked list of free memory blocks; each block has a header with size and next pointer.",
+      "First-fit allocation selects the first free block large enough to satisfy a request.",
+      "Splitting divides a larger free block into two when the requested size is smaller.",
+      "Coalescing merges adjacent free blocks when memory is freed to reduce fragmentation.",
+      "Alignment ensures returned pointers are 16-byte aligned, as required by the ABI.",
+      "Block header stores metadata (size, next pointer, free status) just before the user data.",
+      "Error handling returns negative values or null pointers and sets an error code (if applicable)."
+    ],
+    "diagramType": "project_allocator",
+    "sections": [
       {
-        id: 'sec-31-1',
-        title: '31.1 Custom Heap Allocator Architecture',
-        content: `A complete malloc and free implementation written in pure NASM assembly using brk:`,
-        codeSnippets: [
+        "id": "sec-31-1",
+        "title": "31.1 Project Overview",
+        "content": "We will build two libraries and a test program:\n\n1. File I/O library (fileio.asm): Wraps system calls into convenient functions.\n   - open_file(path, flags, mode) -> fd\n   - close_file(fd) -> 0\n   - read_file(fd, buffer, count) -> bytes read\n   - write_file(fd, buffer, count) -> bytes written\n   - lseek_file(fd, offset, whence) -> new offset\n   - get_file_size(path) -> size\n   - copy_file(src_path, dst_path) -> 0\n\n2. Memory allocator (allocator.asm): Implements a simple malloc/free.\n   - malloc(size) -> pointer or 0\n   - free(ptr)\n   - calloc(num, size) -> pointer or 0\n   - realloc(ptr, size) -> pointer or 0\n\n3. Test program (test_project.asm): Exercises file I/O (create, write, read, copy) and memory allocation (allocate, write, free, reallocate).\n\nAll functions follow the System V AMD64 ABI. We'll use 64-bit sizes for file offsets and memory sizes."
+      },
+      {
+        "id": "sec-31-2",
+        "title": "31.2 File I/O Library Design",
+        "content": ""
+      },
+      {
+        "id": "sec-31-2-1",
+        "title": "31.2.1 System Call Wrap",
+        "content": "Each function sets up the syscall number in rax and arguments in registers, then executes syscall. On error (negative return), we return -1 and optionally set a global error variable (we'll skip for simplicity). The functions mirror the C library's open, read, etc., but without buffering.\n\nClarification: The original wrappers actually return raw -errno, despite promising -1. The completed fileio.asm normalizes errors consistently, retries interrupted reads/writes, and documents that successful read/write counts may still be short. It does not provide libc errno."
+      },
+      {
+        "id": "sec-31-2-2",
+        "title": "31.2.2 Function Signatures",
+        "content": "- int open_file(const char *path, int flags, int mode);\n- int close_file(int fd);\n- ssize_t read_file(int fd, void *buf, size_t count);\n- ssize_t write_file(int fd, const void *buf, size_t count);\n- off_t lseek_file(int fd, off_t offset, int whence);\n- off_t get_file_size(const char *path);\n- int copy_file(const char *src, const char *dst);\n\nFlags and modes are passed as integers. We'll define common constants in fileio.inc."
+      },
+      {
+        "id": "sec-31-2-3",
+        "title": "31.2.3 Implementation of copy_file",
+        "content": "copy_file uses a buffer (e.g., 4096 bytes) allocated on the stack (or static buffer) to read from source and write to destination until EOF."
+      },
+      {
+        "id": "sec-31-3",
+        "title": "31.3 Memory Allocator Design",
+        "content": ""
+      },
+      {
+        "id": "sec-31-3-1",
+        "title": "31.3.1 Heap Management with brk",
+        "content": "The brk system call sets the program break (end of data segment). The initial break is the end of the BSS section. We can call brk(0) to get the current break, and brk(new_addr) to increase or decrease it. We manage a free list of blocks carved out of this region.\n\nClarification: Query the actual break; do not assume it equals the BSS end. Address-space layout can include a gap. Raw brk success is determined by comparing its return with the requested address."
+      },
+      {
+        "id": "sec-31-3-2",
+        "title": "31.3.2 Block Header",
+        "content": "Each block, whether allocated or free, begins with a header:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'allocator.asm',
-            code: `struc Block
-    .size: resq 1        ; user size
-    .next: resq 1        ; next free block pointer
-endstruc
-BLOCK_HEADER_SIZE equ 16
-ALIGNMENT equ 16
-
-section .bss
-    free_list_head resq 1
-    heap_end       resq 1
-
-section .text
-    global malloc, free
-
-align_up:
-    add rdi, ALIGNMENT-1
-    and rdi, ~(ALIGNMENT-1)
-    ret
-
-malloc:
-    push rbx; push rcx; push rdx; push r12; push r13
-    call align_up
-    mov r12, rdi        ; size
-
-    lea rbx, [free_list_head]
-    mov rcx, [rbx]
-.search:
-    test rcx, rcx
-    jz .extend
-    mov rax, [rcx + Block.size]
-    cmp rax, r12
-    jae .found
-    lea rbx, [rcx + Block.next]
-    mov rcx, [rbx]
-    jmp .search
-
-.found:
-    mov rdx, [rcx + Block.next]
-    mov [rbx], rdx      ; unlink
-    lea rax, [rcx + BLOCK_HEADER_SIZE]
-    jmp .done
-
-.extend:
-    mov rdi, r12
-    add rdi, BLOCK_HEADER_SIZE + 4095
-    and rdi, ~4095      ; round to 4KB page
-    mov r13, rdi        ; chunk size
-
-    ; sys_brk(0) to get current break
-    mov rax, 12; xor rdi, rdi; syscall
-    mov rbx, rax        ; old break
-
-    ; sys_brk(old_break + chunk_size)
-    mov rdi, rbx; add rdi, r13; mov rax, 12; syscall
-    test rax, rax; js .fail
-
-    ; initialize block
-    mov [rbx + Block.size], r12
-    lea rax, [rbx + BLOCK_HEADER_SIZE]
-    jmp .done
-
-.fail:
-    xor eax, eax
-.done:
-    pop r13; pop r12; pop rdx; pop rcx; pop rbx; ret
-
-free:
-    test rdi, rdi; jz .ret
-    sub rdi, BLOCK_HEADER_SIZE
-    ; insert at head of free list
-    mov rax, [free_list_head]
-    mov [rdi + Block.next], rax
-    mov [free_list_head], rdi
-.ret:
-    ret`
+            "language": "nasm",
+            "title": "31.3.2 Block Header — listing 1",
+            "code": "struc Block\n    .size: resq 1      ; size of user data (not including header)\n    .next: resq 1      ; pointer to next block in free list (only meaningful if free)\nendstruc\nBLOCK_HEADER_SIZE equ 16",
+            "explanation": "The header is 16 bytes (2 qwords), aligned to 16. User data starts immediately after the header. We'll ensure all returned pointers are 16-byte aligned by aligning the total block size (header + user size) to 16."
+          }
+        ]
+      },
+      {
+        "id": "sec-31-3-3",
+        "title": "31.3.3 Free List",
+        "content": "A singly linked list of free blocks. Initially, the free list is empty. When we need memory, we call brk to extend the heap by a large chunk (e.g., page size), and create a new free block from that chunk, adding it to the free list.\n\nmalloc uses first-fit: traverse the free list, find the first block with size >= requested size. If found, we may split the block: take the needed portion, and the remainder becomes a new free block. If no block is large enough, we extend the heap via brk to create a new block.\n\nfree adds the block back to the free list. We also attempt to coalesce adjacent free blocks to reduce fragmentation. To coalesce, we need to know if the next block is free. Since blocks are contiguous, we can compute the next block's address as ptr + BLOCK_HEADER_SIZE + size. We'll check if that block is free by comparing its address with entries in the free list? That's O(n). Simpler: we'll store a magic number in the header to identify blocks, and after freeing, we can check if the next block (by address) is free by looking at its header's next? Not reliable. For simplicity, we'll skip coalescing in this project; it's an optional extension.\n\nClarification: The complete allocator below includes the coalescing exercise: maintain an address-sorted free list and merge physically adjacent successor and predecessor blocks. A nonzero next pointer is not a reliable allocated/free marker. This implementation is single-threaded and requires exclusive ownership of brk."
+      },
+      {
+        "id": "sec-31-3-4",
+        "title": "31.3.4 Allocator Functions",
+        "content": "- malloc(size): align size up to 16. Search free list for a block. If found, remove from free list, split if remaining size >= BLOCK_HEADER_SIZE + 16 (minimum block size). Return pointer to user data. If not found, call brk to allocate a new chunk of at least size + BLOCK_HEADER_SIZE, create a free block, add to free list, then allocate from it.\n- free(ptr): compute block address as ptr - BLOCK_HEADER_SIZE. Add block to free list. Optionally coalesce.\n- calloc(num, size): call malloc(num*size), then zero the memory using memset or rep stosb.\n- realloc(ptr, size): if ptr is null, call malloc. If size is zero, free ptr and return null. Otherwise, if new size <= old size, return same ptr (or shrink). If new size > old size, allocate new block, copy old data, free old block. We'll implement simple version.\n\nWe'll maintain a global pointer free_list_head in BSS, initialized to 0.\n\nClarification: calloc must check multiplication overflow; malloc must check rounding and heap-growth overflow. A split’s remaining payload is old_capacity − requested_capacity − header_size. realloc failure must leave the old allocation unchanged."
+      },
+      {
+        "id": "sec-31-4",
+        "title": "31.4 File I/O Library Implementation",
+        "content": "We'll create fileio.asm with global functions.\n\nClarification: The original get_file_size clobbers RBX and saves its result in RCX, which close’s SYSCALL overwrites. The copy draft loses arguments; the later listing omits O_TRUNC, treats an initial open error as success, and loses unwritten bytes on a short write. Use the complete library below. It checks same-file device/inode identity before truncating and uses a per-call buffer.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "fileio.asm",
+            "code": "; fileio.asm\n%include \"fileio.inc\"\n\nsection .text\n\n; open_file: rdi=path, rsi=flags, rdx=mode\n; returns fd or -1\nopen_file:\n    mov rax, 2          ; sys_open\n    syscall\n    ret\n\nclose_file:\n    mov rax, 3          ; sys_close\n    syscall\n    ret\n\nread_file:\n    mov rax, 0          ; sys_read\n    syscall\n    ret\n\nwrite_file:\n    mov rax, 1          ; sys_write\n    syscall\n    ret\n\nlseek_file:\n    mov rax, 8          ; sys_lseek\n    syscall\n    ret\n\nget_file_size:\n    ; open file read-only\n    push rdi\n    mov rax, 2\n    mov rsi, 0          ; O_RDONLY\n    xor rdx, rdx\n    syscall\n    pop rdi\n    test rax, rax\n    js  .error\n    mov rbx, rax        ; fd\n\n    ; lseek to end\n    mov rdi, rbx\n    mov rsi, 0\n    mov rdx, 2          ; SEEK_END\n    mov rax, 8\n    syscall\n    mov rcx, rax        ; save size\n    ; close\n    mov rdi, rbx\n    mov rax, 3\n    syscall\n    mov rax, rcx\n    ret\n.error:\n    mov rax, -1\n    ret\n\ncopy_file:\n    ; rdi = src, rsi = dst\n    push rbp\n    mov rbp, rsp\n    sub rsp, 4096       ; allocate buffer on stack? That's large; better use static buffer.\n    ; We'll use a static buffer in .bss for simplicity.\n    ; But here we'll allocate on stack and use r10 as buffer pointer.\n    mov r10, rsp        ; buffer pointer\n\n    ; open source\n    mov rax, 2\n    mov rdi, rdi        ; src path (already in rdi)\n    xor rsi, rsi        ; O_RDONLY\n    syscall\n    test rax, rax\n    js  .copy_error\n    mov r12, rax        ; src fd\n\n    ; open dest\n    mov rax, 2\n    mov rdi, rdx        ; dst path? Wait, we need original dst path. We clobbered rdi.\n    ; Need to save args first.",
+            "explanation": "We need to carefully preserve registers. Let's rewrite copy_file properly:"
+          },
+          {
+            "language": "nasm",
+            "title": "31.4 File I/O Library Implementation — listing 2",
+            "code": "copy_file:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16          ; alignment (we'll use stack buffer in .bss)\n    push rbx\n    push r12\n    push r13\n    push r14\n\n    mov r12, rdi         ; src path\n    mov r13, rsi         ; dst path\n\n    ; open source\n    mov rax, 2\n    mov rdi, r12\n    xor rsi, rsi         ; O_RDONLY\n    xor rdx, rdx\n    syscall\n    test rax, rax\n    js  .copy_error\n    mov r14, rax         ; src fd\n\n    ; open destination (create/truncate)\n    mov rax, 2\n    mov rdi, r13\n    mov rsi, 0x41        ; O_WRONLY | O_CREAT | O_TRUNC? Let's set proper flags: O_WRONLY=1, O_CREAT=64, O_TRUNC=512 -> 577 (0x241)\n    mov rdx, 0644o       ; permissions\n    syscall\n    test rax, rax\n    js  .copy_close_src_error\n    mov rbx, rax         ; dst fd\n\n    ; loop reading and writing\n.copy_loop:\n    mov rax, 0           ; read\n    mov rdi, r14\n    lea rsi, [buffer]    ; static buffer in .bss\n    mov rdx, 4096\n    syscall\n    test rax, rax\n    js  .copy_close_both_error\n    jz  .copy_done       ; EOF\n    mov r8, rax          ; bytes read\n    mov rax, 1           ; write\n    mov rdi, rbx\n    lea rsi, [buffer]\n    mov rdx, r8\n    syscall\n    test rax, rax\n    js  .copy_close_both_error\n    jmp .copy_loop\n\n.copy_done:\n    ; close both\n    mov rax, 3\n    mov rdi, r14\n    syscall\n    mov rax, 3\n    mov rdi, rbx\n    syscall\n    xor eax, eax\n    jmp .copy_exit\n\n.copy_error:\n    xor eax, eax\n    jmp .copy_exit\n\n.copy_close_src_error:\n    mov rax, 3\n    mov rdi, r14\n    syscall\n    mov rax, -1\n    jmp .copy_exit\n\n.copy_close_both_error:\n    mov rax, 3\n    mov rdi, r14\n    syscall\n    mov rax, 3\n    mov rdi, rbx\n    syscall\n    mov rax, -1\n.copy_exit:\n    pop r14\n    pop r13\n    pop r12\n    pop rbx\n    mov rsp, rbp\n    pop rbp\n    ret",
+            "explanation": "We'll add a static buffer in .bss: buffer resb 4096."
+          }
+        ]
+      },
+      {
+        "id": "sec-31-5",
+        "title": "31.5 Memory Allocator Implementation",
+        "content": "We'll create allocator.asm with the following global symbols and BSS variables.\n\nClarification: The original allocator is an unfinished, non-assembling draft. It confuses chunk size with break addresses, fails to check raw brk correctly, and overstates split capacity by one header. The complete version below supplies initialization, growth, split/coalesce, calloc and realloc, with all exports and error paths.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "allocator.asm",
+            "code": "; allocator.asm\n%include \"allocator.inc\"\n\nstruc Block\n    .size: resq 1\n    .next: resq 1\nendstruc\n\nBLOCK_HEADER_SIZE equ 16\nALIGNMENT equ 16\n\nsection .bss\n    free_list_head resq 1\n    heap_start resq 1\n    heap_end resq 1\n\nsection .text\n\n; Initialize allocator (optional)\ninit_allocator:\n    ; get current brk\n    mov rax, 12\n    xor rdi, rdi\n    syscall\n    mov [heap_start], rax\n    mov [heap_end], rax\n    mov qword [free_list_head], 0\n    ret\n\n; align size up to 16\nalign_up:\n    add rdi, ALIGNMENT-1\n    and rdi, ~(ALIGNMENT-1)\n    ret\n\n; malloc: rdi = size\n; returns pointer to user data or 0\nmalloc:\n    push rbx\n    push rcx\n    push rdx\n    push r12\n    push r13\n\n    ; align size\n    call align_up\n    mov r12, rdi        ; aligned size (including header? no, user size)\n\n    ; search free list\n    lea rbx, [free_list_head]   ; pointer to head pointer\n    mov rcx, [rbx]      ; current block\n.search_loop:\n    test rcx, rcx\n    jz .extend_heap      ; no free block\n    mov rax, [rcx + Block.size]\n    cmp rax, r12\n    jae .found_block\n    ; move to next\n    lea rbx, [rcx + Block.next]\n    mov rcx, [rbx]\n    jmp .search_loop\n\n.found_block:\n    ; remove from free list: *rbx = block->next\n    mov rdx, [rcx + Block.next]\n    mov [rbx], rdx\n    ; split if remaining size >= BLOCK_HEADER_SIZE + 16\n    mov rax, [rcx + Block.size]\n    sub rax, r12\n    cmp rax, BLOCK_HEADER_SIZE + 16\n    jb .no_split\n    ; split: new_block = rcx + BLOCK_HEADER_SIZE + r12\n    lea rdx, [rcx + BLOCK_HEADER_SIZE + r12]\n    mov [rdx + Block.size], rax      ; remaining size\n    ; add new block to free list\n    mov r8, [free_list_head]\n    mov [rdx + Block.next], r8\n    mov [free_list_head], rdx\n    ; set allocated block size = r12\n    mov [rcx + Block.size], r12\n.no_split:\n    ; return pointer to user data (rcx + BLOCK_HEADER_SIZE)\n    lea rax, [rcx + BLOCK_HEADER_SIZE]\n    jmp .malloc_done\n\n.extend_heap:\n    ; We need to allocate from brk.\n    ; Compute required chunk: header + aligned size\n    mov rdi, r12\n    add rdi, BLOCK_HEADER_SIZE\n    add rdi, 4095\n    and rdi, ~4095         ; round to page\n    ; Call brk to extend heap by rdi bytes\n    mov rax, 12\n    mov rdi, [heap_end]\n    add rdi, rdi           ; Actually need to add new size to old break.\n    ; Better: new_break = heap_end + chunk_size\n    ; We'll do:\n    mov r9, rdi            ; chunk size\n    mov rax, 12\n    mov rdi, [heap_end]\n    add rdi, r9\n    syscall\n    test rax, rax\n    js .malloc_fail\n    ; update heap_end\n    mov [heap_end], rax\n    ; create a free block at old heap_end\n    mov rcx, [heap_end]\n    sub rcx, r9            ; block address = old heap_end\n    mov [rcx + Block.size], r9 - BLOCK_HEADER_SIZE\n    ; add to free list\n    mov rdx, [free_list_head]\n    mov [rcx + Block.next], rdx\n    mov [free_list_head], rcx\n    ; now retry search\n    jmp .search_loop\n\n.malloc_fail:\n    xor eax, eax\n.malloc_done:\n    pop r13\n    pop r12\n    pop rdx\n    pop rcx\n    pop rbx\n    ret",
+            "explanation": "This is a bit messy; we'll refine later. We need to fix the logic for heap extension and retry.\n\nBetter to have a helper grow_heap that calls brk and adds a block to free list, then malloc restarts search.\n\nLet's rewrite with cleaner structure. The code is getting long; we'll provide a complete but simple allocator that works."
+          }
+        ]
+      },
+      {
+        "id": "sec-31-6",
+        "title": "31.6 Test Program",
+        "content": "We'll create test_project.asm that:\n\n1. Uses open_file, write_file, close_file to create a file \"test.txt\" and write \"Hello, World!\".\n2. Uses read_file to read the file back into a buffer (allocated with malloc).\n3. Uses get_file_size to print file size.\n4. Copies the file to \"copy.txt\" using copy_file.\n5. Tests memory allocator by allocating, writing, reading, and freeing.\n\nWe'll print results using write syscall and simple string messages.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Complete test_project.asm",
+            "code": "; test_project.asm -- run in a disposable directory; test.txt must not exist.\n%include \"fileio.inc\"\n%include \"allocator.inc\"\ndefault rel\nsection .data\npath db 'test.txt',0\ncopy_path db 'copy.txt',0\nmessage db 'Hello, World!'\nmessage_len equ $-message\nok db 'File size: 13',10,'File and memory checks passed',10\nok_len equ $-ok\nsection .text\nglobal _start\n_start:\n    lea rdi,[path]\n    mov esi,1|64|128       ; create new file, O_EXCL avoids accidental overwrite\n    mov edx,0o600\n    call open_file\n    test rax,rax\n    js fail\n    mov r12,rax\n    mov rdi,rax\n    lea rsi,[message]\n    mov edx,message_len\n    call write_file\n    cmp rax,message_len\n    jne fail\n    mov rdi,r12\n    call close_file\n    test rax,rax\n    js fail\n    lea rdi,[path]\n    call get_file_size\n    cmp rax,message_len\n    jne fail\n    lea rdi,[path]\n    call read_entire_file\n    test rax,rax\n    jz fail\n    cmp rdx,message_len\n    jne fail\n    mov r12,rax\n    mov rsi,rax\n    lea rdi,[message]\n    mov ecx,message_len\n    cld\n    repe cmpsb\n    jne fail\n    mov rdi,r12\n    mov esi,8192\n    call realloc\n    test rax,rax\n    jz fail\n    mov r12,rax\n    mov rsi,rax\n    lea rdi,[message]\n    mov ecx,message_len\n    repe cmpsb\n    jne fail\n    mov rdi,r12\n    call free\n    lea rdi,[path]\n    lea rsi,[copy_path]\n    call copy_file\n    test rax,rax\n    jnz fail\n    mov edi,1\n    lea rsi,[ok]\n    mov edx,ok_len\n    call write_file\n    cmp rax,ok_len\n    jne fail\n    xor edi,edi\n    jmp quit\nfail:\n    mov edi,1\nquit:\n    mov eax,60\n    syscall\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Run the original Makefile in a disposable exercise directory. The test creates a new test.txt, validates its 13-byte contents, grows/frees its allocation, copies the file, and prints two success lines. O_EXCL makes an existing test.txt a deliberate failure."
+          }
+        ]
+      },
+      {
+        "id": "sec-31-7",
+        "title": "31.7 Full Source Code, Makefile, and Build",
+        "content": "We'll provide the complete files. Due to length, we'll summarize but ensure all essential code is included.\n\nMakefile:",
+        "codeSnippets": [
+          {
+            "language": "make",
+            "title": "31.7 Full Source Code, Makefile, and Build — listing 1",
+            "code": "ASM = nasm\nASMFLAGS = -f elf64\nLD = ld\nTARGET = test_project\nOBJECTS = test_project.o fileio.o allocator.o\n\nall: $(TARGET)\n\n$(TARGET): $(OBJECTS)\n\t$(LD) $(OBJECTS) -o $(TARGET)\n\n%.o: %.asm\n\t$(ASM) $(ASMFLAGS) $< -o $@\n\nclean:\n\trm -f $(OBJECTS) $(TARGET)"
+          },
+          {
+            "language": "nasm",
+            "title": "Complete fileio.asm",
+            "code": "; fileio.asm -- Linux x86-64. Wrappers normalize negative errno to -1.\n; read/write may return short counts; copy handles them internally.\n; copy overwrites regular destination files after rejecting the same inode.\ndefault rel\nsection .rodata\nprogress db 'Copied another 1 MiB',10\nprogress_len equ $-progress\nsection .text\nglobal open_file,close_file,read_file,write_file,lseek_file,get_file_size\n global copy_file,copy_file_progress,read_entire_file\nextern malloc,free\nopen_file:\n    mov eax,2\n    syscall\n    jmp normalize\nclose_file:\n    mov eax,3\n    syscall\n    jmp normalize\nread_file:\n    xor eax,eax\n    syscall\n    cmp rax,-4\n    je read_file\n    jmp normalize\nwrite_file:\n    mov eax,1\n    syscall\n    cmp rax,-4\n    je write_file\n    jmp normalize\nlseek_file:\n    mov eax,8\n    syscall\nnormalize:\n    test rax,rax\n    jns .done\n    mov rax,-1\n.done:\n    ret\nget_file_size:\n    push rbx\n    push r12\n    sub rsp,8\n    xor esi,esi\n    xor edx,edx\n    call open_file\n    test rax,rax\n    js .done\n    mov rbx,rax\n    mov rdi,rax\n    xor esi,esi\n    mov edx,2\n    call lseek_file\n    mov r12,rax\n    mov rdi,rbx\n    call close_file\n    test rax,rax\n    js .done\n    mov rax,r12\n.done:\n    add rsp,8\n    pop r12\n    pop rbx\n    ret\ncopy_file:\n    xor r8d,r8d\n    jmp copy_common\ncopy_file_progress:\n    mov r8d,1\ncopy_common:\n    push rbx\n    push r12\n    push r13\n    push r14\n    push r15\n    sub rsp,4400           ; data buffer plus two full x86-64 stat structs\n    mov r15d,r8d\n    mov r13,rsi\n    xor esi,esi\n    xor edx,edx\n    call open_file\n    test rax,rax\n    js .error\n    mov r12,rax\n    mov rdi,r13\n    mov esi,65             ; O_WRONLY|O_CREAT; truncate only after inode check\n    mov edx,0o644\n    call open_file\n    test rax,rax\n    js .close_src_error\n    mov rbx,rax\n    mov eax,5              ; fstat(source)\n    mov rdi,r12\n    lea rsi,[rsp+4096]\n    syscall\n    test rax,rax\n    js .close_both_error\n    mov eax,5              ; fstat(destination)\n    mov rdi,rbx\n    lea rsi,[rsp+4240]\n    syscall\n    test rax,rax\n    js .close_both_error\n    mov rax,[rsp+4096]     ; st_dev\n    cmp rax,[rsp+4240]\n    jne .truncate\n    mov rax,[rsp+4104]     ; st_ino\n    cmp rax,[rsp+4248]\n    je .close_both_error\n.truncate:\n    mov eax,77             ; ftruncate destination\n    mov rdi,rbx\n    xor esi,esi\n    syscall\n    test rax,rax\n    js .close_both_error\n    xor r13d,r13d          ; bytes copied\n    mov r14d,1048576       ; next progress threshold\n.read:\n    mov rdi,r12\n    mov rsi,rsp\n    mov edx,4096\n    call read_file\n    test rax,rax\n    js .close_both_error\n    jz .success\n    mov r8,rax\n    mov rdx,rax\n    mov rdi,rbx\n    mov rsi,rsp\n    call write_all_fd\n    test rax,rax\n    js .close_both_error\n    add r13,r8\n    test r15d,r15d\n    jz .read\n.progress:\n    cmp r13,r14\n    jb .read\n    lea rsi,[progress]\n    mov edx,progress_len\n    mov edi,2\n    call write_all_fd\n    test rax,rax\n    js .close_both_error\n    add r14,1048576\n    jmp .progress\n.success:\n    mov rdi,r12\n    call close_file\n    mov r12,rax\n    mov rdi,rbx\n    call close_file\n    or rax,r12\n    jmp .return\n.close_both_error:\n    mov rdi,rbx\n    call close_file\n.close_src_error:\n    mov rdi,r12\n    call close_file\n.error:\n    mov rax,-1\n.return:\n    add rsp,4400\n    pop r15\n    pop r14\n    pop r13\n    pop r12\n    pop rbx\n    ret\n; RDI fd, RSI bytes, RDX count; 0 success, -1 error; R8 preserved.\nwrite_all_fd:\n    test rdx,rdx\n    jz .done\n.loop:\n    mov eax,1\n    syscall\n    cmp rax,-4\n    je .loop\n    test rax,rax\n    jle .error\n    add rsi,rax\n    sub rdx,rax\n    jnz .loop\n.done:\n    xor eax,eax\n    ret\n.error:\n    mov rax,-1\n    ret\n; read_entire_file(path): RAX=allocated bytes, RDX=size; RAX=0 on error.\n; Reads the initial size of a seekable file; rejects premature EOF.\n; Empty files return a non-NULL allocation and size 0. No NUL is appended.\nread_entire_file:\n    push rbx\n    push r12\n    push r13\n    push r14\n    sub rsp,8\n    xor esi,esi\n    xor edx,edx\n    call open_file\n    test rax,rax\n    js .fail\n    mov rbx,rax\n    mov rdi,rax\n    xor esi,esi\n    mov edx,2\n    call lseek_file\n    test rax,rax\n    js .close_fail\n    mov r12,rax\n    mov rdi,rbx\n    xor esi,esi\n    xor edx,edx\n    call lseek_file\n    test rax,rax\n    js .close_fail\n    mov rdi,r12\n    test rdi,rdi\n    jnz .allocate\n    mov edi,1\n.allocate:\n    call malloc\n    test rax,rax\n    jz .close_fail\n    mov r13,rax\n    xor r14d,r14d\n.read:\n    cmp r14,r12\n    jae .complete\n    mov rdi,rbx\n    lea rsi,[r13+r14]\n    mov rdx,r12\n    sub rdx,r14\n    call read_file\n    test rax,rax\n    jle .free_fail\n    add r14,rax\n    jmp .read\n.complete:\n    mov rdi,rbx\n    call close_file\n    test rax,rax\n    js .free_only\n    mov rax,r13\n    mov rdx,r12\n    jmp .return\n.free_fail:\n    mov rdi,rbx\n    call close_file\n.free_only:\n    mov rdi,r13\n    call free\n    jmp .fail\n.close_fail:\n    mov rdi,rbx\n    call close_file\n.fail:\n    xor eax,eax\n    xor edx,edx\n.return:\n    add rsp,8\n    pop r14\n    pop r13\n    pop r12\n    pop rbx\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Includes the seven planned APIs plus copy_file_progress and read_entire_file. get_file_size/read_entire_file require seekable inputs. Copy may leave a partial destination on error and does not preserve permissions/timestamps or promise crash durability."
+          },
+          {
+            "language": "nasm",
+            "title": "Complete allocator.asm",
+            "code": "; allocator.asm -- single-threaded brk allocator for standalone Linux programs.\n; Do not mix with libc malloc/sbrk or another owner of the process break.\n; 16-byte headers: payload capacity, next free block. Sorted free list.\n; malloc(0)=NULL; free(NULL) is a no-op; invalid/double frees are unsupported.\ndefault rel\nsection .bss\nfree_list_head resq 1\nheap_end resq 1\nsection .text\nglobal malloc,free,calloc,realloc,init_allocator\ninit_allocator:\n    cmp qword [heap_end],0\n    jne .done\n    mov eax,12\n    xor edi,edi\n    syscall\n    mov rdi,rax\n    add rdi,15\n    jc .fail\n    and rdi,-16\n    mov eax,12\n    syscall\n    cmp rax,rdi\n    jne .fail\n    mov [heap_end],rax\n.done:\n    xor eax,eax\n    ret\n.fail:\n    mov eax,-1\n    ret\nmalloc:\n    test rdi,rdi\n    jz .zero\n    push rbx\n    push r12\n    push r13\n    push r14\n    sub rsp,8\n    mov r12,rdi\n    add r12,15\n    jc .fail\n    and r12,-16\n    call init_allocator\n    test eax,eax\n    jnz .fail\n.restart:\n    lea rbx,[free_list_head]\n.search:\n    mov rcx,[rbx]\n    test rcx,rcx\n    jz .grow\n    mov rax,[rcx]\n    cmp rax,r12\n    jae .found\n    lea rbx,[rcx+8]\n    jmp .search\n.found:\n    mov rdx,[rcx+8]\n    sub rax,r12\n    cmp rax,32              ; room for header and >=16 payload\n    jb .whole\n    lea r8,[rcx+r12+16]\n    sub rax,16              ; new header consumes part of remainder\n    mov [r8],rax\n    mov [r8+8],rdx\n    mov [rbx],r8\n    mov [rcx],r12\n    jmp .return_block\n.whole:\n    mov [rbx],rdx\n.return_block:\n    lea rax,[rcx+16]\n    jmp .done\n.grow:\n    mov r14,r12\n    add r14,16+4095\n    jc .fail\n    and r14,-4096\n    mov r13,[heap_end]\n    mov rdi,r13\n    add rdi,r14\n    jc .fail\n    mov eax,12\n    syscall\n    cmp rax,rdi             ; raw brk returns old break on failure\n    jne .fail\n    mov [heap_end],rax\n    lea rax,[r14-16]\n    mov [r13],rax\n    lea rdi,[r13+16]\n    call free              ; insert new region and merge its predecessor\n    jmp .restart\n.fail:\n    xor eax,eax\n.done:\n    add rsp,8\n    pop r14\n    pop r13\n    pop r12\n    pop rbx\n    ret\n.zero:\n    xor eax,eax\n    ret\nfree:\n    test rdi,rdi\n    jz .done\n    lea r8,[rdi-16]         ; block header\n    lea r9,[free_list_head] ; pointer to predecessor's next link\n    xor r10d,r10d           ; predecessor block\n.find:\n    mov rcx,[r9]\n    test rcx,rcx\n    jz .insert\n    cmp rcx,r8\n    jae .insert\n    mov r10,rcx\n    lea r9,[rcx+8]\n    jmp .find\n.insert:\n    mov [r8+8],rcx\n    mov [r9],r8\n    test rcx,rcx\n    jz .previous\n    mov rax,[r8]\n    lea rdx,[r8+rax+16]\n    cmp rdx,rcx\n    jne .previous\n    add rax,[rcx]\n    add rax,16\n    mov [r8],rax\n    mov rax,[rcx+8]\n    mov [r8+8],rax\n.previous:\n    test r10,r10\n    jz .done\n    mov rax,[r10]\n    lea rdx,[r10+rax+16]\n    cmp rdx,r8\n    jne .done\n    add rax,[r8]\n    add rax,16\n    mov [r10],rax\n    mov rax,[r8+8]\n    mov [r10+8],rax\n.done:\n    ret\ncalloc:\n    mov rax,rdi\n    mul rsi\n    test rdx,rdx\n    jnz .fail\n    push rbx\n    mov rbx,rax\n    mov rdi,rax\n    call malloc\n    test rax,rax\n    jz .done\n    mov r8,rax\n    mov rdi,rax\n    mov rcx,rbx\n    xor eax,eax\n    cld\n    rep stosb\n    mov rax,r8\n.done:\n    pop rbx\n    ret\n.fail:\n    xor eax,eax\n    ret\nrealloc:\n    test rdi,rdi\n    jz .new\n    test rsi,rsi\n    jz .zero\n    cmp rsi,[rdi-16]\n    jbe .same\n    push rbx\n    push r12\n    push r13\n    mov rbx,rdi\n    mov r12,rsi\n    mov r13,[rdi-16]\n    mov rdi,rsi\n    call malloc\n    test rax,rax\n    jz .return\n    mov r12,rax\n    mov rdi,rax\n    mov rsi,rbx\n    mov rcx,r13\n    cld\n    rep movsb\n    mov rdi,rbx\n    call free\n    mov rax,r12\n.return:\n    pop r13\n    pop r12\n    pop rbx\n    ret\n.new:\n    mov rdi,rsi\n    jmp malloc\n.zero:\n    sub rsp,8\n    call free\n    add rsp,8\n    xor eax,eax\n    ret\n.same:\n    mov rax,rdi\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Standalone brk-based allocator with first-fit, 16-byte alignment, splitting, sorted coalescing, multiplication/rounding checks, and failure-preserving realloc. Retains freed regions for reuse; it does not shrink the process break or support over-aligned allocations."
+          },
+          {
+            "language": "nasm",
+            "title": "Complete fileio.inc",
+            "code": "extern open_file\nextern close_file\nextern read_file\nextern write_file\nextern lseek_file\nextern get_file_size\nextern copy_file\nextern copy_file_progress\nextern read_entire_file\n%define O_RDONLY 0\n%define O_WRONLY 1\n%define O_CREAT 64\n%define O_EXCL 128\n%define O_TRUNC 512\n%define SEEK_SET 0\n%define SEEK_END 2",
+            "explanation": "Declarations belong in callers; fileio.asm defines global symbols and does not include a header that declares its own definitions extern."
+          },
+          {
+            "language": "nasm",
+            "title": "Complete allocator.inc",
+            "code": "extern init_allocator\nextern malloc\nextern free\nextern calloc\nextern realloc",
+            "explanation": "Include in the standalone caller. Do not link this allocator into a libc program using another brk manager."
+          },
+          {
+            "language": "bash",
+            "title": "Build the extended regression",
+            "code": "nasm -f elf64 allocator.asm -o allocator.o\nnasm -f elf64 fileio.asm -o fileio.o\nnasm -f elf64 test_entry.asm -o test_entry.o\ngcc -O2 -ffreestanding -fno-builtin -fno-stack-protector -fno-pie -c test31.c -o test31.o\nld test_entry.o test31.o fileio.o allocator.o -o test31\n./test31",
+            "explanation": "Use a fresh disposable directory: the regression creates source.bin, copy.bin and empty.bin. ld links without libc, avoiding conflicting heap ownership."
+          }
+        ]
+      },
+      {
+        "id": "sec-31-8",
+        "title": "31.8 Possible Extensions",
+        "content": "- Implement realloc properly.\n- Add coalescing of adjacent free blocks.\n- Use mmap for large allocations.\n- Add error checking and errno.\n- Implement buffered I/O.\n- Support reading/writing binary data.\n\nOriginal source solution placeholder: (We'll provide concise solutions.)",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "Freestanding regression and benchmark: test31.c",
+            "code": "/* Freestanding tests: compile with -ffreestanding -fno-builtin -fno-stack-protector.\n   Link with ld and test_entry.o; do not link libc with the brk allocator. */\n#include <stddef.h>\n#include <stdint.h>\nextern void *malloc(size_t),*calloc(size_t,size_t),*realloc(void*,size_t);\nextern void free(void*);\nextern long open_file(const char*,int,int),close_file(long),write_file(long,const void*,size_t),get_file_size(const char*);\nextern long copy_file(const char*,const char*),copy_file_progress(const char*,const char*);\nstruct Blob {void *data;size_t size;};\nextern struct Blob read_entire_file(const char*);\nextern uint64_t clock_ticks(void);\n#define CHECK(condition) do {if (!(condition)) return 1;} while(0)\nstatic unsigned char bytes[4096];\nstatic void *slots[64];\nstatic size_t lengths[64];\nint test_main(void) {\n    CHECK(malloc(0)==0 && malloc(SIZE_MAX)==0 && calloc(SIZE_MAX,2)==0);\n    unsigned char *a=malloc(64),*b=malloc(64),*c=malloc(64);\n    CHECK(a&&b&&c&&(((uintptr_t)a| (uintptr_t)b | (uintptr_t)c)&15)==0);\n    for(size_t i=0;i<64;i++)a[i]=(unsigned char)i;\n    CHECK(realloc(a,SIZE_MAX)==0);for(size_t i=0;i<64;i++)CHECK(a[i]==(unsigned char)i);\n    unsigned char *grown=realloc(a,9000);CHECK(grown);for(size_t i=0;i<64;i++)CHECK(grown[i]==(unsigned char)i);\n    CHECK(realloc(grown,32)==grown);free(grown);free(b);free(c);\n    a=malloc(64);b=malloc(64);c=malloc(64);CHECK(a&&b&&c);\n    free(a);free(b);unsigned char *merged=malloc(128);CHECK(merged==a);\n    free(merged);free(c);free(0);\n    unsigned char *z=calloc(127,3);CHECK(z);for(size_t i=0;i<381;i++)CHECK(z[i]==0);CHECK(realloc(z,0)==0);\n    uint32_t state=31;uint64_t start=clock_ticks();\n    for(unsigned iteration=0;iteration<20000;iteration++) {\n        state=state*1664525u+1013904223u;size_t slot=(state>>16)%64;\n        if(slots[slot]) {unsigned char *p=slots[slot];for(size_t i=0;i<lengths[slot];i++)CHECK(p[i]==(unsigned char)slot);free(p);}\n        size_t n=1+(state%2048);slots[slot]=malloc(n);lengths[slot]=n;CHECK(slots[slot]);\n        unsigned char *p=slots[slot];for(size_t i=0;i<n;i++)p[i]=(unsigned char)slot;\n    }\n    uint64_t elapsed=clock_ticks()-start;CHECK(elapsed>0);\n    for(size_t i=0;i<64;i++)free(slots[i]);\n    /* Print elapsed monotonic nanoseconds without libc. */\n    char digits[32];size_t at=sizeof digits;digits[--at]='\\n';do {digits[--at]=(char)('0'+elapsed%10);elapsed/=10;}while(elapsed);\n    const char label[]=\"Allocator workload nanoseconds: \";CHECK(write_file(1,label,sizeof label-1)>0);CHECK(write_file(1,digits+at,sizeof digits-at)>0);\n    long fd=open_file(\"source.bin\",1|64|128,0600);CHECK(fd>=0);\n    for(size_t i=0;i<sizeof bytes;i++)bytes[i]=(unsigned char)i;\n    for(int i=0;i<513;i++)CHECK(write_file(fd,bytes,sizeof bytes)==(long)sizeof bytes);\n    CHECK(close_file(fd)==0 && get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file_progress(\"source.bin\",\"copy.bin\")==0);\n    CHECK(copy_file(\"source.bin\",\"source.bin\")==-1);\n    CHECK(get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file(\"missing.bin\",\"unused.bin\")==-1);\n    struct Blob blob=read_entire_file(\"copy.bin\");CHECK(blob.data && blob.size==513*4096);\n    for(size_t i=0;i<blob.size;i++){CHECK(((unsigned char*)blob.data)[i]==(unsigned char)i);}\n    free(blob.data);\n    fd=open_file(\"empty.bin\",1|64|128,0600);CHECK(fd>=0 && close_file(fd)==0);\n    blob=read_entire_file(\"empty.bin\");CHECK(blob.data && blob.size==0);free(blob.data);\n    blob=read_entire_file(\"missing.bin\");CHECK(!blob.data && blob.size==0);\n    const char ok[]=\"Allocator and file-I/O checks passed\\n\";CHECK(write_file(1,ok,sizeof ok-1)>0);\n    return 0;\n}",
+            "explanation": "Checks allocation failure preservation, coalescing/reuse, zeroing, 20000 varied allocation operations, a 2 MiB+4096-byte binary copy, same-inode protection and empty/missing file behavior. Compiled C uses only our assembly libraries, not libc."
+          },
+          {
+            "language": "nasm",
+            "title": "Freestanding entry and clock: test_entry.asm",
+            "code": "; test_entry.asm -- entry and timing helper for freestanding test31.c\nsection .text\nglobal _start,clock_ticks\nextern test_main\n_start:\n    call test_main\n    mov edi,eax\n    mov eax,60\n    syscall\nclock_ticks:\n    sub rsp,24\n    mov eax,228            ; clock_gettime\n    mov edi,1              ; CLOCK_MONOTONIC\n    mov rsi,rsp\n    syscall\n    test rax,rax\n    js .error\n    mov rax,[rsp]\n    imul rax,rax,1000000000\n    add rax,[rsp+8]\n    add rsp,24\n    ret\n.error:\n    mov edi,2\n    mov eax,60\n    syscall\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Provides process entry and CLOCK_MONOTONIC nanoseconds through syscall 228. Test timing includes verification work; it is an allocator workload measurement, not a claim of isolated malloc latency."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-31-1',
-        title: 'Exercise 31.1: Implement calloc',
-        description: 'Implement calloc(num, size) by calling malloc and zeroing the memory buffer with rep stosb.',
-        solution: `calloc:\n    imul rdi, rsi\n    push rdi\n    call malloc\n    pop rcx\n    test rax, rax; jz .done\n    push rax\n    mov rdi, rax\n    xor al, al\n    cld\n    rep stosb\n    pop rax\n.done:\n    ret`,
-        solutionLanguage: 'nasm'
+        "id": "ex-31-1",
+        "title": "Exercise 31.1: Implement `realloc`",
+        "description": "Write a realloc function that resizes a previously allocated block, copying data if necessary.",
+        "solution": "/* Freestanding tests: compile with -ffreestanding -fno-builtin -fno-stack-protector.\n   Link with ld and test_entry.o; do not link libc with the brk allocator. */\n#include <stddef.h>\n#include <stdint.h>\nextern void *malloc(size_t),*calloc(size_t,size_t),*realloc(void*,size_t);\nextern void free(void*);\nextern long open_file(const char*,int,int),close_file(long),write_file(long,const void*,size_t),get_file_size(const char*);\nextern long copy_file(const char*,const char*),copy_file_progress(const char*,const char*);\nstruct Blob {void *data;size_t size;};\nextern struct Blob read_entire_file(const char*);\nextern uint64_t clock_ticks(void);\n#define CHECK(condition) do {if (!(condition)) return 1;} while(0)\nstatic unsigned char bytes[4096];\nstatic void *slots[64];\nstatic size_t lengths[64];\nint test_main(void) {\n    CHECK(malloc(0)==0 && malloc(SIZE_MAX)==0 && calloc(SIZE_MAX,2)==0);\n    unsigned char *a=malloc(64),*b=malloc(64),*c=malloc(64);\n    CHECK(a&&b&&c&&(((uintptr_t)a| (uintptr_t)b | (uintptr_t)c)&15)==0);\n    for(size_t i=0;i<64;i++)a[i]=(unsigned char)i;\n    CHECK(realloc(a,SIZE_MAX)==0);for(size_t i=0;i<64;i++)CHECK(a[i]==(unsigned char)i);\n    unsigned char *grown=realloc(a,9000);CHECK(grown);for(size_t i=0;i<64;i++)CHECK(grown[i]==(unsigned char)i);\n    CHECK(realloc(grown,32)==grown);free(grown);free(b);free(c);\n    a=malloc(64);b=malloc(64);c=malloc(64);CHECK(a&&b&&c);\n    free(a);free(b);unsigned char *merged=malloc(128);CHECK(merged==a);\n    free(merged);free(c);free(0);\n    unsigned char *z=calloc(127,3);CHECK(z);for(size_t i=0;i<381;i++)CHECK(z[i]==0);CHECK(realloc(z,0)==0);\n    uint32_t state=31;uint64_t start=clock_ticks();\n    for(unsigned iteration=0;iteration<20000;iteration++) {\n        state=state*1664525u+1013904223u;size_t slot=(state>>16)%64;\n        if(slots[slot]) {unsigned char *p=slots[slot];for(size_t i=0;i<lengths[slot];i++)CHECK(p[i]==(unsigned char)slot);free(p);}\n        size_t n=1+(state%2048);slots[slot]=malloc(n);lengths[slot]=n;CHECK(slots[slot]);\n        unsigned char *p=slots[slot];for(size_t i=0;i<n;i++)p[i]=(unsigned char)slot;\n    }\n    uint64_t elapsed=clock_ticks()-start;CHECK(elapsed>0);\n    for(size_t i=0;i<64;i++)free(slots[i]);\n    /* Print elapsed monotonic nanoseconds without libc. */\n    char digits[32];size_t at=sizeof digits;digits[--at]='\\n';do {digits[--at]=(char)('0'+elapsed%10);elapsed/=10;}while(elapsed);\n    const char label[]=\"Allocator workload nanoseconds: \";CHECK(write_file(1,label,sizeof label-1)>0);CHECK(write_file(1,digits+at,sizeof digits-at)>0);\n    long fd=open_file(\"source.bin\",1|64|128,0600);CHECK(fd>=0);\n    for(size_t i=0;i<sizeof bytes;i++)bytes[i]=(unsigned char)i;\n    for(int i=0;i<513;i++)CHECK(write_file(fd,bytes,sizeof bytes)==(long)sizeof bytes);\n    CHECK(close_file(fd)==0 && get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file_progress(\"source.bin\",\"copy.bin\")==0);\n    CHECK(copy_file(\"source.bin\",\"source.bin\")==-1);\n    CHECK(get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file(\"missing.bin\",\"unused.bin\")==-1);\n    struct Blob blob=read_entire_file(\"copy.bin\");CHECK(blob.data && blob.size==513*4096);\n    for(size_t i=0;i<blob.size;i++){CHECK(((unsigned char*)blob.data)[i]==(unsigned char)i);}\n    free(blob.data);\n    fd=open_file(\"empty.bin\",1|64|128,0600);CHECK(fd>=0 && close_file(fd)==0);\n    blob=read_entire_file(\"empty.bin\");CHECK(blob.data && blob.size==0);free(blob.data);\n    blob=read_entire_file(\"missing.bin\");CHECK(!blob.data && blob.size==0);\n    const char ok[]=\"Allocator and file-I/O checks passed\\n\";CHECK(write_file(1,ok,sizeof ok-1)>0);\n    return 0;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "The complete implementation appears in allocator.asm or fileio.asm above; this shared freestanding harness exercises it. Save as test31.c and use test_entry.asm with the section 31.7 build commands. Do not link libc with this brk allocator. realloc preserves the original 64 bytes during growth to 9000, reuses sufficient capacity on shrink and retains the old allocation when SIZE_MAX fails. It also supports NULL and zero-size cases according to the documented contract."
+      },
+      {
+        "id": "ex-31-2",
+        "title": "Exercise 31.2: Add Coalescing",
+        "description": "Modify free to merge adjacent free blocks. You'll need to maintain a doubly linked free list or search for adjacent blocks by address.",
+        "solution": "/* Freestanding tests: compile with -ffreestanding -fno-builtin -fno-stack-protector.\n   Link with ld and test_entry.o; do not link libc with the brk allocator. */\n#include <stddef.h>\n#include <stdint.h>\nextern void *malloc(size_t),*calloc(size_t,size_t),*realloc(void*,size_t);\nextern void free(void*);\nextern long open_file(const char*,int,int),close_file(long),write_file(long,const void*,size_t),get_file_size(const char*);\nextern long copy_file(const char*,const char*),copy_file_progress(const char*,const char*);\nstruct Blob {void *data;size_t size;};\nextern struct Blob read_entire_file(const char*);\nextern uint64_t clock_ticks(void);\n#define CHECK(condition) do {if (!(condition)) return 1;} while(0)\nstatic unsigned char bytes[4096];\nstatic void *slots[64];\nstatic size_t lengths[64];\nint test_main(void) {\n    CHECK(malloc(0)==0 && malloc(SIZE_MAX)==0 && calloc(SIZE_MAX,2)==0);\n    unsigned char *a=malloc(64),*b=malloc(64),*c=malloc(64);\n    CHECK(a&&b&&c&&(((uintptr_t)a| (uintptr_t)b | (uintptr_t)c)&15)==0);\n    for(size_t i=0;i<64;i++)a[i]=(unsigned char)i;\n    CHECK(realloc(a,SIZE_MAX)==0);for(size_t i=0;i<64;i++)CHECK(a[i]==(unsigned char)i);\n    unsigned char *grown=realloc(a,9000);CHECK(grown);for(size_t i=0;i<64;i++)CHECK(grown[i]==(unsigned char)i);\n    CHECK(realloc(grown,32)==grown);free(grown);free(b);free(c);\n    a=malloc(64);b=malloc(64);c=malloc(64);CHECK(a&&b&&c);\n    free(a);free(b);unsigned char *merged=malloc(128);CHECK(merged==a);\n    free(merged);free(c);free(0);\n    unsigned char *z=calloc(127,3);CHECK(z);for(size_t i=0;i<381;i++)CHECK(z[i]==0);CHECK(realloc(z,0)==0);\n    uint32_t state=31;uint64_t start=clock_ticks();\n    for(unsigned iteration=0;iteration<20000;iteration++) {\n        state=state*1664525u+1013904223u;size_t slot=(state>>16)%64;\n        if(slots[slot]) {unsigned char *p=slots[slot];for(size_t i=0;i<lengths[slot];i++)CHECK(p[i]==(unsigned char)slot);free(p);}\n        size_t n=1+(state%2048);slots[slot]=malloc(n);lengths[slot]=n;CHECK(slots[slot]);\n        unsigned char *p=slots[slot];for(size_t i=0;i<n;i++)p[i]=(unsigned char)slot;\n    }\n    uint64_t elapsed=clock_ticks()-start;CHECK(elapsed>0);\n    for(size_t i=0;i<64;i++)free(slots[i]);\n    /* Print elapsed monotonic nanoseconds without libc. */\n    char digits[32];size_t at=sizeof digits;digits[--at]='\\n';do {digits[--at]=(char)('0'+elapsed%10);elapsed/=10;}while(elapsed);\n    const char label[]=\"Allocator workload nanoseconds: \";CHECK(write_file(1,label,sizeof label-1)>0);CHECK(write_file(1,digits+at,sizeof digits-at)>0);\n    long fd=open_file(\"source.bin\",1|64|128,0600);CHECK(fd>=0);\n    for(size_t i=0;i<sizeof bytes;i++)bytes[i]=(unsigned char)i;\n    for(int i=0;i<513;i++)CHECK(write_file(fd,bytes,sizeof bytes)==(long)sizeof bytes);\n    CHECK(close_file(fd)==0 && get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file_progress(\"source.bin\",\"copy.bin\")==0);\n    CHECK(copy_file(\"source.bin\",\"source.bin\")==-1);\n    CHECK(get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file(\"missing.bin\",\"unused.bin\")==-1);\n    struct Blob blob=read_entire_file(\"copy.bin\");CHECK(blob.data && blob.size==513*4096);\n    for(size_t i=0;i<blob.size;i++){CHECK(((unsigned char*)blob.data)[i]==(unsigned char)i);}\n    free(blob.data);\n    fd=open_file(\"empty.bin\",1|64|128,0600);CHECK(fd>=0 && close_file(fd)==0);\n    blob=read_entire_file(\"empty.bin\");CHECK(blob.data && blob.size==0);free(blob.data);\n    blob=read_entire_file(\"missing.bin\");CHECK(!blob.data && blob.size==0);\n    const char ok[]=\"Allocator and file-I/O checks passed\\n\";CHECK(write_file(1,ok,sizeof ok-1)>0);\n    return 0;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "The complete implementation appears in allocator.asm or fileio.asm above; this shared freestanding harness exercises it. Save as test31.c and use test_entry.asm with the section 31.7 build commands. Do not link libc with this brk allocator. free inserts blocks in address order, merges the successor, then the predecessor when addresses meet exactly. The harness frees two adjacent 64-byte blocks and verifies a 128-byte allocation reuses their combined region. Live neighboring allocations prevent merging across occupied space."
+      },
+      {
+        "id": "ex-31-3",
+        "title": "Exercise 31.3: File Copy with Progress",
+        "description": "Enhance copy_file to print a progress message every 1 MB copied.",
+        "solution": "/* Freestanding tests: compile with -ffreestanding -fno-builtin -fno-stack-protector.\n   Link with ld and test_entry.o; do not link libc with the brk allocator. */\n#include <stddef.h>\n#include <stdint.h>\nextern void *malloc(size_t),*calloc(size_t,size_t),*realloc(void*,size_t);\nextern void free(void*);\nextern long open_file(const char*,int,int),close_file(long),write_file(long,const void*,size_t),get_file_size(const char*);\nextern long copy_file(const char*,const char*),copy_file_progress(const char*,const char*);\nstruct Blob {void *data;size_t size;};\nextern struct Blob read_entire_file(const char*);\nextern uint64_t clock_ticks(void);\n#define CHECK(condition) do {if (!(condition)) return 1;} while(0)\nstatic unsigned char bytes[4096];\nstatic void *slots[64];\nstatic size_t lengths[64];\nint test_main(void) {\n    CHECK(malloc(0)==0 && malloc(SIZE_MAX)==0 && calloc(SIZE_MAX,2)==0);\n    unsigned char *a=malloc(64),*b=malloc(64),*c=malloc(64);\n    CHECK(a&&b&&c&&(((uintptr_t)a| (uintptr_t)b | (uintptr_t)c)&15)==0);\n    for(size_t i=0;i<64;i++)a[i]=(unsigned char)i;\n    CHECK(realloc(a,SIZE_MAX)==0);for(size_t i=0;i<64;i++)CHECK(a[i]==(unsigned char)i);\n    unsigned char *grown=realloc(a,9000);CHECK(grown);for(size_t i=0;i<64;i++)CHECK(grown[i]==(unsigned char)i);\n    CHECK(realloc(grown,32)==grown);free(grown);free(b);free(c);\n    a=malloc(64);b=malloc(64);c=malloc(64);CHECK(a&&b&&c);\n    free(a);free(b);unsigned char *merged=malloc(128);CHECK(merged==a);\n    free(merged);free(c);free(0);\n    unsigned char *z=calloc(127,3);CHECK(z);for(size_t i=0;i<381;i++)CHECK(z[i]==0);CHECK(realloc(z,0)==0);\n    uint32_t state=31;uint64_t start=clock_ticks();\n    for(unsigned iteration=0;iteration<20000;iteration++) {\n        state=state*1664525u+1013904223u;size_t slot=(state>>16)%64;\n        if(slots[slot]) {unsigned char *p=slots[slot];for(size_t i=0;i<lengths[slot];i++)CHECK(p[i]==(unsigned char)slot);free(p);}\n        size_t n=1+(state%2048);slots[slot]=malloc(n);lengths[slot]=n;CHECK(slots[slot]);\n        unsigned char *p=slots[slot];for(size_t i=0;i<n;i++)p[i]=(unsigned char)slot;\n    }\n    uint64_t elapsed=clock_ticks()-start;CHECK(elapsed>0);\n    for(size_t i=0;i<64;i++)free(slots[i]);\n    /* Print elapsed monotonic nanoseconds without libc. */\n    char digits[32];size_t at=sizeof digits;digits[--at]='\\n';do {digits[--at]=(char)('0'+elapsed%10);elapsed/=10;}while(elapsed);\n    const char label[]=\"Allocator workload nanoseconds: \";CHECK(write_file(1,label,sizeof label-1)>0);CHECK(write_file(1,digits+at,sizeof digits-at)>0);\n    long fd=open_file(\"source.bin\",1|64|128,0600);CHECK(fd>=0);\n    for(size_t i=0;i<sizeof bytes;i++)bytes[i]=(unsigned char)i;\n    for(int i=0;i<513;i++)CHECK(write_file(fd,bytes,sizeof bytes)==(long)sizeof bytes);\n    CHECK(close_file(fd)==0 && get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file_progress(\"source.bin\",\"copy.bin\")==0);\n    CHECK(copy_file(\"source.bin\",\"source.bin\")==-1);\n    CHECK(get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file(\"missing.bin\",\"unused.bin\")==-1);\n    struct Blob blob=read_entire_file(\"copy.bin\");CHECK(blob.data && blob.size==513*4096);\n    for(size_t i=0;i<blob.size;i++){CHECK(((unsigned char*)blob.data)[i]==(unsigned char)i);}\n    free(blob.data);\n    fd=open_file(\"empty.bin\",1|64|128,0600);CHECK(fd>=0 && close_file(fd)==0);\n    blob=read_entire_file(\"empty.bin\");CHECK(blob.data && blob.size==0);free(blob.data);\n    blob=read_entire_file(\"missing.bin\");CHECK(!blob.data && blob.size==0);\n    const char ok[]=\"Allocator and file-I/O checks passed\\n\";CHECK(write_file(1,ok,sizeof ok-1)>0);\n    return 0;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "The complete implementation appears in allocator.asm or fileio.asm above; this shared freestanding harness exercises it. Save as test31.c and use test_entry.asm with the section 31.7 build commands. Do not link libc with this brk allocator. copy_file_progress uses cumulative bytes successfully written, emitting one stderr message per crossed 1 MiB threshold. The 513×4096-byte test must produce exactly two progress lines. Data and progress writes both handle short counts and EINTR."
+      },
+      {
+        "id": "ex-31-4",
+        "title": "Exercise 31.4: Read Entire File",
+        "description": "Write a function read_entire_file(path) that opens, reads the entire file into a newly allocated buffer, and returns pointer and size.",
+        "solution": "/* Freestanding tests: compile with -ffreestanding -fno-builtin -fno-stack-protector.\n   Link with ld and test_entry.o; do not link libc with the brk allocator. */\n#include <stddef.h>\n#include <stdint.h>\nextern void *malloc(size_t),*calloc(size_t,size_t),*realloc(void*,size_t);\nextern void free(void*);\nextern long open_file(const char*,int,int),close_file(long),write_file(long,const void*,size_t),get_file_size(const char*);\nextern long copy_file(const char*,const char*),copy_file_progress(const char*,const char*);\nstruct Blob {void *data;size_t size;};\nextern struct Blob read_entire_file(const char*);\nextern uint64_t clock_ticks(void);\n#define CHECK(condition) do {if (!(condition)) return 1;} while(0)\nstatic unsigned char bytes[4096];\nstatic void *slots[64];\nstatic size_t lengths[64];\nint test_main(void) {\n    CHECK(malloc(0)==0 && malloc(SIZE_MAX)==0 && calloc(SIZE_MAX,2)==0);\n    unsigned char *a=malloc(64),*b=malloc(64),*c=malloc(64);\n    CHECK(a&&b&&c&&(((uintptr_t)a| (uintptr_t)b | (uintptr_t)c)&15)==0);\n    for(size_t i=0;i<64;i++)a[i]=(unsigned char)i;\n    CHECK(realloc(a,SIZE_MAX)==0);for(size_t i=0;i<64;i++)CHECK(a[i]==(unsigned char)i);\n    unsigned char *grown=realloc(a,9000);CHECK(grown);for(size_t i=0;i<64;i++)CHECK(grown[i]==(unsigned char)i);\n    CHECK(realloc(grown,32)==grown);free(grown);free(b);free(c);\n    a=malloc(64);b=malloc(64);c=malloc(64);CHECK(a&&b&&c);\n    free(a);free(b);unsigned char *merged=malloc(128);CHECK(merged==a);\n    free(merged);free(c);free(0);\n    unsigned char *z=calloc(127,3);CHECK(z);for(size_t i=0;i<381;i++)CHECK(z[i]==0);CHECK(realloc(z,0)==0);\n    uint32_t state=31;uint64_t start=clock_ticks();\n    for(unsigned iteration=0;iteration<20000;iteration++) {\n        state=state*1664525u+1013904223u;size_t slot=(state>>16)%64;\n        if(slots[slot]) {unsigned char *p=slots[slot];for(size_t i=0;i<lengths[slot];i++)CHECK(p[i]==(unsigned char)slot);free(p);}\n        size_t n=1+(state%2048);slots[slot]=malloc(n);lengths[slot]=n;CHECK(slots[slot]);\n        unsigned char *p=slots[slot];for(size_t i=0;i<n;i++)p[i]=(unsigned char)slot;\n    }\n    uint64_t elapsed=clock_ticks()-start;CHECK(elapsed>0);\n    for(size_t i=0;i<64;i++)free(slots[i]);\n    /* Print elapsed monotonic nanoseconds without libc. */\n    char digits[32];size_t at=sizeof digits;digits[--at]='\\n';do {digits[--at]=(char)('0'+elapsed%10);elapsed/=10;}while(elapsed);\n    const char label[]=\"Allocator workload nanoseconds: \";CHECK(write_file(1,label,sizeof label-1)>0);CHECK(write_file(1,digits+at,sizeof digits-at)>0);\n    long fd=open_file(\"source.bin\",1|64|128,0600);CHECK(fd>=0);\n    for(size_t i=0;i<sizeof bytes;i++)bytes[i]=(unsigned char)i;\n    for(int i=0;i<513;i++)CHECK(write_file(fd,bytes,sizeof bytes)==(long)sizeof bytes);\n    CHECK(close_file(fd)==0 && get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file_progress(\"source.bin\",\"copy.bin\")==0);\n    CHECK(copy_file(\"source.bin\",\"source.bin\")==-1);\n    CHECK(get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file(\"missing.bin\",\"unused.bin\")==-1);\n    struct Blob blob=read_entire_file(\"copy.bin\");CHECK(blob.data && blob.size==513*4096);\n    for(size_t i=0;i<blob.size;i++){CHECK(((unsigned char*)blob.data)[i]==(unsigned char)i);}\n    free(blob.data);\n    fd=open_file(\"empty.bin\",1|64|128,0600);CHECK(fd>=0 && close_file(fd)==0);\n    blob=read_entire_file(\"empty.bin\");CHECK(blob.data && blob.size==0);free(blob.data);\n    blob=read_entire_file(\"missing.bin\");CHECK(!blob.data && blob.size==0);\n    const char ok[]=\"Allocator and file-I/O checks passed\\n\";CHECK(write_file(1,ok,sizeof ok-1)>0);\n    return 0;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "The complete implementation appears in allocator.asm or fileio.asm above; this shared freestanding harness exercises it. Save as test31.c and use test_entry.asm with the section 31.7 build commands. Do not link libc with this brk allocator. read_entire_file returns RAX=buffer and RDX=size; the C struct Blob maps these two integer-class fields to those registers. It reads the initial seekable-file size, rejects premature EOF, ignores later growth, and does not append NUL. Empty files return an allocated pointer with length zero; the caller frees successful buffers."
+      },
+      {
+        "id": "ex-31-5",
+        "title": "Exercise 31.5: Benchmark Malloc",
+        "description": "Write a test that allocates and frees many blocks of random sizes and measures performance with perf.",
+        "solution": "/* Freestanding tests: compile with -ffreestanding -fno-builtin -fno-stack-protector.\n   Link with ld and test_entry.o; do not link libc with the brk allocator. */\n#include <stddef.h>\n#include <stdint.h>\nextern void *malloc(size_t),*calloc(size_t,size_t),*realloc(void*,size_t);\nextern void free(void*);\nextern long open_file(const char*,int,int),close_file(long),write_file(long,const void*,size_t),get_file_size(const char*);\nextern long copy_file(const char*,const char*),copy_file_progress(const char*,const char*);\nstruct Blob {void *data;size_t size;};\nextern struct Blob read_entire_file(const char*);\nextern uint64_t clock_ticks(void);\n#define CHECK(condition) do {if (!(condition)) return 1;} while(0)\nstatic unsigned char bytes[4096];\nstatic void *slots[64];\nstatic size_t lengths[64];\nint test_main(void) {\n    CHECK(malloc(0)==0 && malloc(SIZE_MAX)==0 && calloc(SIZE_MAX,2)==0);\n    unsigned char *a=malloc(64),*b=malloc(64),*c=malloc(64);\n    CHECK(a&&b&&c&&(((uintptr_t)a| (uintptr_t)b | (uintptr_t)c)&15)==0);\n    for(size_t i=0;i<64;i++)a[i]=(unsigned char)i;\n    CHECK(realloc(a,SIZE_MAX)==0);for(size_t i=0;i<64;i++)CHECK(a[i]==(unsigned char)i);\n    unsigned char *grown=realloc(a,9000);CHECK(grown);for(size_t i=0;i<64;i++)CHECK(grown[i]==(unsigned char)i);\n    CHECK(realloc(grown,32)==grown);free(grown);free(b);free(c);\n    a=malloc(64);b=malloc(64);c=malloc(64);CHECK(a&&b&&c);\n    free(a);free(b);unsigned char *merged=malloc(128);CHECK(merged==a);\n    free(merged);free(c);free(0);\n    unsigned char *z=calloc(127,3);CHECK(z);for(size_t i=0;i<381;i++)CHECK(z[i]==0);CHECK(realloc(z,0)==0);\n    uint32_t state=31;uint64_t start=clock_ticks();\n    for(unsigned iteration=0;iteration<20000;iteration++) {\n        state=state*1664525u+1013904223u;size_t slot=(state>>16)%64;\n        if(slots[slot]) {unsigned char *p=slots[slot];for(size_t i=0;i<lengths[slot];i++)CHECK(p[i]==(unsigned char)slot);free(p);}\n        size_t n=1+(state%2048);slots[slot]=malloc(n);lengths[slot]=n;CHECK(slots[slot]);\n        unsigned char *p=slots[slot];for(size_t i=0;i<n;i++)p[i]=(unsigned char)slot;\n    }\n    uint64_t elapsed=clock_ticks()-start;CHECK(elapsed>0);\n    for(size_t i=0;i<64;i++)free(slots[i]);\n    /* Print elapsed monotonic nanoseconds without libc. */\n    char digits[32];size_t at=sizeof digits;digits[--at]='\\n';do {digits[--at]=(char)('0'+elapsed%10);elapsed/=10;}while(elapsed);\n    const char label[]=\"Allocator workload nanoseconds: \";CHECK(write_file(1,label,sizeof label-1)>0);CHECK(write_file(1,digits+at,sizeof digits-at)>0);\n    long fd=open_file(\"source.bin\",1|64|128,0600);CHECK(fd>=0);\n    for(size_t i=0;i<sizeof bytes;i++)bytes[i]=(unsigned char)i;\n    for(int i=0;i<513;i++)CHECK(write_file(fd,bytes,sizeof bytes)==(long)sizeof bytes);\n    CHECK(close_file(fd)==0 && get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file_progress(\"source.bin\",\"copy.bin\")==0);\n    CHECK(copy_file(\"source.bin\",\"source.bin\")==-1);\n    CHECK(get_file_size(\"source.bin\")==513*4096);\n    CHECK(copy_file(\"missing.bin\",\"unused.bin\")==-1);\n    struct Blob blob=read_entire_file(\"copy.bin\");CHECK(blob.data && blob.size==513*4096);\n    for(size_t i=0;i<blob.size;i++){CHECK(((unsigned char*)blob.data)[i]==(unsigned char)i);}\n    free(blob.data);\n    fd=open_file(\"empty.bin\",1|64|128,0600);CHECK(fd>=0 && close_file(fd)==0);\n    blob=read_entire_file(\"empty.bin\");CHECK(blob.data && blob.size==0);free(blob.data);\n    blob=read_entire_file(\"missing.bin\");CHECK(!blob.data && blob.size==0);\n    const char ok[]=\"Allocator and file-I/O checks passed\\n\";CHECK(write_file(1,ok,sizeof ok-1)>0);\n    return 0;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "The complete implementation appears in allocator.asm or fileio.asm above; this shared freestanding harness exercises it. Save as test31.c and use test_entry.asm with the section 31.7 build commands. Do not link libc with this brk allocator. A fixed-seed LCG varies sizes and replacement slots over 20000 operations. The test verifies stored bytes before freeing and prints elapsed monotonic nanoseconds. Optional perf stat ./test31 requires permission to access counters; report unavailable counters rather than inventing results."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why must malloc allocate 16 bytes more than the requested user size?',
-        answer: 'To store the internal metadata Block header (size and free list next pointer) immediately preceding the memory pointer returned to the user application.'
+        "question": "What system calls are used for file I/O in Linux? List their numbers and arguments.",
+        "answer": "Linux x86-64 uses read=0 and write=1 with fd/buffer/count, open=2 with path/flags/mode, close=3 with fd, and lseek=8 with fd/offset/whence. Arguments use RDI, RSI and RDX here. Numbers differ on other architectures."
+      },
+      {
+        "question": "How does brk work? How can you allocate memory using it?",
+        "answer": "brk(0) queries the current program break. Request a larger absolute break, then verify the returned address equals the request before using the added region. Raw Linux brk returns the current break on failure rather than the usual negative errno. A custom owner must not compete with libc malloc/sbrk."
+      },
+      {
+        "question": "What is a free list? How does first-fit allocation work?",
+        "answer": "A free list links currently available blocks. First-fit scans until capacity is sufficient, removes that block, and splits it only if the remainder can hold a new header plus a useful aligned payload. Search time depends on list length."
+      },
+      {
+        "question": "Why do we need a block header in a memory allocator? What information does it contain?",
+        "answer": "A header records capacity and free-list linkage before the returned data. free subtracts the header size to recover metadata. Extra state can support debugging or faster coalescing; the simple allocator assumes valid, single frees."
+      },
+      {
+        "question": "How do you ensure returned pointers from malloc are 16-byte aligned?",
+        "answer": "Align the initial heap address and each payload size to 16, and use a header whose size is also divisible by 16. Check addition/rounding overflow before arithmetic; rounding only sizes cannot fix an unaligned heap base."
+      },
+      {
+        "question": "What is the difference between open flags O_WRONLY, O_CREAT, and O_TRUNC?",
+        "answer": "O_WRONLY selects write access; O_CREAT creates a missing file using a supplied mode filtered by umask; O_TRUNC truncates an existing regular file when opened for writing. O_CREAT alone does not truncate. The corrected copy checks device/inode identity before truncating."
+      },
+      {
+        "question": "How would you implement realloc? What are the steps?",
+        "answer": "NULL input delegates to malloc; this implementation frees and returns NULL for size zero. Reuse sufficient capacity when possible. Otherwise allocate first, copy the old payload, then free the old block. If allocation fails, leave the original allocation intact."
+      },
+      {
+        "question": "Why might you use mmap instead of brk for large allocations?",
+        "answer": "Anonymous mmap provides separate mappings that can be unmapped independently, useful for large allocations. It avoids requiring one contiguous program-break region but has page-rounding and mapping overhead. Track each block’s allocation origin before freeing."
+      },
+      {
+        "question": "In copy_file, why do we read in chunks rather than the entire file at once?",
+        "answer": "A fixed-size buffer bounds memory consumption and works for large files. A successful read may be short; write may consume only part of that chunk. Retry EINTR, loop until each chunk is written and close descriptors on every path."
+      },
+      {
+        "question": "How can you detect errors from system calls? What does a negative return value mean?",
+        "answer": "Most raw Linux syscalls return -errno in the range -4095..-1 on error. The completed wrappers normalize negative results to -1 and do not set libc errno. Zero means EOF for read and success for many other calls; raw brk is a notable exception."
       }
     ],
-    summary: ['brk controls the heap data segment boundary.', 'Free lists and block headers allow efficient dynamic memory reclamation.']
+    "summary": [
+      "File I/O in assembly uses system calls directly; wrapping them simplifies usage.",
+      "A custom memory allocator uses brk and a free list; first-fit and splitting are straightforward.",
+      "Block headers store metadata before user data.",
+      "Alignment is crucial; return pointers aligned to 16 bytes.",
+      "Modular design with separate files and a Makefile promotes reuse.",
+      "Error handling is essential for robustness."
+    ]
   },
   {
     id: 32,
