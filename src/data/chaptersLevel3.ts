@@ -1013,79 +1013,458 @@ export const CHAPTERS_LEVEL_3: Chapter[] = [
     ]
   },
   {
-    id: 14,
-    slug: 'chapter-14-floating-point-simd',
-    level: 3,
-    levelTitle: 'Intermediate Assembly',
-    title: 'Chapter 14: Floating-Point and SIMD Instructions',
-    subtitle: 'IEEE 754 Representation, SSE XMM Registers, and Vector Math',
-    learningObjectives: [
-      'Understand IEEE 754 single and double-precision floating-point formats.',
-      'Use SSE scalar instructions: movss, movsd, addss, addsd, sqrtss, sqrtsd.',
-      'Process 4 floats or 2 doubles simultaneously with packed SIMD (addps, mulps).',
-      'Perform horizontal vector sums and float array operations.',
-      'Convert between integer and floating-point with cvtsi2ss and cvtss2si.'
+    "id": 14,
+    "slug": "chapter-14-floating-point-simd",
+    "level": 3,
+    "levelTitle": "Intermediate Assembly",
+    "title": "Chapter 14: Floating-Point and SIMD Instructions",
+    "subtitle": "IEEE 754 Representation, SSE XMM Registers, and Vector Math",
+    "learningObjectives": [
+      "Understand how floating-point numbers are represented and stored in x86-64.",
+      "Learn the SSE (Streaming SIMD Extensions) register set and data types.",
+      "Master scalar floating-point instructions for single-precision (float) and double-precision (double).",
+      "Explore packed SIMD instructions to operate on multiple data elements simultaneously.",
+      "Understand alignment requirements and performance implications for SIMD.",
+      "Write programs that use SSE to perform arithmetic, comparisons, and vector operations.",
+      "Apply SIMD to accelerate array and matrix computations."
     ],
-    prerequisites: ['Chapters 1–13'],
-    keyConcepts: [
-      'SSE provides 16 128-bit XMM registers (xmm0–xmm15).',
-      'Packed instructions operate on all lanes in parallel.',
-      'movaps requires 16-byte memory alignment; movups allows unaligned memory access.'
+    "prerequisites": [
+      "Solid understanding of integer instructions, registers, and memory addressing (Chapters 2–7).",
+      "Familiarity with procedures, calling conventions, and the stack (Chapter 10).",
+      "Basic knowledge of arrays and memory operations (Chapter 9).",
+      "Some familiarity with the IEEE 754 floating-point standard (conceptual)."
     ],
-    diagramType: 'simd_floating',
-    sections: [
+    "keyConcepts": [
+      "SSE is a set of SIMD instructions that operate on 128-bit registers (xmm0–xmm15).",
+      "Scalar instructions operate on the low 32 or 64 bits of an xmm register; packed instructions operate on all elements simultaneously.",
+      "Floating-point data sizes: single-precision (4 bytes, float) and double-precision (8 bytes, double).",
+      "Data movement: movss, movsd (scalar), movaps, movups (packed aligned/unaligned), movdqa, movdqu (integer packed).",
+      "Arithmetic: addss, addps, addsd, addpd, etc.",
+      "Conversions between integer and floating-point: cvtsi2ss, cvtss2si, etc.",
+      "Alignment: packed loads/stores can be aligned (movaps, movdqa) or unaligned (movups, movdqu). Unaligned is slower.",
+      "The System V AMD64 ABI passes floating-point arguments in xmm0–xmm7 and returns in xmm0.",
+      "Clarifications: CVT-to-integer follows MXCSR rounding; CVTT truncates. Some named instructions require SSE4.1. Unaligned-capable moves are not inherently slower; full-width access and alignment must both be valid."
+    ],
+    "diagramType": "simd_floating",
+    "sections": [
       {
-        id: 'sec-14-1',
-        title: '14.1 Vector Dot Product with Horizontal Sum',
-        content: `Calculating dot product of two 4-float vectors in parallel using SSE:`,
-        codeSnippets: [
+        "id": "sec-14-1",
+        "title": "14.1 Introduction to Floating-Point and SIMD",
+        "content": "Modern CPUs have dedicated hardware for floating-point arithmetic and vector processing. In x86-64, the legacy x87 FPU has been superseded by the SSE (Streaming SIMD Extensions) family, which provides a clean set of registers and instructions for both scalar and packed (SIMD) floating-point operations.\n\nWhy SIMD?\n- Single Instruction, Multiple Data: One instruction can perform the same operation on multiple data elements, accelerating loops and vector math.\n- Used extensively in graphics, scientific computing, digital signal processing, and machine learning.\n\nIn this chapter, we focus on SSE and SSE2, which are guaranteed on x86-64. AVX (Advanced Vector Extensions) provides wider registers (256/512 bits) but is beyond our scope.\n\nClarification: The runnable examples use SSE/SSE2, available in the normal x86-64 environment. BLENDPS/BLENDPD and ROUNDSS mentioned later require SSE4.1 and must not be assumed from SSE2 support. AVX adds 256-bit YMM operations; 512-bit ZMM operations belong to AVX-512 and require additional CPU/OS support. x87 still exists, including ABI uses for extended-precision long double."
+      },
+      {
+        "id": "sec-14-2",
+        "title": "14.2 Floating-Point Representation",
+        "content": "Floating-point numbers in x86 follow the IEEE 754 standard. The two most common formats are:\n\n- Single precision (float): 32 bits total = 1 sign bit + 8 exponent bits + 23 fraction bits.\n- Double precision (double): 64 bits total = 1 sign bit + 11 exponent bits + 52 fraction bits.\n\nThe value is computed as: (-1)^sign × 1.fraction × 2^(exponent - bias).\n\nIn assembly, we can define floating-point constants using dd (for single) or dq (for double) and let the assembler convert decimal notation to IEEE 754 format.\n\nExamples:\n\nClarification: The displayed formula applies to normal finite values, with exponent bias 127 for binary32 and 1023 for binary64. Exponent zero encodes signed zero or subnormals, which use a leading 0 and exponent 1-bias. An all-ones exponent encodes infinity when the fraction is zero and NaN otherwise. Normal significand precision is 24 or 53 bits including the implicit leading bit. Many decimal values, including 1.8, are approximations in binary. NASM dd 1 encodes integer bits, whereas dd 1.0 encodes a float.",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'dot_product.asm',
-            code: `section .data
-    align 16
-    vec1 dd 1.0, 2.0, 3.0, 4.0
-    vec2 dd 5.0, 6.0, 7.0, 8.0
-
-section .text
-    global _start
-_start:
-    movaps xmm0, [vec1]
-    movaps xmm1, [vec2]
-    mulps xmm0, xmm1      ; [1*5, 2*6, 3*7, 4*8] = [5, 12, 21, 32]
-
-    ; Horizontal sum using shufps
-    movaps xmm1, xmm0
-    shufps xmm1, xmm1, 0x4E   ; swap high and low 64-bit halves
-    addps xmm0, xmm1
-    movaps xmm1, xmm0
-    shufps xmm1, xmm1, 0xB1   ; swap adjacent 32-bit words
-    addps xmm0, xmm1          ; all 4 lanes now contain sum (70.0)
-
-    cvtss2si eax, xmm0        ; convert to integer = 70
-    mov rdi, rax
-    mov rax, 60
-    syscall`
+            "language": "nasm",
+            "title": "14.2 Floating-Point Representation — listing 1",
+            "code": "section .data\n    pi  dd 3.14159          ; single precision\n    e   dq 2.718281828      ; double precision"
+          }
+        ]
+      },
+      {
+        "id": "sec-14-3",
+        "title": "14.3 SSE Registers and Data Types",
+        "content": "SSE introduces eight (or sixteen in 64-bit mode) 128-bit registers named xmm0 through xmm15. Each register can hold:\n\n- 4 single-precision floats (4 × 32 bits)\n- 2 double-precision doubles (2 × 64 bits)\n- 16 bytes (for integer SIMD)\n- 8 words, 4 dwords, etc.\n\nThe low 32 or 64 bits are used for scalar operations; the full 128 bits for packed operations.\n\nDiagram of an XMM register with packed single-precision floats:\n\nClarification: Lane 0 is bits 31:0, lane 1 bits 63:32, lane 2 bits 95:64, lane 3 bits 127:96. Upper-bit behavior depends on the instruction form. Legacy scalar arithmetic preserves upper XMM bits; legacy MOVSS/MOVSD from memory zero the unused high XMM bits, while register-to-register forms preserve them. VEX forms have different rules.",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "14.3 SSE Registers and Data Types — listing 1",
+            "code": "[  127  ][  96  ][  95  ][  64  ][  63  ][  32  ][  31  ][  0  ]\n|  float3 |  float2 |  float1 |  float0 |",
+            "explanation": "For scalar double, only the low 64 bits are used; the upper bits are left unchanged unless explicitly zeroed."
+          }
+        ]
+      },
+      {
+        "id": "sec-14-4",
+        "title": "14.4 Scalar Floating-Point Instructions",
+        "content": "Scalar instructions operate on the low element of an xmm register (32-bit for single, 64-bit for double). They are similar to integer instructions but use ss (scalar single) or sd (scalar double) suffixes."
+      },
+      {
+        "id": "sec-14-4-1",
+        "title": "14.4.1 Data Movement",
+        "content": "- movss xmm1, xmm2/m32 – copy 32-bit float from source to low 32 bits of dest.\n- movsd xmm1, xmm2/m64 – copy 64-bit double.\n\nTo load from memory or store to memory:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "14.4.1 Data Movement — listing 1",
+            "code": "movss xmm0, [pi]      ; load single float\nmovsd xmm1, [e]       ; load double\nmovss [result], xmm0  ; store single"
+          }
+        ]
+      },
+      {
+        "id": "sec-14-4-2",
+        "title": "14.4.2 Arithmetic Instructions",
+        "content": "Common scalar arithmetic instructions (source can be register or memory):\n\n\n\nThese instructions do not affect the integer flags; they update the MXCSR register for floating-point exceptions.\n\nExample: Compute hypotenuse (sqrt(a² + b²)) using scalar doubles:\n\nClarification: Arithmetic leaves integer RFLAGS unchanged but can set MXCSR exception-status bits. MXCSR also controls rounding and exception masks; unmasked exceptions can trap. Floating-point addition is not associative, so a SIMD reduction can differ from a scalar left-to-right sum. Straight squaring can overflow or underflow for extreme values even when the final distance is representable.",
+        "tableData": {
+          "headers": [
+            "Instruction",
+            "Operation"
+          ],
+          "rows": [
+            [
+              "addss",
+              "dest = dest + src (single)"
+            ],
+            [
+              "addsd",
+              "dest = dest + src (double)"
+            ],
+            [
+              "subss",
+              "subtraction"
+            ],
+            [
+              "subsd",
+              "subtraction"
+            ],
+            [
+              "mulss",
+              "multiplication"
+            ],
+            [
+              "mulsd",
+              "multiplication"
+            ],
+            [
+              "divss",
+              "division"
+            ],
+            [
+              "divsd",
+              "division"
+            ],
+            [
+              "sqrtss",
+              "square root (single)"
+            ],
+            [
+              "sqrtsd",
+              "square root (double)"
+            ],
+            [
+              "minss",
+              "minimum"
+            ],
+            [
+              "maxss",
+              "maximum"
+            ]
+          ]
+        },
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "14.4.2 Arithmetic Instructions — listing 1",
+            "code": "section .data\n    a dq 3.0\n    b dq 4.0\nsection .text\nglobal _start\n_start:\n    movsd xmm0, [a]      ; xmm0 = a\n    mulsd xmm0, xmm0     ; a²\n    movsd xmm1, [b]\n    mulsd xmm1, xmm1     ; b²\n    addsd xmm0, xmm1     ; a² + b²\n    sqrtsd xmm0, xmm0    ; sqrt\n    ; result = 5.0 in xmm0\n    ; Convert to integer for exit\n    cvtsd2si eax, xmm0   ; eax = 5\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-14-4-3",
+        "title": "14.4.3 Conversions",
+        "content": "To move between integer registers and xmm registers, use conversion instructions:\n\n- cvtsi2ss xmm, reg/mem – convert signed integer to single float.\n- cvtsi2sd xmm, reg/mem – convert signed integer to double.\n- cvtss2si reg, xmm/m32 – convert single float to signed integer (truncate).\n- cvtsd2si reg, xmm/m64 – convert double to signed integer.\n- cvtss2sd xmm1, xmm2/m32 – convert single to double.\n- cvtsd2ss xmm1, xmm2/m64 – convert double to single.\n\nExample: Convert integer 10 to double, add 0.5, convert back to integer (round to nearest?).\n\nClarification: CVTSS2SI/CVTSD2SI obey MXCSR rounding control; they do not always truncate. Default round-to-nearest, ties-to-even maps 10.5 to 10 and 11.5 to 12. CVTTSS2SI/CVTTSD2SI always truncate toward zero. NaN or a value outside the signed destination range raises invalid; when masked the result is the integer-indefinite bit pattern. Choose 32- or 64-bit destination size deliberately. ROUNDSS requires SSE4.1. Reference: https://www.intel.com/content/dam/www/public/us/en/documents/manuals/64-ia-32-architectures-software-developer-vol-2a-manual.pdf",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "14.4.3 Conversions — listing 1",
+            "code": "mov eax, 10\ncvtsi2sd xmm0, eax     ; xmm0 = 10.0\nmovsd xmm1, [point_five] ; 0.5\naddsd xmm0, xmm1       ; 10.5\ncvtsd2si eax, xmm0     ; eax = 10 (truncation)",
+            "explanation": "Note: cvt*2si truncates toward zero; for rounding use cvtss2si with a rounding mode in MXCSR, or roundss if available."
+          },
+          {
+            "language": "nasm",
+            "title": "Runnable rounding versus truncation",
+            "code": "section .data\n    value dq 11.5\n    nearest dd 0x1f80\nsection .bss\n    saved_mxcsr resd 1\nsection .text\nglobal _start\n_start:\n    stmxcsr [saved_mxcsr]\n    ldmxcsr [nearest]      ; nearest-even, exceptions masked\n    movsd xmm0, [value]\n    cvtsd2si eax, xmm0     ; 12\n    cvttsd2si ecx, xmm0    ; 11\n    ldmxcsr [saved_mxcsr]\n    cmp eax, 12\n    jne .failed\n    cmp ecx, 11\n    jne .failed\n    xor edi, edi\n    jmp .exit\n.failed:\n    mov edi, 1\n.exit:\n    mov eax, 60\n    syscall",
+            "explanation": "Exits 0 when both results match. MXCSR is restored after the demonstration; library functions must preserve its control bits."
+          }
+        ]
+      },
+      {
+        "id": "sec-14-5",
+        "title": "14.5 Packed SIMD Instructions",
+        "content": "Packed instructions operate on all elements in an xmm register simultaneously. They use ps (packed single) or pd (packed double) suffixes."
+      },
+      {
+        "id": "sec-14-5-1",
+        "title": "14.5.1 Data Movement",
+        "content": "- movaps xmm1, xmm2/m128 – move aligned packed single-precision (4 floats).\n- movups xmm1, xmm2/m128 – move unaligned packed single.\n- movapd / movupd – for packed double.\n- movdqa / movdqu – for packed integer (128 bits).\n\nAlignment: movaps and movdqa require 16-byte aligned memory addresses; movups and movdqu work on unaligned but may be slower. Use align 16 in .data/.bss to align data.\n\nClarification: The alignment requirement applies to the memory operand, not a register-to-register move. A 128-bit load still accesses all 16 bytes even if only one lane is later used. MOVUPS/MOVUPD allow unaligned addresses but cannot read beyond accessible storage. Use alignb 16 for padding reserved BSS storage."
+      },
+      {
+        "id": "sec-14-5-2",
+        "title": "14.5.2 Packed Arithmetic",
+        "content": "Example: Vector addition of four floats",
+        "tableData": {
+          "headers": [
+            "Instruction",
+            "Operation"
+          ],
+          "rows": [
+            [
+              "addps / addpd",
+              "packed addition"
+            ],
+            [
+              "subps / subpd",
+              "packed subtraction"
+            ],
+            [
+              "mulps / mulpd",
+              "packed multiplication"
+            ],
+            [
+              "divps / divpd",
+              "packed division"
+            ],
+            [
+              "sqrtps / sqrtpd",
+              "packed square root"
+            ],
+            [
+              "minps / maxps",
+              "packed minimum / maximum"
+            ]
+          ]
+        },
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "14.5.2 Packed Arithmetic — listing 1",
+            "code": "section .data\n    align 16\n    vec1 dd 1.0, 2.0, 3.0, 4.0\n    vec2 dd 5.0, 6.0, 7.0, 8.0\n    result dd 0.0, 0.0, 0.0, 0.0\nsection .text\nglobal _start\n_start:\n    movaps xmm0, [vec1]   ; load 4 floats\n    movaps xmm1, [vec2]\n    addps xmm0, xmm1      ; xmm0 = vec1 + vec2\n    movaps [result], xmm0 ; store\n\n    ; Convert first element to integer for exit (6.0 -> 6)\n    movss xmm0, [result]\n    cvtss2si eax, xmm0\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-14-5-3",
+        "title": "14.5.3 Shuffles and Blends (Introduction)",
+        "content": "SSE provides instructions to rearrange elements within registers:\n- shufps – shuffle packed single-precision floats.\n- shufpd – shuffle packed double.\n- unpcklps / unpckhps – interleave low/high elements.\n- blendps / blendpd – blend elements from two registers based on mask.\n\nThese are powerful but advanced; we'll touch on shufps for a simple example.\n\nExample: Replicate a single float across all four slots using shufps\n\nClarification: SHUFPS is SSE and SHUFPD is SSE2; BLENDPS/BLENDPD are SSE4.1. With legacy movss xmm0,[value], high XMM bits are zero before the shuffle, rather than unknown. Immediate zero selects lane 0 for every output lane when both operands are the same register.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "14.5.3 Shuffles and Blends (Introduction) — listing 1",
+            "code": "movss xmm0, [value]   ; xmm0 = [v, ?, ?, ?]\nshufps xmm0, xmm0, 0  ; duplicate v into all 4 slots"
+          }
+        ]
+      },
+      {
+        "id": "sec-14-6",
+        "title": "14.6 Comparisons and Masking",
+        "content": "SSE comparison instructions set all bits of an element to 1 (true) or 0 (false) based on the comparison. They do not affect integer flags.\n\n\n\nThe result is a mask that can be used with bitwise operations or to select values.\n\nExample: Select elements greater than a threshold using cmpps and andps\n\nClarification: CMPxxPS/PD produces all-one or all-zero bit masks, not floating-point 1.0 values. Ordered less-than is false for NaN; some predicates can raise invalid on NaNs, normally masked by MXCSR. CMPNEQ includes unordered cases. UCOMISS/UCOMISD are a different comparison family that does set integer flags; check parity for unordered before treating equality as numeric equality. MOVMSKPS extracts one sign bit per lane, with lane 0 mapped to bit 0.",
+        "tableData": {
+          "headers": [
+            "Instruction",
+            "Operation"
+          ],
+          "rows": [
+            [
+              "cmpeqss / cmpeqsd",
+              "scalar equal"
+            ],
+            [
+              "cmpltss / cmpltsd",
+              "scalar less-than"
+            ],
+            [
+              "cmpless / cmplesd",
+              "scalar less-or-equal"
+            ],
+            [
+              "cmpneqss etc.",
+              "scalar not equal"
+            ],
+            [
+              "cmpeqps / cmpeqpd",
+              "packed equal"
+            ],
+            [
+              "cmpltps / cmpltpd",
+              "packed less-than"
+            ]
+          ]
+        },
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Keep only elements > 2.0 in a vector",
+            "code": "; Keep only elements > 2.0 in a vector\nmovaps xmm0, [vec]\nmovaps xmm1, [threshold]   ; threshold vector\ncmpltps xmm1, xmm0         ; xmm1 = mask (true where threshold < vec)\nandps xmm0, xmm1           ; zero out elements not meeting condition"
+          }
+        ]
+      },
+      {
+        "id": "sec-14-7",
+        "title": "14.7 Practical Examples",
+        "content": ""
+      },
+      {
+        "id": "sec-14-7-1",
+        "title": "14.7.1 Dot Product of Two Vectors (Single Precision)",
+        "content": "Compute dot product of two 4-element vectors: sum of element-wise products.\n\nClarification: The first shuffle selects lanes [2,3,0,1] in low-to-high order; the second selects [1,0,3,2]. The pairwise additions leave 70 in all four lanes for this input. Reduction order can change the rounding of non-exact sums.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "14.7.1 Dot Product of Two Vectors (Single Precision) — listing 1",
+            "code": "section .data\n    align 16\n    vec1 dd 1.0, 2.0, 3.0, 4.0\n    vec2 dd 5.0, 6.0, 7.0, 8.0\nsection .text\nglobal _start\n_start:\n    movaps xmm0, [vec1]\n    movaps xmm1, [vec2]\n    mulps xmm0, xmm1      ; element-wise multiply\n\n    ; Horizontal sum of xmm0\n    ; Method: shuffle and add\n    movaps xmm1, xmm0\n    shufps xmm1, xmm1, 0x4E   ; swap high and low halves (bits: 01 00 11 10)\n    addps xmm0, xmm1\n    movaps xmm1, xmm0\n    shufps xmm1, xmm1, 0xB1   ; swap within halves (bits: 10 11 00 01)\n    addps xmm0, xmm1\n    ; Now all four elements contain the sum (1*5 + 2*6 + 3*7 + 4*8 = 70.0)\n    ; Extract to integer\n    cvtss2si eax, xmm0   ; eax = 70\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-14-7-2",
+        "title": "14.7.2 Array Multiplication by Scalar",
+        "content": "Multiply an array of floats by a scalar.\n\nClarification: The original loop assumes a positive length divisible by four and aligned full vectors. A zero chunk count still enters the loop, and remainder elements are ignored. The general routine below checks the count, processes only complete vectors, and finishes with scalar loads/stores. Source and destination must cover count floats and be disjoint or exactly identical.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "14.7.2 Array Multiplication by Scalar — listing 1",
+            "code": "section .data\n    align 16\n    array dd 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0\n    len equ 8\n    scalar dd 2.0\nsection .bss\n    align 16\n    result resd 8\n\nsection .text\nglobal _start\n_start:\n    ; Broadcast scalar to all four slots\n    movss xmm2, [scalar]\n    shufps xmm2, xmm2, 0\n\n    ; Process in chunks of 4\n    lea rsi, [array]\n    lea rdi, [result]\n    mov rcx, len / 4\n.loop:\n    movaps xmm0, [rsi]      ; load 4 floats\n    mulps xmm0, xmm2        ; multiply by scalar\n    movaps [rdi], xmm0      ; store\n    add rsi, 16\n    add rdi, 16\n    dec rcx\n    jnz .loop\n\n    ; Exit with first element (2.0 -> 2)\n    movss xmm0, [result]\n    cvtss2si eax, xmm0\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          },
+          {
+            "language": "nasm",
+            "title": "General float scaling with scalar tail",
+            "code": "; RDI=destination, RSI=source, RDX=float count, XMM0.low=scalar.\n; Supports unaligned arrays, zero length, tails, and exact in-place use.\nscale_floats:\n    shufps xmm0, xmm0, 0\n    mov rcx, rdx\n    shr rcx, 2\n    jz .tail\n.vector:\n    movups xmm1, [rsi]\n    mulps xmm1, xmm0\n    movups [rdi], xmm1\n    add rsi, 16\n    add rdi, 16\n    dec rcx\n    jnz .vector\n.tail:\n    and edx, 3\n    jz .done\n.scalar:\n    movss xmm1, [rsi]\n    mulss xmm1, xmm0\n    movss [rdi], xmm1\n    add rsi, 4\n    add rdi, 4\n    dec edx\n    jnz .scalar\n.done:\n    ret",
+            "explanation": "Uses only SSE instructions and caller-saved registers. Count zero performs no memory access. Partial overlap is not supported. For a function call, align RSP beforehand as in Chapter 10."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 14.3",
+            "code": "section .data\n    align 16\n    array dq 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0\n    len equ 8\n    scalar dq 2.5\nsection .bss\n    align 16\n    result resq 8\nsection .text\nglobal _start\n_start:\n    ; Process in pairs using packed doubles (2 per iteration)\n    movapd xmm2, [scalar] ; actually scalar needs to be broadcast to both slots\n    ; scalar dq 2.5, need to duplicate to high half\n    movapd xmm2, [scalar] ; if scalar is just one double, high half is undefined; better define scalar as dq 2.5, 2.5\n    ; We'll redefine scalar as two doubles in .data for simplicity\n    ; (Alternatively use shufpd)\n    ; For solution, assume scalar2 dq 2.5, 2.5\n    movapd xmm2, [scalar2]\n\n    lea rsi, [array]\n    lea rdi, [result]\n    mov rcx, len / 2\n.loop:\n    movapd xmm0, [rsi]   ; load 2 doubles\n    mulpd xmm0, xmm2     ; multiply\n    movapd [rdi], xmm0\n    add rsi, 16\n    add rdi, 16\n    dec rcx\n    jnz .loop\n\n    ; Exit with first result (2.5 -> truncates to 2)\n    movsd xmm0, [result]\n    cvtsd2si eax, xmm0\n    mov rdi, rax\n    mov rax, 60\n    syscall\n\nsection .data\n    scalar2 dq 2.5, 2.5",
+            "explanation": "Original retained for comparison; use the corrected interactive exercise solution. The double-scalar loads read beyond one scalar, and scalar2 is not 16-byte aligned."
+          }
+        ]
+      },
+      {
+        "id": "sec-14-7-3",
+        "title": "14.7.3 Distance Between Two Points (Scalar Double)",
+        "content": "Compute Euclidean distance: sqrt((x2-x1)^2 + (y2-y1)^2).",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "14.7.3 Distance Between Two Points (Scalar Double) — listing 1",
+            "code": "section .data\n    p1x dq 1.0\n    p1y dq 2.0\n    p2x dq 4.0\n    p2y dq 6.0\nsection .text\nglobal _start\n_start:\n    movsd xmm0, [p2x]\n    subsd xmm0, [p1x]      ; dx\n    mulsd xmm0, xmm0\n    movsd xmm1, [p2y]\n    subsd xmm1, [p1y]      ; dy\n    mulsd xmm1, xmm1\n    addsd xmm0, xmm1\n    sqrtsd xmm0, xmm0\n    cvtsd2si eax, xmm0     ; sqrt(9+16)=5\n    mov rdi, rax\n    mov rax, 60\n    syscall"
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 14.5",
+            "code": "section .data\n    align 16\n    celsius dd 0.0, 10.0, 20.0, 30.0\n    factor dd 1.8, 1.8, 1.8, 1.8   ; 9/5 = 1.8\n    addend dd 32.0, 32.0, 32.0, 32.0\nsection .bss\n    align 16\n    fahrenheit resd 4\nsection .text\nglobal _start\n_start:\n    movaps xmm0, [celsius]\n    movaps xmm1, [factor]\n    mulps xmm0, xmm1      ; C * 1.8\n    movaps xmm2, [addend]\n    addps xmm0, xmm2      ; + 32\n    movaps [fahrenheit], xmm0\n\n    ; First value: 0*1.8+32 = 32\n    movss xmm0, [fahrenheit]\n    cvtss2si eax, xmm0\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+            "explanation": "Original retained for comparison; use the corrected interactive exercise solution. CVTSS2SI rounds according to MXCSR; the exercise explicitly requests truncation."
+          }
+        ]
+      },
+      {
+        "id": "sec-14-8",
+        "title": "14.8 Alignment and Performance",
+        "content": "SIMD instructions benefit greatly from aligned data. When data is 16-byte aligned, movaps/movdqa are faster than unaligned counterparts. The stack should also be 16-byte aligned (already required by ABI).\n\nTo align data in .data/.bss, use the align directive:\n\nClarification: Aligned moves are not universally faster than unaligned-capable moves on modern CPUs; cache-line/page splits and the particular CPU matter. Misaligned MOVAPS/MOVAPD can fault, so alignment is first a correctness requirement. RSP is 16-byte aligned before CALL and 8 modulo 16 at callee entry: allocate or push appropriately before using an aligned stack slot. If adjusting an allocated pointer, reserve sufficient extra space and retain the original pointer for deallocation. Use scalar tails rather than reading a full vector beyond an array.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "14.8 Alignment and Performance — listing 1",
+            "code": "section .data\n    align 16\n    my_vector dd 1.0, 2.0, 3.0, 4.0",
+            "explanation": "In .bss, similarly:"
+          },
+          {
+            "language": "nasm",
+            "title": "14.8 Alignment and Performance — listing 2",
+            "code": "section .bss\n    align 16\n    buffer resb 64",
+            "explanation": "For dynamically allocated memory, use posix_memalign or allocate extra and adjust pointer manually.\n\nPerformance tips:\n- Process data in chunks of 4 (single) or 2 (double) to fill the XMM register.\n- Use aligned loads/stores whenever possible.\n- Minimize data dependencies and use multiple XMM registers to hide latency.\n- Compilers auto-vectorize loops, but hand-coded assembly can sometimes do better."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-14-1',
-        title: 'Exercise 14.1: Euclidean Distance in 2D',
-        description: 'Compute sqrt((x2-x1)^2 + (y2-y1)^2) using scalar doubles (movsd, subsd, mulsd, addsd, sqrtsd).',
-        solution: `movsd xmm0, [x2]\nsubsd xmm0, [x1]\nmulsd xmm0, xmm0\nmovsd xmm1, [y2]\nsubsd xmm1, [y1]\nmulsd xmm1, xmm1\naddsd xmm0, xmm1\nsqrtsd xmm0, xmm0`,
-        solutionLanguage: 'nasm'
+        "id": "ex-14-1",
+        "title": "Exercise 14.1: Sum of Squares (Scalar)",
+        "description": "Write a program that computes the sum of squares of two doubles (e.g., 3.0 and 4.0) using scalar SSE instructions. Exit with the integer result (25).",
+        "solution": "section .data\n    a dq 3.0\n    b dq 4.0\nsection .text\nglobal _start\n_start:\n    movsd xmm0, [a]\n    mulsd xmm0, xmm0      ; a²\n    movsd xmm1, [b]\n    mulsd xmm1, xmm1      ; b²\n    addsd xmm0, xmm1      ; 9+16=25\n    cvtsd2si eax, xmm0    ; eax = 25\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected exit status: 25. Both squares and their sum are exact for these inputs. Converting other fractional results with CVTSD2SI follows MXCSR; use CVTTSD2SI if truncation is required."
+      },
+      {
+        "id": "ex-14-2",
+        "title": "Exercise 14.2: Vector Addition and Horizontal Sum",
+        "description": "Given two arrays of 4 floats each, compute their element-wise sum, then compute the sum of all elements in the result vector. Exit with integer result.",
+        "solution": "section .data\n    align 16\n    vec1 dd 1.0, 2.0, 3.0, 4.0\n    vec2 dd 5.0, 6.0, 7.0, 8.0\nsection .bss\n    align 16\n    result resd 4\nsection .text\nglobal _start\n_start:\n    movaps xmm0, [vec1]\n    movaps xmm1, [vec2]\n    addps xmm0, xmm1      ; xmm0 = [6,8,10,12]\n    movaps [result], xmm0\n\n    ; Horizontal sum\n    movaps xmm1, xmm0\n    shufps xmm1, xmm1, 0x4E\n    addps xmm0, xmm1\n    movaps xmm1, xmm0\n    shufps xmm1, xmm1, 0xB1\n    addps xmm0, xmm1\n    ; all elements = 36\n    cvtss2si eax, xmm0    ; eax = 36\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected stored lanes: 6, 8, 10, 12. The horizontal sum is 36, giving exit status 36. The source reserves a full aligned 16-byte result; verify all lanes as well as the sum."
+      },
+      {
+        "id": "ex-14-3",
+        "title": "Exercise 14.3: Scalar Multiplication of Array",
+        "description": "Multiply an array of 8 doubles by a scalar double (2.5). Use a loop with scalar SSE instructions (or packed if you prefer). Exit with the first element as integer (truncated).",
+        "solution": "section .data\n    align 16\n    array dq 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0\n    len equ 8\n    scalar dq 2.5\nsection .bss\n    align 16\n    result resq 8\nsection .text\nglobal _start\n_start:\n    ; Load exactly one double, then broadcast safely.\n    movsd xmm2, [scalar]\n    unpcklpd xmm2, xmm2\n\n    lea rsi, [array]\n    lea rdi, [result]\n    mov rcx, len / 2\n.loop:\n    movapd xmm0, [rsi]   ; load 2 doubles\n    mulpd xmm0, xmm2     ; multiply\n    movapd [rdi], xmm0\n    add rsi, 16\n    add rdi, 16\n    dec rcx\n    jnz .loop\n\n    ; Exit with first result (2.5 -> truncates to 2)\n    movsd xmm0, [result]\n    cvttsd2si eax, xmm0\n    mov rdi, rax\n    mov rax, 60\n    syscall\n",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nCorrected broadcast reads only the scalar double and duplicates it with UNPCKLPD. Expected results: 2.5, 5, 7.5, 10, 12.5, 15, 17.5, 20. CVTTSD2SI produces exit status 2 regardless of MXCSR rounding mode. This fixed example assumes exactly eight doubles; check zero count and process an odd tail when generalizing."
+      },
+      {
+        "id": "ex-14-4",
+        "title": "Exercise 14.4: Comparison Mask",
+        "description": "Given an array of 4 floats and a threshold, count how many elements are greater than the threshold. Use packed comparison and bitwise operations to count bits. Exit with count.",
+        "solution": "section .data\n    align 16\n    vec dd 1.0, 5.0, 3.0, 7.0\n    threshold dd 2.0, 2.0, 2.0, 2.0\nsection .text\nglobal _start\n_start:\n    movaps xmm0, [vec]\n    movaps xmm1, [threshold]\n    cmpltps xmm1, xmm0    ; mask: true where threshold < vec (i.e., vec > threshold)\n    ; Count set bits in each 32-bit element (number of elements > threshold)\n    ; Use movmskps to get top bits of each element into integer\n    movmskps eax, xmm1    ; eax bits 0..3 correspond to elements 0..3\n    ; Count set bits\n    xor ecx, ecx\ncount_bits:\n    test eax, eax\n    jz done\n    shr eax, 1\n    adc ecx, 0            ; add carry flag (set if bit was 1)\n    jmp count_bits\ndone:\n    ; ecx = number of elements > 2.0 = 3 (5,3,7)\n    mov rdi, rcx\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected mask is binary 1110, since lanes 1, 2, and 3 exceed 2.0; exit status 3. MOVMSKPS extracts four bits, and the shift/ADC loop counts them without requiring POPCNT. Values equal to the threshold do not count."
+      },
+      {
+        "id": "ex-14-5",
+        "title": "Exercise 14.5: Convert Temperature",
+        "description": "Convert an array of Celsius temperatures (floats) to Fahrenheit using formula F = C * 9/5 + 32. Use packed SSE instructions. Process 4 values at a time. Exit with the first Fahrenheit value (truncated to integer).",
+        "solution": "section .data\n    align 16\n    celsius dd 0.0, 10.0, 20.0, 30.0\n    factor dd 1.8, 1.8, 1.8, 1.8   ; 9/5 = 1.8\n    addend dd 32.0, 32.0, 32.0, 32.0\nsection .bss\n    align 16\n    fahrenheit resd 4\nsection .text\nglobal _start\n_start:\n    movaps xmm0, [celsius]\n    movaps xmm1, [factor]\n    mulps xmm0, xmm1      ; C * 1.8\n    movaps xmm2, [addend]\n    addps xmm0, xmm2      ; + 32\n    movaps [fahrenheit], xmm0\n\n    ; First value: 0*1.8+32 = 32\n    movss xmm0, [fahrenheit]\n    cvttss2si eax, xmm0\n    mov rdi, rax\n    mov rax, 60\n    syscall",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "\n\nExpected Fahrenheit lanes for the supplied values: 32, 50, 68, 86; exit status 32. The corrected CVTTSS2SI explicitly truncates. Binary32 factor 1.8 is approximate, so other inputs can have rounding error. This example covers exactly four values; use a loop and scalar remainder for arbitrary lengths."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'What is the difference between movaps and movups?',
-        answer: 'movaps requires memory to be strictly aligned to a 16-byte boundary (crashes with a General Protection Fault if unaligned). movups handles unaligned memory at a minor performance cost.'
+        "question": "What are the SSE registers, and how many are there in x86-64?",
+        "answer": "XMM0 through XMM15 are sixteen 128-bit registers in 64-bit mode. They can hold four floats, two doubles, or packed integers; the same bits have no permanent type. Instructions determine how lanes are interpreted."
+      },
+      {
+        "question": "Explain the difference between movss and movaps. When would you use each?",
+        "answer": "MOVSS transfers one 32-bit float; MOVAPS transfers 128 bits, or four floats, and requires a 16-byte-aligned memory operand. Use MOVSS for one element, MOVAPS for aligned full vectors, and MOVUPS for unaligned full vectors. All loaded bytes must be accessible."
+      },
+      {
+        "question": "How do you convert an integer to a double-precision float? Provide the instruction.",
+        "answer": "cvtsi2sd xmm0, eax converts a signed 32-bit integer; cvtsi2sd xmm0, rax converts a signed 64-bit integer. movq xmm0, rax only copies bits and does not numerically convert. Large integers may round because a double has 53 bits of significand precision."
+      },
+      {
+        "question": "What is the difference between addps and addpd? How many elements do they operate on?",
+        "answer": "ADDPS adds four corresponding binary32 lanes in an XMM register. ADDPD adds two corresponding binary64 lanes. Neither performs a horizontal sum or changes integer flags."
+      },
+      {
+        "question": "Why is alignment important for SIMD? What is the penalty for unaligned access?",
+        "answer": "Aligned memory instructions require the specified boundary and can fault otherwise. Unaligned-capable moves need not be slower when data stays within a cache line; splits and CPU implementation affect cost. There is no single universal cycle penalty. Use ALIGN for initialized data and ALIGNB for BSS."
+      },
+      {
+        "question": "Describe how you would compute the dot product of two 4-element vectors using SSE.",
+        "answer": "Load both vectors with MOVAPS if aligned, multiply lanes with MULPS, then shuffle/add halves using SHUFPS immediate 0x4E and shuffle/add neighbors with 0xB1. For [1,2,3,4] and [5,6,7,8], the result is 70.0. Floating-point reduction order can affect rounding."
+      },
+      {
+        "question": "How do you broadcast a single float to all four slots of an XMM register? Show the instructions.",
+        "answer": "movss xmm0, [rel value]\nshufps xmm0, xmm0, 0\nThe low float is selected for all four output lanes. For one double use movsd followed by unpcklpd xmm0, xmm0."
+      },
+      {
+        "question": "What is the purpose of shufps? Provide an example.",
+        "answer": "SHUFPS selects lanes using four two-bit selectors in its immediate. shufps xmm0, xmm0, 0x4E changes [a,b,c,d] into [c,d,a,b] in low-to-high lane order. With distinct operands, the low two output lanes come from the old destination and the high two from the source."
+      },
+      {
+        "question": "How are floating-point comparison results stored? How can you use them to mask data?",
+        "answer": "Packed comparisons store all-one bits for true lanes and zeros for false lanes. ANDPS with a data vector keeps true lanes and turns false lanes into positive zero. MOVMSKPS extracts the sign bits as a four-bit integer mask. Handle NaNs according to the chosen predicate; scalar UCOMIS comparisons instead set integer flags."
+      },
+      {
+        "question": "How do you pass floating-point arguments to a function according to the System V AMD64 ABI?",
+        "answer": "Under System V AMD64, ordinary scalar float/double arguments use the low lanes of XMM0–XMM7, independently of the integer argument-register sequence; scalar float/double returns use XMM0. Further arguments and aggregate types follow ABI classification rules. XMM registers are caller-saved. Before a variadic call, AL describes vector-register usage (0–8); float arguments are promoted to double. Keep the call-site stack aligned."
       }
     ],
-    summary: ['SIMD provides massive speedups for graphics and scientific computation.', 'IEEE 754 floats use sign, exponent, and mantissa.']
+    "summary": [
+      "SSE provides 128-bit xmm registers for scalar and packed floating-point operations.",
+      "Scalar instructions (addss, addsd) operate on the low element; packed (addps, addpd) process all elements at once.",
+      "Data movement must respect alignment: use movaps for aligned data, movups for unaligned.",
+      "Conversions between integer and floating-point are done with cvt* instructions.",
+      "SIMD enables significant speedups for vectorizable code.",
+      "Understanding data layout and alignment is critical for performance.",
+      "The System V ABI passes floating-point arguments in xmm0–xmm7.",
+      "In the next chapter, we’ll explore macros and modular programming, which will help you write more maintainable and reusable assembly code.",
+      "Use explicit truncation where requested, broadcast scalars without overreading, guard empty loops, process scalar tails, and distinguish required instruction support from optional extensions."
+    ]
   },
   {
     id: 15,
