@@ -827,104 +827,349 @@ export const CHAPTERS_LEVEL_6: Chapter[] = [
     ]
   },
   {
-    id: 30,
-    slug: 'chapter-30-project-3-array-sorting-utilities',
-    level: 6,
-    levelTitle: 'Advanced Projects',
-    title: 'Chapter 30: Project 3: Array and Sorting Utilities',
-    subtitle: 'Iterative Sorts (Bubble, Selection, Insertion), Recursive Quicksort & Binary Search',
-    learningObjectives: [
-      'Implement Bubble, Selection, and Insertion sorts in x86-64 assembly.',
-      'Construct a recursive In-Place Quicksort with stack frame management.',
-      'Implement O(log n) Binary Search.',
-      'Benchmark algorithm performance across array sizes.'
+    "id": 30,
+    "slug": "chapter-30-project-3-array-sorting-utilities",
+    "level": 6,
+    "levelTitle": "Advanced Projects",
+    "title": "Chapter 30: Project 3: Array and Sorting Utilities",
+    "subtitle": "Iterative Sorts (Bubble, Selection, Insertion), Recursive Quicksort & Binary Search",
+    "learningObjectives": [
+      "Apply assembly language to implement fundamental array operations and sorting algorithms.",
+      "Understand array representation in memory and efficient traversal using pointers and indexed addressing.",
+      "Implement iterative sorting algorithms: bubble sort, selection sort, and insertion sort.",
+      "Implement a recursive sorting algorithm: quicksort, demonstrating stack management and recursion.",
+      "Implement binary search on a sorted array for efficient lookup.",
+      "Write functions that follow the System V AMD64 ABI for interoperability with C code.",
+      "Create a reusable array utilities library and a test program to validate functionality.",
+      "Practice modular programming, linking multiple object files, and using a makefile.",
+      "Compare algorithm performance and understand trade-offs (time complexity, memory usage)."
     ],
-    prerequisites: ['Chapters 1–29'],
-    keyConcepts: [
-      'Quicksort partitions around a pivot element, recursing on sub-arrays.',
-      'Binary search requires sorted input data to halve search windows.',
-      'Preserve callee-saved registers across recursive partitions.'
+    "prerequisites": [
+      "Mastery of x86-64 assembly: registers, memory, addressing modes (Chapters 1–13).",
+      "Solid understanding of control flow, loops, and procedures (Chapters 8, 10).",
+      "Experience with recursion and stack frames (Chapter 11).",
+      "Knowledge of system calls for I/O (Chapter 16).",
+      "Familiarity with modular programming and linking (Chapter 15).",
+      "Basic understanding of algorithm complexity (optional but helpful)."
     ],
-    diagramType: 'project_sorting_utils',
-    sections: [
+    "keyConcepts": [
+      "Arrays are contiguous blocks of memory; elements accessed via base + index * element size.",
+      "Sorting algorithms reorder array elements according to a comparison function.",
+      "Bubble sort: O(n²), simple but inefficient; repeatedly swaps adjacent elements.",
+      "Selection sort: O(n²), finds minimum/maximum and places it.",
+      "Insertion sort: O(n²) but efficient for small or nearly sorted arrays.",
+      "Quicksort: O(n log n) average, divide-and-conquer using partitioning.",
+      "Binary search: O(log n) on sorted arrays, repeatedly halves search interval.",
+      "Recursion uses the stack for each call; quicksort is naturally recursive.",
+      "Stable vs unstable sorting: bubble, insertion stable; selection and quicksort typically unstable.",
+      "In-place sorting uses O(1) extra space; quicksort uses O(log n) stack space."
+    ],
+    "diagramType": "project_sorting_utils",
+    "sections": [
       {
-        id: 'sec-30-1',
-        title: '30.1 Recursive Quicksort in Assembly',
-        content: `In-place Quicksort implementation in NASM:`,
-        codeSnippets: [
+        "id": "sec-30-1",
+        "title": "30.1 Project Overview",
+        "content": "We will build an array utilities library (arraylib.asm) containing functions for:\n\n- array_sum: sum all elements of an integer array.\n- array_min / array_max: find minimum/maximum element.\n- array_reverse: reverse array elements in place.\n- bubble_sort: sort ascending using bubble sort.\n- selection_sort: sort ascending using selection sort.\n- insertion_sort: sort ascending using insertion sort.\n- quicksort: sort ascending using recursive quicksort.\n- binary_search: search for a value in a sorted array, return index or -1.\n\nAll functions use 32-bit signed integers (int) as element type. They follow the System V AMD64 ABI:\n\n- rdi = pointer to first element (or array)\n- rsi = number of elements (or other args)\n- Return in eax (or rax for pointer/index)\n\nWe will also create:\n- arraylib.inc: header with extern declarations.\n- test_array.asm: test program that exercises the functions and prints results.\n- Makefile: automates build.\n\nClarification: The completed library uses the stated C signatures with signed 32-bit int lengths, not arbitrary 64-bit counts. len<=0 yields a no-op for mutations, zero for sum/min/max and -1 for search. Zero is an explicit empty min/max convention, not a mathematical extremum. array_sum wraps modulo 2^32; use a wider API when an exact larger sum is required."
+      },
+      {
+        "id": "sec-30-2",
+        "title": "30.2 Program Design",
+        "content": ""
+      },
+      {
+        "id": "sec-30-2-1",
+        "title": "30.2.1 Data Representation",
+        "content": "We use 32-bit integers (4 bytes) as array elements. The array pointer is 64-bit (rdi). Length is 64-bit (rsi) but often stored in 32-bit registers for loop counters.\n\nAccessing element i: mov eax, [rdi + rcx*4] where rcx is index.\n\nClarification: Only the low 32 bits of an int argument are meaningful. Normalize ESI before using RSI in an address. Do not assume a caller supplied a fully initialized 64-bit RSI."
+      },
+      {
+        "id": "sec-30-2-2",
+        "title": "30.2.2 Function Signatures",
+        "content": "We'll define prototypes:\n\n- int array_sum(int *arr, int len); returns sum.\n- int array_min(int *arr, int len); returns min value.\n- int array_max(int *arr, int len); returns max value.\n- void array_reverse(int *arr, int len); no return.\n- void bubble_sort(int *arr, int len);\n- void selection_sort(int *arr, int len);\n- void insertion_sort(int *arr, int len);\n- void quicksort(int *arr, int len);\n- int binary_search(int *arr, int len, int target); returns index or -1.\n\nFor quicksort, we need an internal recursive routine; we'll wrap it in a non-recursive entry that sets up registers and calls the recursive partition function."
+      },
+      {
+        "id": "sec-30-2-3",
+        "title": "30.2.3 Efficiency Considerations",
+        "content": "- Use pointer arithmetic instead of indexing where beneficial.\n- For bubble/selection/insertion, simple loops suffice.\n- Quicksort uses recursion; stack depth is O(log n) on average. Use a frame pointer for clarity.\n- Ensure proper register preservation (callee-saved registers) in recursive functions.\n\nClarification: The straightforward last-pivot quicksort has O(n) worst-case stack depth as well as O(n²) worst-case time. O(log n) stack is an average-case statement for this implementation, not a guarantee."
+      },
+      {
+        "id": "sec-30-3",
+        "title": "30.3 Implementation Details",
+        "content": "We'll implement each function step by step."
+      },
+      {
+        "id": "sec-30-3-1",
+        "title": "30.3.1 array_sum",
+        "content": "Simple loop, accumulate in eax.\n\nClarification: The source loop does not reject a negative length; the complete library does so before reading. Its explicit modular sum avoids making an unsupported promise about C signed-overflow semantics.",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'quicksort.asm',
-            code: `global quicksort
-
-section .text
-quicksort:
-    push rbp; mov rbp, rsp
-    cmp esi, 1; jle .done
-    mov rdx, rsi; dec rdx; xor esi, esi
-    call qs_rec
-.done:
-    pop rbp; ret
-
-qs_rec:
-    push rbp; mov rbp, rsp
-    push rbx; push r12; push r13; push r14; push r15
-    cmp esi, edx; jge .return
-
-    mov r12d, esi        ; low
-    mov r13d, edx        ; high
-
-    ; Partition: pivot = arr[high]
-    mov eax, [rdi + r13*4]
-    mov r14d, r12d; dec r14d   ; i = low - 1
-    mov r15d, r12d             ; j = low
-
-.loop_j:
-    cmp r15d, r13d; jge .part_done
-    mov ebx, [rdi + r15*4]
-    cmp ebx, eax; jg .skip
-    inc r14d
-    mov ecx, [rdi + r14*4]
-    mov [rdi + r14*4], ebx
-    mov [rdi + r15*4], ecx
-.skip:
-    inc r15d; jmp .loop_j
-
-.part_done:
-    inc r14d
-    mov ecx, [rdi + r14*4]
-    mov edx, [rdi + r13*4]
-    mov [rdi + r14*4], edx
-    mov [rdi + r13*4], ecx
-    mov r15d, r14d       ; pivot index
-
-    ; recurse left
-    mov edx, r15d; dec edx; mov esi, r12d; call qs_rec
-    ; recurse right
-    mov esi, r15d; inc esi; mov edx, r13d; call qs_rec
-
-.return:
-    pop r15; pop r14; pop r13; pop r12; pop rbx; pop rbp; ret`
+            "language": "nasm",
+            "title": "30.3.1 array_sum — listing 1",
+            "code": "array_sum:\n    xor eax, eax\n    xor ecx, ecx\n.loop:\n    cmp ecx, esi\n    je .done\n    add eax, [rdi + rcx*4]\n    inc ecx\n    jmp .loop\n.done:\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-30-3-2",
+        "title": "30.3.2 array_min and array_max",
+        "content": "Initialize with first element, then compare and update.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "30.3.2 array_min and array_max — listing 1",
+            "code": "array_min:\n    test esi, esi\n    jle .empty\n    mov eax, [rdi]\n    mov ecx, 1\n.loop:\n    cmp ecx, esi\n    je .done\n    mov edx, [rdi + rcx*4]\n    cmp edx, eax\n    jge .skip\n    mov eax, edx\n.skip:\n    inc ecx\n    jmp .loop\n.done:\n    ret\n.empty:\n    xor eax, eax\n    ret",
+            "explanation": "array_max similar with jle to update."
+          }
+        ]
+      },
+      {
+        "id": "sec-30-3-3",
+        "title": "30.3.3 array_reverse",
+        "content": "Two pointers: start and end, swap until they meet.\n\nClarification: The complete routine normalizes the length to RSI and uses unsigned pointer ordering. For 64-bit elements, both stride and load/store widths must change, as in the exercise support file.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "30.3.3 array_reverse — listing 1",
+            "code": "array_reverse:\n    test esi, esi\n    jle .done\n    lea r8, [rdi]           ; left\n    lea r9, [rdi + rsi*4 - 4] ; right\n.loop:\n    cmp r8, r9\n    jge .done\n    mov eax, [r8]\n    mov edx, [r9]\n    mov [r8], edx\n    mov [r9], eax\n    add r8, 4\n    sub r9, 4\n    jmp .loop\n.done:\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-30-3-4",
+        "title": "30.3.4 bubble_sort",
+        "content": "Nested loops; outer from 0 to n-1, inner from 0 to n-i-1.\n\nClarification: The first bubble-sort listing is an unfinished draft. The complete version returns before decrementing counts of one or less, including INT_MIN, and keeps each adjacent read inside the active range.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "30.3.4 bubble_sort — listing 1",
+            "code": "bubble_sort:\n    ; rdi = arr, esi = n\n    mov ecx, esi            ; outer counter = n-1\n    dec ecx\n.outer:\n    test ecx, ecx\n    jle .done\n    xor edx, edx            ; inner index = 0\n.inner:\n    mov eax, edx\n    inc eax\n    cmp eax, esi            ; inner < n - outer? Actually we can compare with n-outer.\n    ; simpler: inner from 0 to ecx-1 (ecx = outer remaining)\n    ; but easier to use original n and offset.\n    ; We'll implement inner loop with index r8 from 0 to ecx-1 (since ecx = n-1-outer)\n    ; We'll need to save ecx.\n    ; I'll rewrite with proper indexes.",
+            "explanation": "Better bubble sort:"
+          },
+          {
+            "language": "nasm",
+            "title": "30.3.4 bubble_sort — listing 2",
+            "code": "bubble_sort:\n    ; rdi = arr, esi = n\n    mov r10d, esi           ; n\n    dec r10d                ; last index = n-1\n.outer_loop:\n    test r10d, r10d\n    jle .done\n    xor r8d, r8d            ; inner index i = 0\n.inner_loop:\n    cmp r8d, r10d\n    jge .inner_done\n    lea r9, [rdi + r8*4]    ; pointer to element i\n    mov eax, [r9]\n    mov edx, [r9+4]\n    cmp eax, edx\n    jle .no_swap\n    mov [r9], edx\n    mov [r9+4], eax\n.no_swap:\n    inc r8d\n    jmp .inner_loop\n.inner_done:\n    dec r10d\n    jmp .outer_loop\n.done:\n    ret",
+            "explanation": "This uses r10d as the number of passes (or upper bound of inner loop). It sorts ascending."
+          }
+        ]
+      },
+      {
+        "id": "sec-30-3-5",
+        "title": "30.3.5 selection_sort",
+        "content": "Find minimum in unsorted part and swap with current position.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "30.3.5 selection_sort — listing 1",
+            "code": "selection_sort:\n    ; rdi = arr, esi = n\n    xor ecx, ecx            ; current index i = 0\n.outer_loop:\n    cmp ecx, esi\n    jge .done\n    mov edx, ecx            ; min_index = i\n    mov eax, [rdi + rcx*4]  ; min_value\n    mov r8d, ecx\n    inc r8d                 ; j = i+1\n.inner_loop:\n    cmp r8d, esi\n    jge .inner_done\n    mov r9d, [rdi + r8*4]\n    cmp r9d, eax\n    jge .skip\n    mov eax, r9d\n    mov edx, r8d\n.skip:\n    inc r8d\n    jmp .inner_loop\n.inner_done:\n    ; swap arr[i] and arr[min_index]\n    mov r9d, [rdi + rcx*4]  ; current value\n    mov r10d, [rdi + rdx*4] ; min value\n    mov [rdi + rcx*4], r10d\n    mov [rdi + rdx*4], r9d\n    inc ecx\n    jmp .outer_loop\n.done:\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-30-3-6",
+        "title": "30.3.6 insertion_sort",
+        "content": "Start from second element, insert into sorted prefix.\n\nClarification: When EDX decrements from zero it becomes 0xFFFFFFFF, zero-extended in RDX. The source address [rdi+rdx*4+4] then points far beyond the array. Increment EDX back to the nonnegative insertion index before forming the address, as in the completed library.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "30.3.6 insertion_sort — listing 1",
+            "code": "insertion_sort:\n    ; rdi = arr, esi = n\n    mov ecx, 1              ; i = 1\n.outer_loop:\n    cmp ecx, esi\n    jge .done\n    mov eax, [rdi + rcx*4]  ; key = arr[i]\n    mov edx, ecx\n    dec edx                 ; j = i-1\n.inner_loop:\n    cmp edx, 0\n    jl .inner_done\n    mov r8d, [rdi + rdx*4]  ; arr[j]\n    cmp r8d, eax\n    jle .inner_done\n    ; shift arr[j] to arr[j+1]\n    lea r9, [rdi + rdx*4]\n    mov r10d, [r9]\n    mov [r9+4], r10d\n    dec edx\n    jmp .inner_loop\n.inner_done:\n    ; insert key at j+1\n    lea r9, [rdi + rdx*4 + 4]\n    mov [r9], eax\n    inc ecx\n    jmp .outer_loop\n.done:\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-30-3-7",
+        "title": "30.3.7 quicksort",
+        "content": "We'll implement a recursive quicksort. For simplicity, we'll choose the last element as pivot. Partitioning in-place using two indices.\n\nWe'll write a wrapper quicksort that calls an internal recursive function qs_rec with parameters: rdi = arr, rsi = low index, rdx = high index (inclusive). The wrapper sets low=0, high=n-1 and calls qs_rec.\n\nqs_rec:\n- If low >= high, return.\n- Partition: pivot = arr[high]; i = low - 1; for j = low to high-1: if arr[j] <= pivot, i++, swap arr[i] and arr[j]; finally swap arr[i+1] and arr[high]; pivot_index = i+1.\n- Recursively call qs_rec(low, pivot_index-1) and qs_rec(pivot_index+1, high).\n\nWe must save registers properly. Use frame pointer and callee-saved registers. We'll store low, high, pivot_index on stack.\n\nImplementation:\n\nClarification: The original recursive function pushes an odd number of registers after RBP, leaving nested calls misaligned. The completed version adds/removes an eight-byte pad and normalizes the wrapper length. It retains the simple last-pivot algorithm so its limitations remain visible; use the mergesort extension for predictable O(n log n) work.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "30.3.7 quicksort — listing 1",
+            "code": "quicksort:\n    ; rdi = arr, esi = n\n    push rbp\n    mov rbp, rsp\n    ; if n <= 1, return\n    cmp esi, 1\n    jle .done\n    ; call qs_rec(arr, 0, n-1)\n    mov rdx, rsi\n    dec rdx\n    xor esi, esi\n    call qs_rec\n.done:\n    pop rbp\n    ret\n\nqs_rec:\n    ; rdi = arr, esi = low, edx = high\n    push rbp\n    mov rbp, rsp\n    push rbx\n    push r12\n    push r13\n    push r14\n    push r15\n\n    ; check base case: low >= high\n    cmp esi, edx\n    jge .return\n\n    ; We'll save low/high in callee-saved regs\n    mov r12d, esi        ; low\n    mov r13d, edx        ; high\n\n    ; Partition:\n    ; pivot = arr[high]\n    mov eax, [rdi + r13*4]   ; pivot value\n    ; i = low - 1\n    mov r14d, r12d\n    dec r14d                ; i\n    ; j = low\n    mov r15d, r12d          ; j\n.loop_j:\n    cmp r15d, r13d\n    jge .partition_done     ; j < high\n    mov ebx, [rdi + r15*4]  ; arr[j]\n    cmp ebx, eax\n    jg .not_less\n    ; if arr[j] <= pivot\n    inc r14d                ; i++\n    ; swap arr[i] and arr[j]\n    mov ecx, [rdi + r14*4]\n    mov edx, [rdi + r15*4]\n    mov [rdi + r14*4], edx\n    mov [rdi + r15*4], ecx\n.not_less:\n    inc r15d\n    jmp .loop_j\n.partition_done:\n    ; swap arr[i+1] and arr[high]\n    inc r14d                ; i+1\n    mov ecx, [rdi + r14*4]\n    mov edx, [rdi + r13*4]\n    mov [rdi + r14*4], edx\n    mov [rdi + r13*4], ecx\n    ; pivot_index = r14\n    mov r15d, r14d          ; save pivot index\n\n    ; Recursively sort left: qs_rec(arr, low, pivot-1)\n    mov edx, r15d\n    dec edx\n    mov esi, r12d\n    call qs_rec\n\n    ; Recursively sort right: qs_rec(arr, pivot+1, high)\n    mov esi, r15d\n    inc esi\n    mov edx, r13d\n    call qs_rec\n\n.return:\n    pop r15\n    pop r14\n    pop r13\n    pop r12\n    pop rbx\n    pop rbp\n    ret",
+            "explanation": "This uses many callee-saved registers; we must save them. The recursive calls will also save/restore as needed. This implementation is correct but may be further optimized."
+          }
+        ]
+      },
+      {
+        "id": "sec-30-3-8",
+        "title": "30.3.8 binary_search",
+        "content": "Assumes array sorted ascending. Return index or -1.\n\nClarification: The complete search handles nonpositive lengths before subtracting one and computes mid as low+(high-low)/2. Only EAX defines the int return; a C caller interprets 0xFFFFFFFF as -1, while assembly needing a signed 64-bit result must sign-extend EAX.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "30.3.8 binary_search — listing 1",
+            "code": "binary_search:\n    ; rdi = arr, esi = len, edx = target\n    xor ecx, ecx            ; low = 0\n    mov r8d, esi\n    dec r8d                 ; high = len-1\n    mov r9d, edx            ; target\n.loop:\n    cmp ecx, r8d\n    jg .not_found\n    ; mid = (low + high) / 2\n    lea eax, [rcx + r8]\n    shr eax, 1\n    mov r10d, eax           ; mid\n    mov eax, [rdi + r10*4]  ; arr[mid]\n    cmp eax, r9d\n    je .found\n    jl .go_right            ; arr[mid] < target\n    ; go left: high = mid-1\n    lea r8d, [r10-1]\n    jmp .loop\n.go_right:\n    lea ecx, [r10+1]\n    jmp .loop\n.found:\n    mov eax, r10d\n    ret\n.not_found:\n    mov eax, -1\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-30-4",
+        "title": "30.4 Full Library Source Code",
+        "content": "Create arraylib.asm with all functions. We'll add global declarations.\n\narraylib.inc:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "30.4 Full Library Source Code — listing 1",
+            "code": "extern array_sum\nextern array_min\nextern array_max\nextern array_reverse\nextern bubble_sort\nextern selection_sort\nextern insertion_sort\nextern quicksort\nextern binary_search",
+            "explanation": "arraylib.asm:\nWe'll include the full code from above, with proper global directives."
+          },
+          {
+            "language": "nasm",
+            "title": "Complete arraylib.asm",
+            "code": "; arraylib.asm: SysV AMD64; signed int elements and int lengths.\n; len<=0: sum/min/max return 0, search returns -1, mutation is a no-op.\n; array_sum returns the low 32 bits (explicit modular sum).\ndefault rel\nsection .text\nglobal array_sum,array_min,array_max,array_reverse,bubble_sort\nglobal selection_sort,insertion_sort,quicksort,binary_search\narray_sum:\n    xor eax, eax\n    test esi,esi\n    jle .done\n    xor ecx, ecx\n.loop:\n    cmp ecx, esi\n    je .done\n    add eax, [rdi + rcx*4]\n    inc ecx\n    jmp .loop\n.done:\n    ret\n\narray_min:\n    test esi, esi\n    jle .empty\n    mov eax, [rdi]\n    mov ecx, 1\n.loop:\n    cmp ecx, esi\n    je .done\n    mov edx, [rdi + rcx*4]\n    cmp edx, eax\n    jge .skip\n    mov eax, edx\n.skip:\n    inc ecx\n    jmp .loop\n.done:\n    ret\n.empty:\n    xor eax, eax\n    ret\n\narray_max:\n    test esi, esi\n    jle .empty\n    mov eax, [rdi]\n    mov ecx, 1\n.loop:\n    cmp ecx, esi\n    je .done\n    mov edx, [rdi + rcx*4]\n    cmp edx, eax\n    jle .skip\n    mov eax, edx\n.skip:\n    inc ecx\n    jmp .loop\n.done:\n    ret\n.empty:\n    xor eax, eax\n    ret\n\narray_reverse:\n    test esi, esi\n    jle .done\n    mov esi,esi           ; normalize int length to a 64-bit index\n    lea r8, [rdi]           ; left\n    lea r9, [rdi + rsi*4 - 4] ; right\n.loop:\n    cmp r8, r9\n    jae .done\n    mov eax, [r8]\n    mov edx, [r9]\n    mov [r8], edx\n    mov [r9], eax\n    add r8, 4\n    sub r9, 4\n    jmp .loop\n.done:\n    ret\n\nbubble_sort:\n    ; rdi = arr, esi = n\n    cmp esi,1\n    jle .done\n    mov r10d, esi           ; n\n    dec r10d                ; last index = n-1\n.outer_loop:\n    test r10d, r10d\n    jle .done\n    xor r8d, r8d            ; inner index i = 0\n.inner_loop:\n    cmp r8d, r10d\n    jge .inner_done\n    lea r9, [rdi + r8*4]    ; pointer to element i\n    mov eax, [r9]\n    mov edx, [r9+4]\n    cmp eax, edx\n    jle .no_swap\n    mov [r9], edx\n    mov [r9+4], eax\n.no_swap:\n    inc r8d\n    jmp .inner_loop\n.inner_done:\n    dec r10d\n    jmp .outer_loop\n.done:\n    ret\n\nselection_sort:\n    ; rdi = arr, esi = n\n    xor ecx, ecx            ; current index i = 0\n.outer_loop:\n    cmp ecx, esi\n    jge .done\n    mov edx, ecx            ; min_index = i\n    mov eax, [rdi + rcx*4]  ; min_value\n    mov r8d, ecx\n    inc r8d                 ; j = i+1\n.inner_loop:\n    cmp r8d, esi\n    jge .inner_done\n    mov r9d, [rdi + r8*4]\n    cmp r9d, eax\n    jge .skip\n    mov eax, r9d\n    mov edx, r8d\n.skip:\n    inc r8d\n    jmp .inner_loop\n.inner_done:\n    ; swap arr[i] and arr[min_index]\n    mov r9d, [rdi + rcx*4]  ; current value\n    mov r10d, [rdi + rdx*4] ; min value\n    mov [rdi + rcx*4], r10d\n    mov [rdi + rdx*4], r9d\n    inc ecx\n    jmp .outer_loop\n.done:\n    ret\n\ninsertion_sort:\n    ; rdi = arr, esi = n\n    mov ecx, 1              ; i = 1\n.outer_loop:\n    cmp ecx, esi\n    jge .done\n    mov eax, [rdi + rcx*4]  ; key = arr[i]\n    mov edx, ecx\n    dec edx                 ; j = i-1\n.inner_loop:\n    cmp edx, 0\n    jl .inner_done\n    mov r8d, [rdi + rdx*4]  ; arr[j]\n    cmp r8d, eax\n    jle .inner_done\n    ; shift arr[j] to arr[j+1]\n    lea r9, [rdi + rdx*4]\n    mov r10d, [r9]\n    mov [r9+4], r10d\n    dec edx\n    jmp .inner_loop\n.inner_done:\n    ; insert key at j+1\n    inc edx               ; j=-1 becomes index 0 in 32 bits\n    lea r9, [rdi + rdx*4]\n    mov [r9], eax\n    inc ecx\n    jmp .outer_loop\n.done:\n    ret\n\nquicksort:\n    ; rdi = arr, esi = n\n    push rbp\n    mov rbp, rsp\n    ; if n <= 1, return\n    cmp esi, 1\n    jle .done\n    ; call qs_rec(arr, 0, n-1)\n    mov edx, esi\n    dec rdx\n    xor esi, esi\n    call qs_rec\n.done:\n    pop rbp\n    ret\n\nqs_rec:\n    ; rdi = arr, esi = low, edx = high\n    push rbp\n    mov rbp, rsp\n    push rbx\n    push r12\n    push r13\n    push r14\n    push r15\n    sub rsp,8              ; align recursive calls\n\n    ; check base case: low >= high\n    cmp esi, edx\n    jge .return\n\n    ; We'll save low/high in callee-saved regs\n    mov r12d, esi        ; low\n    mov r13d, edx        ; high\n\n    ; Partition:\n    ; pivot = arr[high]\n    mov eax, [rdi + r13*4]   ; pivot value\n    ; i = low - 1\n    mov r14d, r12d\n    dec r14d                ; i\n    ; j = low\n    mov r15d, r12d          ; j\n.loop_j:\n    cmp r15d, r13d\n    jge .partition_done     ; j < high\n    mov ebx, [rdi + r15*4]  ; arr[j]\n    cmp ebx, eax\n    jg .not_less\n    ; if arr[j] <= pivot\n    inc r14d                ; i++\n    ; swap arr[i] and arr[j]\n    mov ecx, [rdi + r14*4]\n    mov edx, [rdi + r15*4]\n    mov [rdi + r14*4], edx\n    mov [rdi + r15*4], ecx\n.not_less:\n    inc r15d\n    jmp .loop_j\n.partition_done:\n    ; swap arr[i+1] and arr[high]\n    inc r14d                ; i+1\n    mov ecx, [rdi + r14*4]\n    mov edx, [rdi + r13*4]\n    mov [rdi + r14*4], edx\n    mov [rdi + r13*4], ecx\n    ; pivot_index = r14\n    mov r15d, r14d          ; save pivot index\n\n    ; Recursively sort left: qs_rec(arr, low, pivot-1)\n    mov edx, r15d\n    dec edx\n    mov esi, r12d\n    call qs_rec\n\n    ; Recursively sort right: qs_rec(arr, pivot+1, high)\n    mov esi, r15d\n    inc esi\n    mov edx, r13d\n    call qs_rec\n\n.return:\n    add rsp,8\n    pop r15\n    pop r14\n    pop r13\n    pop r12\n    pop rbx\n    pop rbp\n    ret\n\nbinary_search:\n    ; rdi = arr, esi = len, edx = target\n    test esi,esi\n    jle .not_found\n    xor ecx, ecx            ; low = 0\n    mov r8d, esi\n    dec r8d                 ; high = len-1\n    mov r9d, edx            ; target\n.loop:\n    cmp ecx, r8d\n    jg .not_found\n    ; mid = (low + high) / 2\n    mov eax,r8d\n    sub eax,ecx\n    shr eax,1\n    add eax,ecx\n    mov r10d, eax           ; mid\n    mov eax, [rdi + r10*4]  ; arr[mid]\n    cmp eax, r9d\n    je .found\n    jl .go_right            ; arr[mid] < target\n    ; go left: high = mid-1\n    lea r8d, [r10-1]\n    jmp .loop\n.go_right:\n    lea ecx, [r10+1]\n    jmp .loop\n.found:\n    mov eax, r10d\n    ret\n.not_found:\n    mov eax, -1\n    ret\n\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Defines all nine exports with corrected bounds, insertion addressing and recursive-call alignment. A nonempty array must have len accessible int elements."
+          }
+        ]
+      },
+      {
+        "id": "sec-30-5",
+        "title": "30.5 Test Program",
+        "content": "We'll create test_array.asm that exercises the functions and prints results. For simplicity, we'll use write syscall and our own itoa to print numbers. We'll define an array in .data, call each function, and print the relevant results.\n\nWe'll include a print_number function that converts an integer to string and writes it. We can reuse the itoa from Chapter 28, but we can write a simplified version that prints signed 32-bit.\n\nThe test program will:\n- Define an array: [5, 2, 9, 1, 7, 3]\n- Print original sum, min, max.\n- Reverse the array and print first element.\n- Sort using bubble_sort and print sorted array.\n- Test binary_search on sorted array.\n\nWe'll print the sorted array by iterating and printing each number separated by spaces.\n\nSince printing numbers in assembly is verbose, we'll keep the test program modest.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Complete test_array.asm",
+            "code": "; test_array.asm -- assemble and link using the chapter Makefile.\n%include \"arraylib.inc\"\ndefault rel\nsection .data\na dd 5,2,9,1,7,3\nsum_msg db 'Sum: '\nsum_len equ $-sum_msg\nmin_msg db 'Min: '\nmin_len equ $-min_msg\nmax_msg db 'Max: '\nmax_len equ $-max_msg\nreverse_msg db 'Reversed first: '\nreverse_len equ $-reverse_msg\nsorted_msg db 'Sorted: '\nsorted_len equ $-sorted_msg\nsearch_msg db 'Search 7 at index: '\nsearch_len equ $-search_msg\nsection .bss\noutput resb 32\nsection .text\nglobal _start\n%macro LABEL 1\n    lea rsi,[%1_msg]\n    mov edx,%1_len\n    call print_bytes\n%endmacro\n%macro STAT 2\n    lea rdi,[a]\n    mov esi,6\n    call %2\n    movsxd r12,eax\n    LABEL %1\n    mov rax,r12\n    mov edi,10\n    call print_number\n%endmacro\n_start:\n    STAT sum,array_sum\n    STAT min,array_min\n    STAT max,array_max\n    lea rdi,[a]\n    mov esi,6\n    call array_reverse\n    LABEL reverse\n    movsxd rax,dword [a]\n    mov edi,10\n    call print_number\n    lea rdi,[a]\n    mov esi,6\n    call bubble_sort\n    LABEL sorted\n    xor r12d,r12d\n.next:\n    lea r13,[a]\n    movsxd rax,dword [r13+r12*4]\n    mov edi,' '\n    cmp r12d,5\n    jne .print\n    mov edi,10\n.print:\n    call print_number\n    inc r12d\n    cmp r12d,6\n    jb .next\n    lea rdi,[a]\n    mov esi,6\n    mov edx,7\n    call binary_search\n    movsxd r12,eax\n    LABEL search\n    mov rax,r12\n    mov edi,10\n    call print_number\n    xor edi,edi\n    mov eax,60\n    syscall\nprint_number:\n    lea rsi,[output+31]\n    mov [rsi],dil\n    mov r8,rax\n    test rax,rax\n    jns .magnitude\n    neg rax\n.magnitude:\n    mov r9d,10\n.digit:\n    xor edx,edx\n    div r9\n    add dl,'0'\n    dec rsi\n    mov [rsi],dl\n    test rax,rax\n    jnz .digit\n    test r8,r8\n    jns .length\n    dec rsi\n    mov byte [rsi],'-'\n.length:\n    lea rdx,[output+32]\n    sub rdx,rsi\nprint_bytes:\n    mov eax,1\n    mov edi,1\n    syscall\n    cmp rax,-4\n    je print_bytes\n    test rax,rax\n    jle io_error\n    add rsi,rax\n    sub rdx,rax\n    jnz print_bytes\n    ret\nio_error:\n    mov edi,1\n    mov eax,60\n    syscall\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Prints the exact six-line demonstration below using Linux write and exit. Includes signed integer formatting and short-write/EINTR handling; no omitted itoa routine."
+          }
+        ]
+      },
+      {
+        "id": "sec-30-6",
+        "title": "30.6 Build and Test",
+        "content": "Create a Makefile:",
+        "codeSnippets": [
+          {
+            "language": "make",
+            "title": "30.6 Build and Test — listing 1",
+            "code": "ASM = nasm\nASMFLAGS = -f elf64\nLD = ld\nTARGET = test_array\nOBJECTS = test_array.o arraylib.o\n\nall: $(TARGET)\n\n$(TARGET): $(OBJECTS)\n\t$(LD) $(OBJECTS) -o $(TARGET)\n\n%.o: %.asm\n\t$(ASM) $(ASMFLAGS) $< -o $@\n\nclean:\n\trm -f $(OBJECTS) $(TARGET)",
+            "explanation": "Run make, then ./test_array.\n\nExpected output:"
+          },
+          {
+            "language": "text",
+            "title": "30.6 Build and Test — listing 2",
+            "code": "Sum: 27\nMin: 1\nMax: 9\nReversed first: 3\nSorted: 1 2 3 5 7 9\nSearch 7 at index: 4"
+          },
+          {
+            "language": "bash",
+            "title": "Build extension tests",
+            "code": "nasm -f elf64 arraylib.asm -o arraylib.o\nnasm -f elf64 extensions.asm -o extensions.o\ngcc -O2 -Wall -Wextra test_arrays.c arraylib.o extensions.o -o test_arrays\n./test_arrays\n# Optional, when counters are permitted:\n# perf stat -e cycles,instructions ./test_arrays",
+            "explanation": "The raw-syscall demonstration still builds with the original Makefile. The extension harness links libc for allocation, reference sorting and clock measurements."
+          }
+        ]
+      },
+      {
+        "id": "sec-30-7",
+        "title": "30.7 Possible Extensions",
+        "content": "- Implement mergesort for stable O(n log n) sorting.\n- Add heap_sort.\n- Support floating-point arrays using SSE.\n- Implement array_remove_duplicates.\n- Add array_binary_insert for sorted insertion.\n- Optimize quicksort with median-of-three pivot and insertion sort for small subarrays.\n- Implement sorting for 64-bit integers or other data types.\n\nOriginal source solution placeholder: (Provide detailed solutions for each exercise.)",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Complete extension library: extensions.asm",
+            "code": "; extensions.asm: SysV AMD64; int element/length interfaces unless noted.\ndefault rel\nsection .text\nglobal array_sum_unrolled,array_reverse64,binary_search_ptr,merge_sort\nextern malloc,free\narray_sum_unrolled:\n    xor eax,eax\n    xor r8d,r8d\n    test esi,esi\n    jle .done\n    mov esi,esi\n    xor ecx,ecx\n    mov r9d,esi\n    and r9d,-4\n.loop:\n    cmp ecx,r9d\n    jae .tail\n    add eax,[rdi+rcx*4]\n    add r8d,[rdi+rcx*4+4]\n    add eax,[rdi+rcx*4+8]\n    add r8d,[rdi+rcx*4+12]\n    add ecx,4\n    jmp .loop\n.tail:\n    cmp ecx,esi\n    jae .combine\n    add eax,[rdi+rcx*4]\n    inc ecx\n    jmp .tail\n.combine:\n    add eax,r8d\n.done:\n    ret\n; void array_reverse64(int64_t *a, int n)\narray_reverse64:\n    cmp esi,1\n    jle .done\n    mov esi,esi\n    lea r8,[rdi+rsi*8-8]\n.loop:\n    cmp rdi,r8\n    jae .done\n    mov rax,[rdi]\n    mov rdx,[r8]\n    mov [rdi],rdx\n    mov [r8],rax\n    add rdi,8\n    sub r8,8\n    jmp .loop\n.done:\n    ret\nbinary_search_ptr:\n    test esi,esi\n    jle .missing\n    mov r8,rdi\n    mov esi,esi\n    lea r9,[rdi+rsi*4]      ; half-open [first,last)\n.loop:\n    cmp r8,r9\n    jae .missing\n    mov rax,r9\n    sub rax,r8\n    shr rax,3              ; half the element count\n    lea rcx,[r8+rax*4]\n    cmp [rcx],edx\n    je .found\n    jl .right\n    mov r9,rcx\n    jmp .loop\n.right:\n    lea r8,[rcx+4]\n    jmp .loop\n.found:\n    mov rax,rcx\n    sub rax,rdi\n    shr rax,2\n    ret\n.missing:\n    mov eax,-1\n    ret\n; int merge_sort(int *a,int n): 0 success, -1 allocation failure.\n; Stable bottom-up mergesort; malloc scratch avoids unbounded stack growth.\nmerge_sort:\n    cmp esi,1\n    jle .trivial\n    push rbp\n    push rbx\n    push r12\n    push r13\n    push r14\n    push r15\n    sub rsp,8\n    mov r12,rdi\n    mov r13d,esi\n    lea rdi,[r13*4]\n    call malloc wrt ..plt\n    test rax,rax\n    jz .failed\n    mov r14,rax\n    mov r15d,1\n.pass:\n    xor ebx,ebx\n.pair:\n    cmp rbx,r13\n    jae .copy_back\n    lea r8,[rbx+r15]        ; middle\n    cmp r8,r13\n    cmova r8,r13\n    lea r9,[r8+r15]         ; end\n    cmp r9,r13\n    cmova r9,r13\n    mov r10,rbx            ; left cursor\n    mov r11,r8             ; right cursor\n    mov rcx,rbx            ; output cursor\n.merge:\n    cmp rcx,r9\n    jae .next_pair\n    cmp r10,r8\n    jae .right\n    cmp r11,r9\n    jae .left\n    mov eax,[r12+r10*4]\n    cmp eax,[r12+r11*4]\n    jle .left              ; equal values come from left: stable\n.right:\n    mov eax,[r12+r11*4]\n    inc r11\n    jmp .store\n.left:\n    mov eax,[r12+r10*4]\n    inc r10\n.store:\n    mov [r14+rcx*4],eax\n    inc rcx\n    jmp .merge\n.next_pair:\n    mov rbx,r9\n    jmp .pair\n.copy_back:\n    mov rdi,r12\n    mov rsi,r14\n    mov rcx,r13\n    cld\n    rep movsd\n    shl r15,1\n    cmp r15,r13\n    jb .pass\n    mov rdi,r14\n    call free wrt ..plt\n    xor eax,eax\n    jmp .return\n.failed:\n    mov eax,-1\n.return:\n    add rsp,8\n    pop r15\n    pop r14\n    pop r13\n    pop r12\n    pop rbx\n    pop rbp\n    ret\n.trivial:\n    xor eax,eax\n    ret\nsection .note.GNU-stack noalloc noexec nowrite progbits",
+            "explanation": "Adds four-way unrolled sum with two accumulators and a tail, 64-bit element reversal, pointer-interval binary search, and stable bottom-up mergesort. The malloc/free-backed scratch array avoids interfering with libc’s program break and is released before returning. Allocation failure returns -1 without modifying the input."
+          },
+          {
+            "language": "c",
+            "title": "Complete tests and timing harness: test_arrays.c",
+            "code": "#define _POSIX_C_SOURCE 200809L\n#include <assert.h>\n#include <limits.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <time.h>\nextern int array_sum(int*,int),array_min(int*,int),array_max(int*,int);\nextern void array_reverse(int*,int),bubble_sort(int*,int),selection_sort(int*,int),insertion_sort(int*,int),quicksort(int*,int);\nextern int binary_search(int*,int,int),binary_search_ptr(int*,int,int),array_sum_unrolled(int*,int),merge_sort(int*,int);\nextern void array_reverse64(int64_t*,int);\nstatic int compare(const void *a,const void *b){int x=*(const int*)a,y=*(const int*)b;return (x>y)-(x<y);}\nstatic void merge_adapter(int *a,int n){assert(merge_sort(a,n)==0);}\nstatic double now(void){struct timespec t;assert(clock_gettime(CLOCK_MONOTONIC,&t)==0);return t.tv_sec+t.tv_nsec*1e-9;}\nint main(void) {\n    void (*sorts[])(int*,int)={bubble_sort,selection_sort,insertion_sort,quicksort,merge_adapter};\n    const char *names[]={\"bubble\",\"selection\",\"insertion\",\"quick\",\"merge\"};\n    int small[]={INT_MAX,-1,0,INT_MIN,4,4};\n    assert(array_min(small,6)==INT_MIN && array_max(small,6)==INT_MAX);\n    for(int n=-1;n<=6;n++) {\n        uint32_t expected=0;for(int i=0;i<n;i++)expected+=(uint32_t)small[i];\n        assert((uint32_t)array_sum(small,n)==expected);\n        assert((uint32_t)array_sum_unrolled(small,n)==expected);\n    }\n    for(int n=0;n<=64;n++) for(int pattern=0;pattern<4;pattern++) {\n        int a[64],reference[64];\n        for(int i=0;i<n;i++)reference[i]=pattern==0?i:pattern==1?-i:pattern==2?7:(i*31%17)-8;\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,reference,(size_t)n*sizeof *a);\n            sorts[k](a,n);\n            for(int i=1;i<n;i++)assert(a[i-1]<=a[i]);\n        }\n        memcpy(a,reference,(size_t)n*sizeof *a);array_reverse(a,n);\n        for(int i=0;i<n;i++)assert(a[i]==reference[n-i-1]);\n    }\n    int64_t wide[]={INT64_MIN,5,INT64_MAX};array_reverse64(wide,3);\n    assert(wide[0]==INT64_MAX && wide[1]==5 && wide[2]==INT64_MIN);\n    for(int n=1000;n<=10000;n*=10) {\n        int *original=malloc((size_t)n*sizeof *original),*a=malloc((size_t)n*sizeof *a),*ref=malloc((size_t)n*sizeof *ref);\n        assert(original&&a&&ref);uint32_t state=12345;\n        for(int i=0;i<n;i++){state=state*1664525u+1013904223u;original[i]=(int)(state%200001u)-100000;}\n        memcpy(ref,original,(size_t)n*sizeof *ref);qsort(ref,(size_t)n,sizeof *ref,compare);\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,original,(size_t)n*sizeof *a);double start=now();sorts[k](a,n);double elapsed=now()-start;\n            assert(!memcmp(a,ref,(size_t)n*sizeof *a));\n            printf(\"n=%d sort=%s seconds=%.6f\\n\",n,names[k],elapsed);\n        }\n        size_t checksum=0;double start=now();\n        for(int i=0;i<n;i++){int index=binary_search(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"indexed search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        checksum=0;start=now();\n        for(int i=0;i<n;i++){int index=binary_search_ptr(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"pointer search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        assert(binary_search(a,n,INT_MAX)==-1&&binary_search_ptr(a,n,INT_MAX)==-1);\n        for(int mode=0;mode<2;mode++) {\n            uint32_t total=0;start=now();\n            for(int j=0;j<1000;j++)total+=(uint32_t)(mode?array_sum_unrolled(a,n):array_sum(a,n));\n            printf(\"sum mode=%d seconds=%.6f checksum=%u\\n\",mode,now()-start,total);\n        }\n        free(ref);free(a);free(original);\n    }\n    puts(\"Array and sorting checks passed.\");\n}",
+            "explanation": "Checks empty, sorted, reverse, equal and duplicate patterns; verifies five sorts against libc qsort on identical LCG-generated arrays of 1000 and 10000 elements; tests sums, wide reversal and searches. Timings are observations, not promised rankings."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-30-1',
-        title: 'Exercise 30.1: Binary Search with 32-bit Integers',
-        description: 'Write binary_search returning 0-based index or -1 if not present.',
-        solution: `binary_search:\n    xor ecx, ecx; mov r8d, esi; dec r8d\n.loop:\n    cmp ecx, r8d; jg .not_found\n    lea eax, [rcx + r8]; shr eax, 1\n    mov r10d, eax\n    mov eax, [rdi + r10*4]\n    cmp eax, edx\n    je .found\n    jl .right\n    lea r8d, [r10-1]; jmp .loop\n.right:\n    lea ecx, [r10+1]; jmp .loop\n.found: mov eax, r10d; ret\n.not_found: mov eax, -1; ret`,
-        solutionLanguage: 'nasm'
+        "id": "ex-30-1",
+        "title": "Exercise 30.1: Implement `array_sum` with Unrolling",
+        "description": "Write a version of array_sum that unrolls the loop by 4 and uses two accumulators. Compare performance with the simple version using perf.",
+        "solution": "#define _POSIX_C_SOURCE 200809L\n#include <assert.h>\n#include <limits.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <time.h>\nextern int array_sum(int*,int),array_min(int*,int),array_max(int*,int);\nextern void array_reverse(int*,int),bubble_sort(int*,int),selection_sort(int*,int),insertion_sort(int*,int),quicksort(int*,int);\nextern int binary_search(int*,int,int),binary_search_ptr(int*,int,int),array_sum_unrolled(int*,int),merge_sort(int*,int);\nextern void array_reverse64(int64_t*,int);\nstatic int compare(const void *a,const void *b){int x=*(const int*)a,y=*(const int*)b;return (x>y)-(x<y);}\nstatic void merge_adapter(int *a,int n){assert(merge_sort(a,n)==0);}\nstatic double now(void){struct timespec t;assert(clock_gettime(CLOCK_MONOTONIC,&t)==0);return t.tv_sec+t.tv_nsec*1e-9;}\nint main(void) {\n    void (*sorts[])(int*,int)={bubble_sort,selection_sort,insertion_sort,quicksort,merge_adapter};\n    const char *names[]={\"bubble\",\"selection\",\"insertion\",\"quick\",\"merge\"};\n    int small[]={INT_MAX,-1,0,INT_MIN,4,4};\n    assert(array_min(small,6)==INT_MIN && array_max(small,6)==INT_MAX);\n    for(int n=-1;n<=6;n++) {\n        uint32_t expected=0;for(int i=0;i<n;i++)expected+=(uint32_t)small[i];\n        assert((uint32_t)array_sum(small,n)==expected);\n        assert((uint32_t)array_sum_unrolled(small,n)==expected);\n    }\n    for(int n=0;n<=64;n++) for(int pattern=0;pattern<4;pattern++) {\n        int a[64],reference[64];\n        for(int i=0;i<n;i++)reference[i]=pattern==0?i:pattern==1?-i:pattern==2?7:(i*31%17)-8;\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,reference,(size_t)n*sizeof *a);\n            sorts[k](a,n);\n            for(int i=1;i<n;i++)assert(a[i-1]<=a[i]);\n        }\n        memcpy(a,reference,(size_t)n*sizeof *a);array_reverse(a,n);\n        for(int i=0;i<n;i++)assert(a[i]==reference[n-i-1]);\n    }\n    int64_t wide[]={INT64_MIN,5,INT64_MAX};array_reverse64(wide,3);\n    assert(wide[0]==INT64_MAX && wide[1]==5 && wide[2]==INT64_MIN);\n    for(int n=1000;n<=10000;n*=10) {\n        int *original=malloc((size_t)n*sizeof *original),*a=malloc((size_t)n*sizeof *a),*ref=malloc((size_t)n*sizeof *ref);\n        assert(original&&a&&ref);uint32_t state=12345;\n        for(int i=0;i<n;i++){state=state*1664525u+1013904223u;original[i]=(int)(state%200001u)-100000;}\n        memcpy(ref,original,(size_t)n*sizeof *ref);qsort(ref,(size_t)n,sizeof *ref,compare);\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,original,(size_t)n*sizeof *a);double start=now();sorts[k](a,n);double elapsed=now()-start;\n            assert(!memcmp(a,ref,(size_t)n*sizeof *a));\n            printf(\"n=%d sort=%s seconds=%.6f\\n\",n,names[k],elapsed);\n        }\n        size_t checksum=0;double start=now();\n        for(int i=0;i<n;i++){int index=binary_search(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"indexed search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        checksum=0;start=now();\n        for(int i=0;i<n;i++){int index=binary_search_ptr(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"pointer search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        assert(binary_search(a,n,INT_MAX)==-1&&binary_search_ptr(a,n,INT_MAX)==-1);\n        for(int mode=0;mode<2;mode++) {\n            uint32_t total=0;start=now();\n            for(int j=0;j<1000;j++)total+=(uint32_t)(mode?array_sum_unrolled(a,n):array_sum(a,n));\n            printf(\"sum mode=%d seconds=%.6f checksum=%u\\n\",mode,now()-start,total);\n        }\n        free(ref);free(a);free(original);\n    }\n    puts(\"Array and sorting checks passed.\");\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Use the full corresponding routine in extensions.asm and the C build commands in section 30.6. This complete shared harness checks results before comparing timings. Each sort receives a fresh copy of the same input; duplicate searches may return different valid matching indices. array_sum_unrolled processes groups of four with EAX/R8D accumulators, then a scalar tail. Both implementations use the same modulo-2^32 contract. The harness checks lengths -1 through 6 and times both sums; performance counters are optional."
+      },
+      {
+        "id": "ex-30-2",
+        "title": "Exercise 30.2: Add `array_reverse` for 64-bit elements",
+        "description": "Modify array_reverse to work on an array of 64-bit integers (long). Adjust offsets and element size.",
+        "solution": "#define _POSIX_C_SOURCE 200809L\n#include <assert.h>\n#include <limits.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <time.h>\nextern int array_sum(int*,int),array_min(int*,int),array_max(int*,int);\nextern void array_reverse(int*,int),bubble_sort(int*,int),selection_sort(int*,int),insertion_sort(int*,int),quicksort(int*,int);\nextern int binary_search(int*,int,int),binary_search_ptr(int*,int,int),array_sum_unrolled(int*,int),merge_sort(int*,int);\nextern void array_reverse64(int64_t*,int);\nstatic int compare(const void *a,const void *b){int x=*(const int*)a,y=*(const int*)b;return (x>y)-(x<y);}\nstatic void merge_adapter(int *a,int n){assert(merge_sort(a,n)==0);}\nstatic double now(void){struct timespec t;assert(clock_gettime(CLOCK_MONOTONIC,&t)==0);return t.tv_sec+t.tv_nsec*1e-9;}\nint main(void) {\n    void (*sorts[])(int*,int)={bubble_sort,selection_sort,insertion_sort,quicksort,merge_adapter};\n    const char *names[]={\"bubble\",\"selection\",\"insertion\",\"quick\",\"merge\"};\n    int small[]={INT_MAX,-1,0,INT_MIN,4,4};\n    assert(array_min(small,6)==INT_MIN && array_max(small,6)==INT_MAX);\n    for(int n=-1;n<=6;n++) {\n        uint32_t expected=0;for(int i=0;i<n;i++)expected+=(uint32_t)small[i];\n        assert((uint32_t)array_sum(small,n)==expected);\n        assert((uint32_t)array_sum_unrolled(small,n)==expected);\n    }\n    for(int n=0;n<=64;n++) for(int pattern=0;pattern<4;pattern++) {\n        int a[64],reference[64];\n        for(int i=0;i<n;i++)reference[i]=pattern==0?i:pattern==1?-i:pattern==2?7:(i*31%17)-8;\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,reference,(size_t)n*sizeof *a);\n            sorts[k](a,n);\n            for(int i=1;i<n;i++)assert(a[i-1]<=a[i]);\n        }\n        memcpy(a,reference,(size_t)n*sizeof *a);array_reverse(a,n);\n        for(int i=0;i<n;i++)assert(a[i]==reference[n-i-1]);\n    }\n    int64_t wide[]={INT64_MIN,5,INT64_MAX};array_reverse64(wide,3);\n    assert(wide[0]==INT64_MAX && wide[1]==5 && wide[2]==INT64_MIN);\n    for(int n=1000;n<=10000;n*=10) {\n        int *original=malloc((size_t)n*sizeof *original),*a=malloc((size_t)n*sizeof *a),*ref=malloc((size_t)n*sizeof *ref);\n        assert(original&&a&&ref);uint32_t state=12345;\n        for(int i=0;i<n;i++){state=state*1664525u+1013904223u;original[i]=(int)(state%200001u)-100000;}\n        memcpy(ref,original,(size_t)n*sizeof *ref);qsort(ref,(size_t)n,sizeof *ref,compare);\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,original,(size_t)n*sizeof *a);double start=now();sorts[k](a,n);double elapsed=now()-start;\n            assert(!memcmp(a,ref,(size_t)n*sizeof *a));\n            printf(\"n=%d sort=%s seconds=%.6f\\n\",n,names[k],elapsed);\n        }\n        size_t checksum=0;double start=now();\n        for(int i=0;i<n;i++){int index=binary_search(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"indexed search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        checksum=0;start=now();\n        for(int i=0;i<n;i++){int index=binary_search_ptr(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"pointer search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        assert(binary_search(a,n,INT_MAX)==-1&&binary_search_ptr(a,n,INT_MAX)==-1);\n        for(int mode=0;mode<2;mode++) {\n            uint32_t total=0;start=now();\n            for(int j=0;j<1000;j++)total+=(uint32_t)(mode?array_sum_unrolled(a,n):array_sum(a,n));\n            printf(\"sum mode=%d seconds=%.6f checksum=%u\\n\",mode,now()-start,total);\n        }\n        free(ref);free(a);free(original);\n    }\n    puts(\"Array and sorting checks passed.\");\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Use the full corresponding routine in extensions.asm and the C build commands in section 30.6. This complete shared harness checks results before comparing timings. Each sort receives a fresh copy of the same input; duplicate searches may return different valid matching indices. array_reverse64 uses eight-byte strides and qword loads/stores. The harness includes INT64_MIN and INT64_MAX; on SysV AMD64 Linux, long is 64 bits, while int64_t states the width explicitly."
+      },
+      {
+        "id": "ex-30-3",
+        "title": "Exercise 30.3: Implement `mergesort`",
+        "description": "Implement mergesort as an additional sorting algorithm. It requires a temporary array for merging. Use the stack or allocate memory with brk.",
+        "solution": "#define _POSIX_C_SOURCE 200809L\n#include <assert.h>\n#include <limits.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <time.h>\nextern int array_sum(int*,int),array_min(int*,int),array_max(int*,int);\nextern void array_reverse(int*,int),bubble_sort(int*,int),selection_sort(int*,int),insertion_sort(int*,int),quicksort(int*,int);\nextern int binary_search(int*,int,int),binary_search_ptr(int*,int,int),array_sum_unrolled(int*,int),merge_sort(int*,int);\nextern void array_reverse64(int64_t*,int);\nstatic int compare(const void *a,const void *b){int x=*(const int*)a,y=*(const int*)b;return (x>y)-(x<y);}\nstatic void merge_adapter(int *a,int n){assert(merge_sort(a,n)==0);}\nstatic double now(void){struct timespec t;assert(clock_gettime(CLOCK_MONOTONIC,&t)==0);return t.tv_sec+t.tv_nsec*1e-9;}\nint main(void) {\n    void (*sorts[])(int*,int)={bubble_sort,selection_sort,insertion_sort,quicksort,merge_adapter};\n    const char *names[]={\"bubble\",\"selection\",\"insertion\",\"quick\",\"merge\"};\n    int small[]={INT_MAX,-1,0,INT_MIN,4,4};\n    assert(array_min(small,6)==INT_MIN && array_max(small,6)==INT_MAX);\n    for(int n=-1;n<=6;n++) {\n        uint32_t expected=0;for(int i=0;i<n;i++)expected+=(uint32_t)small[i];\n        assert((uint32_t)array_sum(small,n)==expected);\n        assert((uint32_t)array_sum_unrolled(small,n)==expected);\n    }\n    for(int n=0;n<=64;n++) for(int pattern=0;pattern<4;pattern++) {\n        int a[64],reference[64];\n        for(int i=0;i<n;i++)reference[i]=pattern==0?i:pattern==1?-i:pattern==2?7:(i*31%17)-8;\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,reference,(size_t)n*sizeof *a);\n            sorts[k](a,n);\n            for(int i=1;i<n;i++)assert(a[i-1]<=a[i]);\n        }\n        memcpy(a,reference,(size_t)n*sizeof *a);array_reverse(a,n);\n        for(int i=0;i<n;i++)assert(a[i]==reference[n-i-1]);\n    }\n    int64_t wide[]={INT64_MIN,5,INT64_MAX};array_reverse64(wide,3);\n    assert(wide[0]==INT64_MAX && wide[1]==5 && wide[2]==INT64_MIN);\n    for(int n=1000;n<=10000;n*=10) {\n        int *original=malloc((size_t)n*sizeof *original),*a=malloc((size_t)n*sizeof *a),*ref=malloc((size_t)n*sizeof *ref);\n        assert(original&&a&&ref);uint32_t state=12345;\n        for(int i=0;i<n;i++){state=state*1664525u+1013904223u;original[i]=(int)(state%200001u)-100000;}\n        memcpy(ref,original,(size_t)n*sizeof *ref);qsort(ref,(size_t)n,sizeof *ref,compare);\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,original,(size_t)n*sizeof *a);double start=now();sorts[k](a,n);double elapsed=now()-start;\n            assert(!memcmp(a,ref,(size_t)n*sizeof *a));\n            printf(\"n=%d sort=%s seconds=%.6f\\n\",n,names[k],elapsed);\n        }\n        size_t checksum=0;double start=now();\n        for(int i=0;i<n;i++){int index=binary_search(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"indexed search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        checksum=0;start=now();\n        for(int i=0;i<n;i++){int index=binary_search_ptr(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"pointer search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        assert(binary_search(a,n,INT_MAX)==-1&&binary_search_ptr(a,n,INT_MAX)==-1);\n        for(int mode=0;mode<2;mode++) {\n            uint32_t total=0;start=now();\n            for(int j=0;j<1000;j++)total+=(uint32_t)(mode?array_sum_unrolled(a,n):array_sum(a,n));\n            printf(\"sum mode=%d seconds=%.6f checksum=%u\\n\",mode,now()-start,total);\n        }\n        free(ref);free(a);free(original);\n    }\n    puts(\"Array and sorting checks passed.\");\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Use the full corresponding routine in extensions.asm and the C build commands in section 30.6. This complete shared harness checks results before comparing timings. Each sort receives a fresh copy of the same input; duplicate searches may return different valid matching indices. merge_sort uses bottom-up runs and caller-visible allocation failure rather than deep recursion or an unbounded stack allocation. Each pass merges into scratch and copies back; equal values come from the left run. Memory cost is O(n). The exercise’s brk suggestion is replaced by malloc/free for compatibility with this C-linked library."
+      },
+      {
+        "id": "ex-30-4",
+        "title": "Exercise 30.4: Optimize Binary Search",
+        "description": "Rewrite binary_search to use pointer arithmetic instead of index calculation. Which is faster? Benchmark.",
+        "solution": "#define _POSIX_C_SOURCE 200809L\n#include <assert.h>\n#include <limits.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <time.h>\nextern int array_sum(int*,int),array_min(int*,int),array_max(int*,int);\nextern void array_reverse(int*,int),bubble_sort(int*,int),selection_sort(int*,int),insertion_sort(int*,int),quicksort(int*,int);\nextern int binary_search(int*,int,int),binary_search_ptr(int*,int,int),array_sum_unrolled(int*,int),merge_sort(int*,int);\nextern void array_reverse64(int64_t*,int);\nstatic int compare(const void *a,const void *b){int x=*(const int*)a,y=*(const int*)b;return (x>y)-(x<y);}\nstatic void merge_adapter(int *a,int n){assert(merge_sort(a,n)==0);}\nstatic double now(void){struct timespec t;assert(clock_gettime(CLOCK_MONOTONIC,&t)==0);return t.tv_sec+t.tv_nsec*1e-9;}\nint main(void) {\n    void (*sorts[])(int*,int)={bubble_sort,selection_sort,insertion_sort,quicksort,merge_adapter};\n    const char *names[]={\"bubble\",\"selection\",\"insertion\",\"quick\",\"merge\"};\n    int small[]={INT_MAX,-1,0,INT_MIN,4,4};\n    assert(array_min(small,6)==INT_MIN && array_max(small,6)==INT_MAX);\n    for(int n=-1;n<=6;n++) {\n        uint32_t expected=0;for(int i=0;i<n;i++)expected+=(uint32_t)small[i];\n        assert((uint32_t)array_sum(small,n)==expected);\n        assert((uint32_t)array_sum_unrolled(small,n)==expected);\n    }\n    for(int n=0;n<=64;n++) for(int pattern=0;pattern<4;pattern++) {\n        int a[64],reference[64];\n        for(int i=0;i<n;i++)reference[i]=pattern==0?i:pattern==1?-i:pattern==2?7:(i*31%17)-8;\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,reference,(size_t)n*sizeof *a);\n            sorts[k](a,n);\n            for(int i=1;i<n;i++)assert(a[i-1]<=a[i]);\n        }\n        memcpy(a,reference,(size_t)n*sizeof *a);array_reverse(a,n);\n        for(int i=0;i<n;i++)assert(a[i]==reference[n-i-1]);\n    }\n    int64_t wide[]={INT64_MIN,5,INT64_MAX};array_reverse64(wide,3);\n    assert(wide[0]==INT64_MAX && wide[1]==5 && wide[2]==INT64_MIN);\n    for(int n=1000;n<=10000;n*=10) {\n        int *original=malloc((size_t)n*sizeof *original),*a=malloc((size_t)n*sizeof *a),*ref=malloc((size_t)n*sizeof *ref);\n        assert(original&&a&&ref);uint32_t state=12345;\n        for(int i=0;i<n;i++){state=state*1664525u+1013904223u;original[i]=(int)(state%200001u)-100000;}\n        memcpy(ref,original,(size_t)n*sizeof *ref);qsort(ref,(size_t)n,sizeof *ref,compare);\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,original,(size_t)n*sizeof *a);double start=now();sorts[k](a,n);double elapsed=now()-start;\n            assert(!memcmp(a,ref,(size_t)n*sizeof *a));\n            printf(\"n=%d sort=%s seconds=%.6f\\n\",n,names[k],elapsed);\n        }\n        size_t checksum=0;double start=now();\n        for(int i=0;i<n;i++){int index=binary_search(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"indexed search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        checksum=0;start=now();\n        for(int i=0;i<n;i++){int index=binary_search_ptr(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"pointer search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        assert(binary_search(a,n,INT_MAX)==-1&&binary_search_ptr(a,n,INT_MAX)==-1);\n        for(int mode=0;mode<2;mode++) {\n            uint32_t total=0;start=now();\n            for(int j=0;j<1000;j++)total+=(uint32_t)(mode?array_sum_unrolled(a,n):array_sum(a,n));\n            printf(\"sum mode=%d seconds=%.6f checksum=%u\\n\",mode,now()-start,total);\n        }\n        free(ref);free(a);free(original);\n    }\n    puts(\"Array and sorting checks passed.\");\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Use the full corresponding routine in extensions.asm and the C build commands in section 30.6. This complete shared harness checks results before comparing timings. Each sort receives a fresh copy of the same input; duplicate searches may return different valid matching indices. binary_search_ptr maintains a half-open pointer interval and calculates a midpoint from its byte span; the result is converted back to an element index. The harness measures both searches separately and verifies membership, without assuming either version is universally faster."
+      },
+      {
+        "id": "ex-30-5",
+        "title": "Exercise 30.5: Test Sorting Algorithms",
+        "description": "Create a test program that generates an array of random numbers (use a simple LCG) and verifies that each sorting algorithm correctly sorts. Compare execution times for n=1000, 10000.",
+        "solution": "#define _POSIX_C_SOURCE 200809L\n#include <assert.h>\n#include <limits.h>\n#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n#include <time.h>\nextern int array_sum(int*,int),array_min(int*,int),array_max(int*,int);\nextern void array_reverse(int*,int),bubble_sort(int*,int),selection_sort(int*,int),insertion_sort(int*,int),quicksort(int*,int);\nextern int binary_search(int*,int,int),binary_search_ptr(int*,int,int),array_sum_unrolled(int*,int),merge_sort(int*,int);\nextern void array_reverse64(int64_t*,int);\nstatic int compare(const void *a,const void *b){int x=*(const int*)a,y=*(const int*)b;return (x>y)-(x<y);}\nstatic void merge_adapter(int *a,int n){assert(merge_sort(a,n)==0);}\nstatic double now(void){struct timespec t;assert(clock_gettime(CLOCK_MONOTONIC,&t)==0);return t.tv_sec+t.tv_nsec*1e-9;}\nint main(void) {\n    void (*sorts[])(int*,int)={bubble_sort,selection_sort,insertion_sort,quicksort,merge_adapter};\n    const char *names[]={\"bubble\",\"selection\",\"insertion\",\"quick\",\"merge\"};\n    int small[]={INT_MAX,-1,0,INT_MIN,4,4};\n    assert(array_min(small,6)==INT_MIN && array_max(small,6)==INT_MAX);\n    for(int n=-1;n<=6;n++) {\n        uint32_t expected=0;for(int i=0;i<n;i++)expected+=(uint32_t)small[i];\n        assert((uint32_t)array_sum(small,n)==expected);\n        assert((uint32_t)array_sum_unrolled(small,n)==expected);\n    }\n    for(int n=0;n<=64;n++) for(int pattern=0;pattern<4;pattern++) {\n        int a[64],reference[64];\n        for(int i=0;i<n;i++)reference[i]=pattern==0?i:pattern==1?-i:pattern==2?7:(i*31%17)-8;\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,reference,(size_t)n*sizeof *a);\n            sorts[k](a,n);\n            for(int i=1;i<n;i++)assert(a[i-1]<=a[i]);\n        }\n        memcpy(a,reference,(size_t)n*sizeof *a);array_reverse(a,n);\n        for(int i=0;i<n;i++)assert(a[i]==reference[n-i-1]);\n    }\n    int64_t wide[]={INT64_MIN,5,INT64_MAX};array_reverse64(wide,3);\n    assert(wide[0]==INT64_MAX && wide[1]==5 && wide[2]==INT64_MIN);\n    for(int n=1000;n<=10000;n*=10) {\n        int *original=malloc((size_t)n*sizeof *original),*a=malloc((size_t)n*sizeof *a),*ref=malloc((size_t)n*sizeof *ref);\n        assert(original&&a&&ref);uint32_t state=12345;\n        for(int i=0;i<n;i++){state=state*1664525u+1013904223u;original[i]=(int)(state%200001u)-100000;}\n        memcpy(ref,original,(size_t)n*sizeof *ref);qsort(ref,(size_t)n,sizeof *ref,compare);\n        for(size_t k=0;k<5;k++) {\n            memcpy(a,original,(size_t)n*sizeof *a);double start=now();sorts[k](a,n);double elapsed=now()-start;\n            assert(!memcmp(a,ref,(size_t)n*sizeof *a));\n            printf(\"n=%d sort=%s seconds=%.6f\\n\",n,names[k],elapsed);\n        }\n        size_t checksum=0;double start=now();\n        for(int i=0;i<n;i++){int index=binary_search(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"indexed search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        checksum=0;start=now();\n        for(int i=0;i<n;i++){int index=binary_search_ptr(a,n,original[i]);assert(index>=0&&a[index]==original[i]);checksum+=(size_t)index;}\n        printf(\"pointer search seconds=%.6f checksum=%zu\\n\",now()-start,checksum);\n        assert(binary_search(a,n,INT_MAX)==-1&&binary_search_ptr(a,n,INT_MAX)==-1);\n        for(int mode=0;mode<2;mode++) {\n            uint32_t total=0;start=now();\n            for(int j=0;j<1000;j++)total+=(uint32_t)(mode?array_sum_unrolled(a,n):array_sum(a,n));\n            printf(\"sum mode=%d seconds=%.6f checksum=%u\\n\",mode,now()-start,total);\n        }\n        free(ref);free(a);free(original);\n    }\n    puts(\"Array and sorting checks passed.\");\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Use the full corresponding routine in extensions.asm and the C build commands in section 30.6. This complete shared harness checks results before comparing timings. Each sort receives a fresh copy of the same input; duplicate searches may return different valid matching indices. The LCG uses uint32_t wraparound and a fixed seed for repeatability. qsort provides a full reference permutation, so merely producing a nondecreasing but corrupted array cannot pass the large-array tests. Compare repeated timing runs on the intended machine."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why does Quicksort have O(n log n) average time complexity?',
-        answer: 'Because partitioning divides an array of size n in half at each recursion level (log n levels), performing n comparisons at each level. If the pivot is poorly chosen (already sorted array with last element as pivot), it degrades to O(n²).'
+        "question": "How do you compute the address of the i-th element in an array of 32-bit integers? Show the assembly.",
+        "answer": "For int elements, address = base + i*4. With base in RDI and nonnegative index in RCX: mov eax,[rdi+rcx*4]. Validate the index and normalize its width before forming an address."
+      },
+      {
+        "question": "Explain the difference between stable and unstable sorting algorithms. Give examples.",
+        "answer": "A stable sort preserves the input order of records with equal keys. Bubble and insertion are stable when they move only strictly out-of-order values; the shown selection and quicksort swaps are not. Stable mergesort chooses the left element on ties."
+      },
+      {
+        "question": "Describe the partitioning step in quicksort. What is the role of the pivot?",
+        "answer": "With the last element as pivot, scan the other elements and grow a prefix containing values no greater than the pivot. Swap the pivot immediately after that prefix, then sort both sides. The partition establishes ordering around the pivot, not complete ordering within each side."
+      },
+      {
+        "question": "Why is quicksort's average time complexity O(n log n)? What causes the worst-case O(n²)?",
+        "answer": "Balanced partitions give logarithmic depth with linear partition work per level. Repeatedly selecting an extreme pivot creates one nearly full subproblem, producing quadratic work. Sorted, reverse-sorted and all-equal data can trigger this in the simple last-pivot version."
+      },
+      {
+        "question": "How does binary search work? What are the preconditions?",
+        "answer": "Binary search compares a target with a midpoint and discards the half that cannot contain it. It requires ascending order under the same comparison and valid bounds. Empty input returns -1; duplicate matches may return any matching index."
+      },
+      {
+        "question": "In insertion sort, why is it efficient for nearly sorted arrays?",
+        "answer": "Insertion sort shifts elements only while they exceed the key. A nearly sorted input has few inversions and therefore few shifts; an already sorted array needs a linear scan."
+      },
+      {
+        "question": "How would you modify the sorting algorithms to sort in descending order?",
+        "answer": "Reverse signed value comparisons while preserving index/bounds comparisons. For example bubble swaps when left<right rather than left>right. Update the binary-search ordering too if it will search descending output."
+      },
+      {
+        "question": "What are the advantages and disadvantages of bubble sort compared to insertion sort?",
+        "answer": "Bubble sort is simple and stable but typically makes many comparisons and swaps. An early-exit flag improves its best case. Insertion sort usually moves less data and performs well on short or nearly sorted arrays; both have quadratic worst cases."
+      },
+      {
+        "question": "How does recursion in quicksort affect stack usage? How can you reduce it?",
+        "answer": "The straightforward recursive version uses logarithmic stack on average and linear stack in the worst case. Recurse only on the smaller partition and loop over the larger one to bound stack depth; introsort can also switch algorithms after excessive partition depth."
+      },
+      {
+        "question": "If you needed to sort a very large array that doesn't fit in memory, which sorting algorithm would you choose? Why?",
+        "answer": "Use external merge sorting: sort memory-sized runs, write them to storage, then merge runs using bounded buffers. Its mostly sequential I/O suits data larger than memory; account for temporary storage and failure recovery."
       }
     ],
-    summary: ['Quicksort offers superior cache locality.', 'Binary search delivers O(log n) lookups on sorted arrays.']
+    "summary": [
+      "Array manipulation in assembly requires careful pointer arithmetic and loop control.",
+      "Sorting algorithms illustrate different trade-offs between time complexity, stability, and memory usage.",
+      "Bubble sort, selection sort, insertion sort are O(n²) but simple to implement.",
+      "Quicksort is O(n log n) average, uses recursion and partitioning.",
+      "Binary search is O(log n) and requires sorted array.",
+      "Modular design with header files and separate compilation enables reusable libraries.",
+      "Performance can be improved with loop unrolling, better algorithms, and optimized code."
+    ]
   },
   {
     id: 31,
