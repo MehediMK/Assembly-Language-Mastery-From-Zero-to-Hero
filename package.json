@@ -32,7 +32,8 @@
     "check:chapter21": "node --import tsx scripts/check-chapter21.mjs",
     "check:chapter22": "node --import tsx scripts/check-chapter22.mjs",
     "check:chapter23": "node --import tsx scripts/check-chapter23.mjs",
-    "check:chapter24": "node --import tsx scripts/check-chapter24.mjs"
+    "check:chapter24": "node --import tsx scripts/check-chapter24.mjs",
+    "check:chapter25": "node --import tsx scripts/check-chapter25.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

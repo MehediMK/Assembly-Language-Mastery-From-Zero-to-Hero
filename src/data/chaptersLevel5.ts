@@ -938,62 +938,444 @@ export const CHAPTERS_LEVEL_5: Chapter[] = [
     ]
   },
   {
-    id: 25,
-    slug: 'chapter-25-stack-frames-prologues-epilogues',
-    level: 5,
-    levelTitle: 'Low-Level Systems and Reverse Engineering',
-    title: 'Chapter 25: Stack Frames, Prologues, and Epilogues',
-    subtitle: 'Standard Frames, Frame Pointer Omission (FPO), Alloca, and Red Zone',
-    learningObjectives: [
-      'Master prologue and epilogue variations across compilers.',
-      'Analyze stack layout for functions with more than 6 arguments.',
-      'Understand how dynamic allocation (alloca, VLAs) affects stack pointer tracking.',
-      'Recognize red zone usage in stripped leaf functions.'
+    "id": 25,
+    "slug": "chapter-25-stack-frames-prologues-epilogues",
+    "level": 5,
+    "levelTitle": "Low-Level Systems and Reverse Engineering",
+    "title": "Chapter 25: Stack Frames, Prologues, and Epilogues",
+    "subtitle": "Standard Frames, Frame Pointer Omission (FPO), Alloca, and Red Zone",
+    "learningObjectives": [
+      "Understand the purpose and structure of stack frames in function calls.",
+      "Master the standard prologue and epilogue with a frame pointer (rbp).",
+      "Recognize optimized variants: frame pointer omission, leaf functions, and red zone usage.",
+      "Analyze how functions with more than six arguments and local variables are laid out on the stack.",
+      "Read and interpret compiler-generated stack frames in disassembly.",
+      "Handle special cases like variable-length arrays and alloca.",
+      "Write assembly functions with correct stack management and alignment."
     ],
-    prerequisites: ['Chapters 1–24'],
-    keyConcepts: [
-      'Frame pointer rbp provides constant offset references even when rsp changes.',
-      'Without a frame pointer, all variables are accessed relative to rsp.',
-      'The 128-byte red zone enables leaf functions to eliminate sub rsp / add rsp.'
+    "prerequisites": [
+      "Solid understanding of the stack, rsp, and rbp (Chapter 3).",
+      "Familiarity with calling conventions and procedures (Chapter 10).",
+      "Knowledge of ABI details and register allocation (Chapter 19).",
+      "Experience reading disassembly (Chapter 24).",
+      "Basic understanding of compiler optimizations (Chapter 24)."
     ],
-    diagramType: 'stack_frames_prologues',
-    sections: [
+    "keyConcepts": [
+      "A stack frame is the region of the stack dedicated to a single function invocation.",
+      "The prologue sets up the frame; the epilogue tears it down.",
+      "Using a frame pointer (rbp) provides stable access to arguments and locals even if rsp changes.",
+      "Frame pointer omission frees rbp for general use but complicates stack access.",
+      "Leaf functions can use the red zone (128 bytes below rsp) without adjusting rsp.",
+      "Stack alignment must be maintained (16-byte before call).",
+      "Functions with more than six arguments pass additional ones on the stack, accessed via positive offsets from rbp.",
+      "Variable-length arrays and alloca require dynamic stack allocation with rsp adjustment."
+    ],
+    "diagramType": "stack_frames_prologues",
+    "sections": [
       {
-        id: 'sec-25-1',
-        title: '25.1 Dynamic Stack Allocation (alloca Mechanics)',
-        content: `Dynamic stack allocation adjusts rsp at runtime, relying on rbp for stable local variable referencing:`,
-        codeSnippets: [
+        "id": "sec-25-1",
+        "title": "25.1 Review of Stack Frame Basics",
+        "content": "When a function is called, the CPU pushes the return address onto the stack. The callee then typically saves the caller’s frame pointer (if using one) and sets up its own frame pointer. This creates a stack frame that contains:\n\n- Return address\n- Saved previous frame pointer (rbp)\n- Arguments passed on the stack (beyond the first six)\n- Local variables\n- Saved callee-saved registers (if any)\n\nThe frame pointer (rbp) points to the saved previous rbp, providing a fixed reference for accessing both arguments (positive offsets) and locals (negative offsets). The stack pointer (rsp) may change during the function (e.g., due to pushes/pops for temporary storage), so using rbp keeps access stable."
+      },
+      {
+        "id": "sec-25-1-1",
+        "title": "25.1.1 Typical Stack Frame Layout (with Frame Pointer)",
+        "content": "\n\nClarification: The duplicated [rbp+8] row labeled sixth argument is incorrect: that slot contains only the return address. A spilled sixth register argument needs its own allocated slot, usually at a negative offset. The seventh integer argument is at [rbp+16].",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'dynamic_alloc.asm',
-            code: `dynamic_alloc:
-    push rbp
-    mov rbp, rsp
-    sub rsp, rdi          ; allocate N bytes dynamically at runtime
-    ; [rsp] points to the dynamic buffer
-    ; [rbp-8] still reliably accesses static local variables!
-    mov rsp, rbp          ; deallocates entire frame and dynamic buffer instantly!
-    pop rbp
-    ret`
+            "language": "text",
+            "title": "25.1.1 Typical Stack Frame Layout (with Frame Pointer) — listing 1",
+            "code": "        +------------------------+  Higher addresses\n        |       ...              |\n        | 7th argument (if any)  |  [rbp+16]\n        | 6th argument           |  [rbp+8]   (if spilled)\n        | Return Address         |  [rbp+8]   (actually return address is at [rbp+8])\n        | Saved RBP              |  [rbp]     <-- rbp points here\n        | Local variable 1       |  [rbp-8]\n        | Local variable 2       |  [rbp-16]\n        | ...                    |\n        | Saved callee-saved regs|  [rbp-...]\n        +------------------------+  Lower addresses (rsp after allocation)",
+            "explanation": "Note: The return address is at [rbp+8] because call pushes it before the prologue. The first stack-passed argument (7th overall) is at [rbp+16] after the prologue (since push rbp places saved rbp at [rbp])."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-2",
+        "title": "25.2 Standard Prologue and Epilogue with Frame Pointer",
+        "content": "The most straightforward function prologue uses a frame pointer to create a stable stack frame."
+      },
+      {
+        "id": "sec-25-2-1",
+        "title": "25.2.1 Prologue",
+        "content": "\n\nClarification: N being divisible by 16 assumes no additional pushes. Include every saved register and outgoing argument in the alignment calculation; padding must be established before a call, never repaired afterward.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "25.2.1 Prologue — listing 1",
+            "code": "push rbp          ; save caller's base pointer\nmov rbp, rsp      ; set our base pointer\nsub rsp, N        ; allocate N bytes for local variables",
+            "explanation": "This sequence:\n- Saves the caller’s rbp on the stack.\n- Sets rbp to the current rsp, so rbp points to the saved old rbp.\n- Allocates space for locals by subtracting N from rsp. N should be a multiple of 16 to maintain alignment if the function calls other functions.\n\nAlignment consideration: At function entry, rsp is 8 mod 16 (because return address was pushed). After push rbp, rsp becomes 0 mod 16. If we subtract a multiple of 16, rsp remains 0 mod 16, which is correct for making calls (the call instruction will push 8 bytes, making it 8 mod 16 at callee entry, as expected). Therefore, N should be a multiple of 16. If you need an odd number of bytes for locals, round up to a multiple of 16 and use only the needed part, or adjust for alignment."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-2-2",
+        "title": "25.2.2 Epilogue",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "25.2.2 Epilogue — listing 1",
+            "code": "mov rsp, rbp      ; deallocate locals (restore rsp to rbp)\npop rbp           ; restore caller's rbp\nret",
+            "explanation": "Alternatively, use the leave instruction, which is equivalent to mov rsp, rbp followed by pop rbp. It is shorter but may be slower on some older CPUs (though on modern CPUs it is fine)."
+          },
+          {
+            "language": "nasm",
+            "title": "25.2.2 Epilogue — listing 2",
+            "code": "leave\nret"
+          }
+        ]
+      },
+      {
+        "id": "sec-25-2-3",
+        "title": "25.2.3 Complete Example",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Function: add_two",
+            "code": "; Function: add_two\n; Inputs: rdi = a, rsi = b\n; Output: rax = a + b\nadd_two:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16          ; allocate 16 bytes for two locals (unused here)\n\n    ; Body: could use locals at [rbp-8] and [rbp-16]\n    mov rax, rdi\n    add rax, rsi\n\n    ; Epilogue\n    mov rsp, rbp\n    pop rbp\n    ret",
+            "explanation": "Even though locals aren't used, the prologue/epilogue are often present for consistency or debugging. Optimized code will omit unnecessary stack operations."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-3",
+        "title": "25.3 Frame Pointer Omission and Optimized Code",
+        "content": "Modern compilers often omit the frame pointer (-fomit-frame-pointer) to free rbp as a general-purpose register. This is default at -O1 and higher on x86-64. Without a frame pointer, the function uses rsp-relative addressing for all locals and stack arguments. The challenge is that rsp may change during the function (e.g., due to pushes for register saves or alloca). To handle this, the compiler ensures that rsp is stable within the body or adjusts offsets accordingly."
+      },
+      {
+        "id": "sec-25-3-1",
+        "title": "25.3.1 Characteristics of Frame Pointer Omission",
+        "content": "- rbp is free for general use, increasing available registers.\n- Prologue typically just sub rsp, N (no push rbp/mov rbp, rsp).\n- Locals are accessed as [rsp+offset] (positive offsets after the initial sub).\n- Stack arguments (beyond six) are at [rsp+N+8] after prologue (since return address at [rsp] before sub, after sub it moves to [rsp+N], and the first stack arg is at [rsp+N+8]).\n- If the function pushes registers (e.g., callee-saved), the offsets shift; the compiler tracks this."
+      },
+      {
+        "id": "sec-25-3-2",
+        "title": "25.3.2 Example: Simple Function Without Frame Pointer",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Function: add_two (no frame pointer)",
+            "code": "; Function: add_two (no frame pointer)\nadd_two:\n    sub rsp, 8          ; allocate 8 bytes (for alignment or local)\n    mov rax, rdi\n    add rax, rsi\n    add rsp, 8          ; deallocate\n    ret",
+            "explanation": "If no locals are needed, the function can be just:"
+          },
+          {
+            "language": "nasm",
+            "title": "25.3.2 Example: Simple Function Without Frame Pointer — listing 2",
+            "code": "add_two:\n    lea rax, [rdi+rsi]\n    ret",
+            "explanation": "No stack operations at all."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-3-3",
+        "title": "25.3.3 Pros and Cons",
+        "content": "Advantages:\n- One extra register (rbp) for use.\n- Smaller prologue/epilogue (no push/pop).\n- Often faster due to fewer instructions.\n\nDisadvantages:\n- Debugging is harder because variable locations change with rsp and are not stable.\n- Stack unwinding (for exceptions or backtraces) requires additional metadata (DWARF CFI) to locate frames; the debugger uses this instead of rbp.\n- If the function uses alloca or variable-length arrays, frame pointer omission is more complex, but compilers handle it with CFI.\n\nClarification: Dynamic allocations often cause the compiler to retain a frame pointer even with frame-pointer omission enabled. CFI describes unwind state; it does not itself provide a stable addressing register."
+      },
+      {
+        "id": "sec-25-4",
+        "title": "25.4 Leaf Functions and the Red Zone",
+        "content": "A leaf function is one that does not call any other functions. The System V AMD64 ABI defines a red zone: the 128 bytes immediately below rsp that are reserved for use by leaf functions without adjusting rsp. This allows leaf functions to store small amounts of data on the stack without the overhead of sub rsp/add rsp."
+      },
+      {
+        "id": "sec-25-4-1",
+        "title": "25.4.1 Rules for Red Zone",
+        "content": "- The red zone extends from [rsp-128] to [rsp-1].\n- It is safe to use only if the function does not call other functions (because a call would push the return address and clobber the red zone).\n- Signal handlers must not use the red zone (they use their own stack), but this is guaranteed by the kernel.\n- The red zone is not available if the function uses alloca or dynamically adjusts the stack in a way that makes rsp point into the red zone.\n\nClarification: The protection concerns the interrupted function’s red zone: signal delivery preserves it. A user-space signal-handler function can use its own red zone under the same ABI. The red zone is relative to the current RSP and can hold temporaries in a non-leaf only when they are dead before a call. Windows and kernel interrupt contexts differ."
+      },
+      {
+        "id": "sec-25-4-2",
+        "title": "25.4.2 Example: Leaf Function Using Red Zone",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Function that stores two locals in red zone",
+            "code": "; Function that stores two locals in red zone\nmy_leaf:\n    mov [rsp-8], rdi    ; local1\n    mov [rsp-16], rsi   ; local2\n    ; ... use [rsp-8] and [rsp-16] ...\n    ret",
+            "explanation": "No sub rsp needed. This saves instructions and avoids potential alignment issues.\n\nNote: If the function calls another function, the call will push the return address at [rsp-8], overwriting the red zone area. Therefore, the red zone cannot be used across calls."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-5",
+        "title": "25.5 Stack Frame for Functions with Many Arguments",
+        "content": "When a function has more than six integer arguments, the extra arguments are passed on the stack. The caller pushes them in reverse order (right-to-left) before the call. At function entry, the stack layout (from top, i.e., rsp after call) is:\n\nClarification: The caller may reserve outgoing argument space and store arguments, rather than literally pushing them. These layouts assume scalar integer/pointer arguments, not arbitrary floating-point or aggregate signatures.",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "25.5 Stack Frame for Functions with Many Arguments — listing 1",
+            "code": "[rsp]      = return address\n[rsp+8]    = 7th argument\n[rsp+16]   = 8th argument\n...",
+            "explanation": "After the standard prologue (push rbp; mov rbp, rsp; sub rsp, N), the offsets relative to rbp are:"
+          },
+          {
+            "language": "text",
+            "title": "25.5 Stack Frame for Functions with Many Arguments — listing 2",
+            "code": "[rbp]      = saved old rbp\n[rbp+8]    = return address\n[rbp+16]   = 7th argument\n[rbp+24]   = 8th argument\n...",
+            "explanation": "The function can access these using [rbp+16], [rbp+24], etc."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-5-1",
+        "title": "25.5.1 Example: Function with Seven Arguments",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "sum_seven: first six in rdi..r9, 7th on stack",
+            "code": "; sum_seven: first six in rdi..r9, 7th on stack\nsum_seven:\n    push rbp\n    mov rbp, rsp\n    ; 7th arg at [rbp+16]\n    add rdi, rsi\n    add rdi, rdx\n    add rdi, rcx\n    add rdi, r8\n    add rdi, r9\n    mov rax, [rbp+16]   ; load 7th arg\n    add rdi, rax\n    mov rax, rdi\n    mov rsp, rbp\n    pop rbp\n    ret",
+            "explanation": "Caller:"
+          },
+          {
+            "language": "nasm",
+            "title": "25.5.1 Example: Function with Seven Arguments — listing 2",
+            "code": "    ; set rdi..r9\n    push 7              ; push 7th argument (value 7)\n    call sum_seven\n    add rsp, 8          ; cleanup stack",
+            "explanation": "Alignment: The caller must ensure that before call, rsp is 16-byte aligned. If it pushes an odd number of arguments, it may need to adjust (sub rsp, 8 before pushes or after cleanup) to maintain alignment."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-5-2",
+        "title": "25.5.2 Without Frame Pointer",
+        "content": "If frame pointer omitted, the function might do:",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "25.5.2 Without Frame Pointer — listing 1",
+            "code": "sum_seven:\n    sub rsp, 8          ; alignment or local\n    ; 7th arg is now at [rsp+8+8] = [rsp+16] after sub? Let's compute:\n    ; At entry: [rsp] = return addr, [rsp+8] = 7th arg.\n    ; After sub rsp,8: return addr at [rsp+8], 7th arg at [rsp+16].\n    ; So access [rsp+16].\n    ...\n    add rsp, 8\n    ret",
+            "explanation": "This is why frame pointer makes argument access clearer."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-6",
+        "title": "25.6 Compiler-Generated Stack Frames",
+        "content": "When compiling C/C++, the compiler generates prologues and epilogues according to optimization level and function properties. Reading these in disassembly helps understand the function’s local variables and arguments."
+      },
+      {
+        "id": "sec-25-6-1",
+        "title": "25.6.1 At -O0 (No Optimization)",
+        "content": "Almost every function uses frame pointer:",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "25.6.1 At -O0 (No Optimization) — listing 1",
+            "code": "push rbp\nmov rbp, rsp\nsub rsp, <size>\n... body ...\nmov rsp, rbp\npop rbp\nret",
+            "explanation": "Locals are accessed as [rbp-N], arguments as [rbp+8+...] (return address at [rbp+8], first stack arg at [rbp+16])."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-6-2",
+        "title": "25.6.2 At -O2 (Optimized)",
+        "content": "Many functions omit frame pointer:",
+        "codeSnippets": [
+          {
+            "language": "text",
+            "title": "25.6.2 At -O2 (Optimized) — listing 1",
+            "code": "sub rsp, <size>\n... body using [rsp+offset] ...\nadd rsp, <size>\nret",
+            "explanation": "Or no stack at all if no locals and no spills.\n\nRegisters are used aggressively; locals that don't fit are spilled to stack. The compiler uses DWARF CFI to enable unwinding without frame pointer."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-6-3",
+        "title": "25.6.3 Example: C Function with Locals",
+        "content": "C code:\n\nClarification: The -O0 example uses the red zone after saving RBP. The original -O2 listing includes an editing comment disguised as an instruction; the corrected instruction sequence below computes a+b+a*b. C inputs must avoid signed overflow.",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "25.6.3 Example: C Function with Locals — listing 1",
+            "code": "int compute(int a, int b) {\n    int c = a + b;\n    int d = a * b;\n    return c + d;\n}",
+            "explanation": "Compile with -O0 -masm=intel -S:"
+          },
+          {
+            "language": "text",
+            "title": "25.6.3 Example: C Function with Locals — listing 2",
+            "code": "compute:\n    push rbp\n    mov rbp, rsp\n    mov DWORD PTR [rbp-20], edi   ; a\n    mov DWORD PTR [rbp-24], esi   ; b\n    mov edx, DWORD PTR [rbp-20]\n    mov eax, DWORD PTR [rbp-24]\n    add eax, edx                   ; c = a+b\n    mov DWORD PTR [rbp-4], eax\n    mov edx, DWORD PTR [rbp-20]\n    mov eax, DWORD PTR [rbp-24]\n    imul eax, edx                  ; d = a*b\n    mov DWORD PTR [rbp-8], eax\n    mov edx, DWORD PTR [rbp-4]\n    mov eax, DWORD PTR [rbp-8]\n    add eax, edx                   ; return c+d\n    pop rbp\n    ret",
+            "explanation": "Here locals c at [rbp-4], d at [rbp-8], and args a at [rbp-20], b at [rbp-24]. The compiler spilled everything to stack for clarity.\n\nCompile with -O2:"
+          },
+          {
+            "language": "text",
+            "title": "25.6.3 Example: C Function with Locals — listing 3",
+            "code": "compute:\n    lea eax, [rdi+rsi]   ; c = a+b\n    add eax, edi\n    add eax, esi? Wait, that's wrong. Actually:\n    ; compute: c = a+b, d = a*b, return c+d = (a+b)+(a*b)\n    lea eax, [rdi+rsi]\n    imul edi, esi\n    add eax, edi\n    ret",
+            "explanation": "The compiler optimized directly, no stack.\n\nThis illustrates the dramatic difference."
+          },
+          {
+            "language": "nasm",
+            "title": "Corrected optimized compute",
+            "code": "compute:\n    lea eax,[rdi+rsi]\n    imul edi,esi\n    add eax,edi\n    ret",
+            "explanation": "Only EAX and EDI are modified; no frame is necessary."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-7",
+        "title": "25.7 Reading Prologues and Epilogues in Disassembly",
+        "content": "To identify a function’s stack frame in disassembly:\n\n1. Look for push rbp; mov rbp, rsp at function start → indicates frame pointer used.\n2. Look for sub rsp, N to allocate locals.\n3. Look for mov [rbp-...], reg to store local variables; mov [rbp+...] to access stack arguments.\n4. At the end, leave or mov rsp, rbp; pop rbp; ret indicates epilogue.\n5. For frame pointer omission, look for sub rsp, N at entry and add rsp, N before ret, with locals at [rsp+offset].\n\nIn GDB, info frame shows the current frame, including saved registers and argument locations, using debug info."
+      },
+      {
+        "id": "sec-25-8",
+        "title": "25.8 Special Cases: alloca and Variable-Length Arrays",
+        "content": "alloca (or VLA in C) allocates memory on the stack whose size is determined at runtime. This requires dynamic adjustment of rsp. The frame pointer is very helpful here because after dynamic allocation, rsp changes unpredictably, but rbp remains fixed."
+      },
+      {
+        "id": "sec-25-8-1",
+        "title": "25.8.1 Example: Using alloca-like Allocation",
+        "content": "\n\nClarification: The source does not actually round N despite its comment. Check size and arithmetic before allocation. alloca storage lasts until function return; a VLA normally lasts until its block exits. Neither provides recoverable allocation failure like malloc.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Function that allocates N bytes on stack (N in rdi)",
+            "code": "; Function that allocates N bytes on stack (N in rdi)\ndynamic_alloc:\n    push rbp\n    mov rbp, rsp\n    sub rsp, rdi        ; allocate N bytes (rounded up for alignment)\n    ; use space at [rsp] ... but rsp may not be aligned; adjust if needed\n    ; ...\n    mov rsp, rbp        ; deallocate all at once\n    pop rbp\n    ret",
+            "explanation": "If the function calls other functions, you must ensure alignment after the dynamic allocation (e.g., round rdi up to multiple of 16). With frame pointer, you can still access locals at fixed offsets relative to rbp.\n\nWithout frame pointer, dynamic allocation is trickier because rsp changes; the compiler often uses a frame pointer in such functions even at -O2."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-9",
+        "title": "25.9 Practical Examples",
+        "content": ""
+      },
+      {
+        "id": "sec-25-9-1",
+        "title": "25.9.1 Analyzing a Simple Function with GDB",
+        "content": "Compile a C function with -O0 -g, load in GDB, break at function, and examine stack frame:",
+        "codeSnippets": [
+          {
+            "language": "gdb",
+            "title": "25.9.1 Analyzing a Simple Function with GDB — listing 1",
+            "code": "break myfunc\nrun\ninfo frame\ninfo args\ninfo locals\nx/8gx $rbp",
+            "explanation": "info frame shows saved registers and frame layout based on CFI."
+          }
+        ]
+      },
+      {
+        "id": "sec-25-9-2",
+        "title": "25.9.2 Writing a Function with Stack Args and Locals",
+        "content": "We'll write a function that takes seven arguments (six in regs, one on stack) and uses two local variables, demonstrating both positive and negative offsets from rbp.\n\nClarification: Only the first two arguments are stored into locals, despite the source comment saying first six. The result is a+b+c+d+e+f+g+a+b. The local additions use dword operands because the destination is EAX.",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "25.9.2 Writing a Function with Stack Args and Locals — listing 1",
+            "code": "section .text\nglobal my_func\n\n; int my_func(int a, int b, int c, int d, int e, int f, int g)\n; returns sum of all plus local-based adjustments\nmy_func:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16          ; two locals: [rbp-8] and [rbp-16]\n\n    ; store first six regs into locals for demonstration\n    mov [rbp-8], rdi     ; local1 = a\n    mov [rbp-16], rsi    ; local2 = b\n\n    ; compute sum of first six\n    mov eax, edi\n    add eax, esi\n    add eax, edx\n    add eax, ecx\n    add eax, r8d\n    add eax, r9d\n\n    ; add 7th arg from stack: [rbp+16]\n    add eax, dword [rbp+16]\n\n    ; add locals\n    add eax, [rbp-8]\n    add eax, [rbp-16]\n\n    mov rsp, rbp\n    pop rbp\n    ret",
+            "explanation": "Caller pushes 7th arg (e.g., 7) and calls."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 25.1",
+            "code": "sum:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16\n    mov [rbp-8], rdi   ; local1\n    mov [rbp-16], rsi  ; local2\n    mov rax, [rbp-8]\n    add rax, [rbp-16]\n    mov rsp, rbp\n    pop rbp\n    ret\n\nsum:\n    sub rsp, 16\n    mov [rsp], rdi\n    mov [rsp+8], rsi\n    mov rax, [rsp]\n    add rax, [rsp+8]\n    add rsp, 16\n    ret",
+            "explanation": "Original source Solution 25.1; see the complete exercise version for separate labels, caller alignment, or bounded allocation."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 25.3",
+            "code": "section .text\nglobal sum_nine\n\nsum_nine:\n    push rbp\n    mov rbp, rsp\n    ; first six in edi, esi, edx, ecx, r8d, r9d\n    add edi, esi\n    add edi, edx\n    add edi, ecx\n    add edi, r8d\n    add edi, r9d\n    ; last three at [rbp+16], [rbp+24], [rbp+32]\n    add edi, dword [rbp+16]\n    add edi, dword [rbp+24]\n    add edi, dword [rbp+32]\n    mov eax, edi\n    mov rsp, rbp\n    pop rbp\n    ret\n\n    ; set regs\n    push 9\n    push 8\n    push 7\n    call sum_nine\n    add rsp, 24",
+            "explanation": "Original source Solution 25.3; see the complete exercise version for separate labels, caller alignment, or bounded allocation."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 25.5",
+            "code": "dynamic_func:\n    push rbp\n    mov rbp, rsp\n    sub rsp, rdi        ; allocate size in rdi (assume multiple of 16)\n    ; use [rsp] as buffer\n    ; ...\n    mov rsp, rbp\n    pop rbp\n    ret",
+            "explanation": "Original source Solution 25.5; see the complete exercise version for separate labels, caller alignment, or bounded allocation."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-25-1',
-        title: 'Exercise 25.1: Nine Arguments Stack Layout',
-        description: 'Map the stack layout for a function taking 9 arguments.',
-        solution: 'Args 1-6 in registers (rdi..r9). Arg 7 at [rbp+16], Arg 8 at [rbp+24], Arg 9 at [rbp+32]. Return address is at [rbp+8], saved rbp at [rbp].'
+        "id": "ex-25-1",
+        "title": "Exercise 25.1: Frame Pointer Analysis",
+        "description": "Write a simple function that takes two integers and returns their sum, using a frame pointer and two local variables. Show the prologue and epilogue. Then remove the frame pointer and show the equivalent.",
+        "solution": "section .text\nglobal sum_frame, sum_no_frame\nsum_frame:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16\n    mov [rbp-8], rdi   ; local1\n    mov [rbp-16], rsi  ; local2\n    mov rax, [rbp-8]\n    add rax, [rbp-16]\n    mov rsp, rbp\n    pop rbp\n    ret\n\nsum_no_frame:\n    sub rsp, 16\n    mov [rsp], rdi\n    mov [rsp+8], rsi\n    mov rax, [rsp]\n    add rax, [rsp+8]\n    add rsp, 16\n    ret",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Frame pointer version:\n\nNo frame pointer: These distinct labels can coexist in one NASM object. Both operate on 64-bit values. The no-frame version is a leaf; its 16-byte allocation need not align a nested call because it makes none."
+      },
+      {
+        "id": "ex-25-2",
+        "title": "Exercise 25.2: Red Zone Usage",
+        "description": "Write a leaf function that stores four 64-bit values in the red zone and returns their sum. Ensure no sub rsp is used. Explain why it is safe.",
+        "solution": "section .text\nglobal leaf_sum\nleaf_sum:\n    mov [rsp-8], rdi\n    mov [rsp-16], rsi\n    mov [rsp-24], rdx\n    mov [rsp-32], rcx\n    mov rax, [rsp-8]\n    add rax, [rsp-16]\n    add rax, [rsp-24]\n    add rax, [rsp-32]\n    ret",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Safe because no calls are made; red zone is below rsp."
+      },
+      {
+        "id": "ex-25-3",
+        "title": "Exercise 25.3: Stack Arguments",
+        "description": "Implement a function sum_nine that takes nine integer arguments: first six in registers, last three on stack. Return the sum. Include proper stack cleanup in the caller.",
+        "solution": "section .text\nglobal sum_nine\n\nsum_nine:\n    push rbp\n    mov rbp, rsp\n    ; first six in edi, esi, edx, ecx, r8d, r9d\n    add edi, esi\n    add edi, edx\n    add edi, ecx\n    add edi, r8d\n    add edi, r9d\n    ; last three at [rbp+16], [rbp+24], [rbp+32]\n    add edi, dword [rbp+16]\n    add edi, dword [rbp+24]\n    add edi, dword [rbp+32]\n    mov eax, edi\n    mov rsp, rbp\n    pop rbp\n    ret\n\n\n; Complete Linux process-entry caller, initially RSP aligned to 16.\nglobal _start\n_start:\n    sub rsp,8              ; padding belongs above the arguments\n    push 9\n    push 8\n    push 7\n    mov edi,1\n    mov esi,2\n    mov edx,3\n    mov ecx,4\n    mov r8d,5\n    mov r9d,6\n    call sum_nine\n    add rsp,32             ; three arguments plus padding\n    mov edi,eax\n    mov eax,60\n    syscall\n",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": "Caller: Assemble/link as a Linux executable; expected exit status 45. This caller starts at _start, not a normal function entry. Its total 32-byte allocation preserves call alignment."
+      },
+      {
+        "id": "ex-25-4",
+        "title": "Exercise 25.4: Compiler Output",
+        "description": "Write a C function with several local variables and a loop. Compile with -O0 and -O2. Disassemble and identify the stack frame differences. Note which variables are in registers vs stack.",
+        "solution": "// gcc -O0 -g -c locals.c -o locals-O0.o\n// gcc -O2 -g -c locals.c -o locals-O2.o\n// objdump -d -M intel locals-O0.o\n// objdump -d -M intel locals-O2.o\nunsigned compute_locals(unsigned n) {\n    unsigned sum=0, odd=1, last=0;\n    for (unsigned i=0;i<n;i++) {\n        last=odd;\n        sum+=last;\n        odd+=2;\n    }\n    return sum;\n}",
+        "solutionLanguage": "c",
+        "solutionExplanation": "Write C code, compile, disassemble. Note -O0 uses rbp, spills locals; -O2 may not touch stack at all or only sub rsp for alignment. For n=0,1,10 the results are 0,1,100. Unsigned arithmetic wraps predictably. Source locals need not have separate storage at -O2; track induction values and the return result instead."
+      },
+      {
+        "id": "ex-25-5",
+        "title": "Exercise 25.5: Dynamic Allocation",
+        "description": "Write a function that allocates a variable amount of stack space (simulate alloca) and uses it to store values, then returns. Use a frame pointer. Ensure alignment if calling other functions.",
+        "solution": "; uint64_t dynamic_func(size_t n); accepts 0..256 bytes.\n; Returns n after storing byte 1 in every requested byte, or -1 if n>256.\nsection .text\nglobal dynamic_func\ndynamic_func:\n    cmp rdi,256\n    ja .bad\n    push rbp\n    mov rbp,rsp\n    mov rax,rdi\n    add rax,15             ; safe after bounding n\n    and rax,-16\n    sub rsp,rax\n    xor ecx,ecx\n.fill:\n    cmp rcx,rdi\n    jae .filled\n    mov byte [rsp+rcx],1\n    inc rcx\n    jmp .fill\n.filled:\n    mov rsi,rdi            ; length\n    mov rdi,rsp            ; buffer\n    call count_bytes       ; RSP is aligned before CALL\n    mov rsp,rbp\n    pop rbp\n    ret\n.bad:\n    mov rax,-1\n    ret\ncount_bytes:\n    xor eax,eax\n    xor ecx,ecx\n.loop:\n    cmp rcx,rsi\n    jae .done\n    movzx edx,byte [rdi+rcx]\n    add rax,rdx\n    inc rcx\n    jmp .loop\n.done:\n    ret",
+        "solutionLanguage": "nasm",
+        "solutionExplanation": " Bounded allocation avoids rounding overflow and unbounded stack growth. The helper validates stored bytes through their sum; zero length never dereferences the buffer. No pointer escapes the function."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why does alloca deallocate in O(1) time?',
-        answer: 'Because the epilogue simply executes mov rsp, rbp (or leave), which restores the stack pointer to the base pointer, reclaiming all dynamically allocated stack bytes in a single instruction.'
+        "question": "What is a stack frame? What are its components?",
+        "answer": "A stack frame holds invocation-specific state: return address, any saved frame pointer and registers, locals, spills and incoming/outgoing stack arguments. Exact layout follows the ABI and generated code."
+      },
+      {
+        "question": "Show the standard prologue and epilogue for a function using a frame pointer.",
+        "answer": "push rbp; mov rbp,rsp; sub rsp,N establishes a frame. mov rsp,rbp; pop rbp; ret tears it down. Restore other saved registers before discarding their slots. With only push rbp before allocation, use N divisible by 16 before nested calls."
+      },
+      {
+        "question": "What is the red zone? When can you use it?",
+        "answer": "The SysV AMD64 user-space red zone is the 128 bytes below current RSP protected from signal/interrupt delivery. Temporaries there must not survive a call. Windows x64 has no such red zone, and kernel code must not assume it."
+      },
+      {
+        "question": "How does frame pointer omission affect local variable access?",
+        "answer": "Locals use offsets from RSP or another compiler-chosen base. Every push, pop or allocation changes those offsets; unwind information can describe how to recover caller state without RBP."
+      },
+      {
+        "question": "How are extra arguments beyond six passed to a function? Where are they located relative to rbp?",
+        "answer": "For ordinary integer/pointer arguments, the seventh, eighth and ninth arrive at RSP+8,+16,+24. After push rbp; mov rbp,rsp they are at RBP+16,+24,+32. The caller releases their stack storage."
+      },
+      {
+        "question": "Why is alignment important when allocating stack space? How do you maintain it?",
+        "answer": "The baseline SysV ABI requires RSP divisible by 16 immediately before CALL, so a callee enters at 8 modulo 16. Track all pushes and allocations together; insert padding before stack arguments so the first argument remains adjacent to the return address."
+      },
+      {
+        "question": "What is leave equivalent to? Is it always used?",
+        "answer": "In ordinary 64-bit code, leave performs mov rsp,rbp followed by pop rbp. Functions may use the separate instructions, an RSP adjustment, or no frame teardown depending on their layout."
+      },
+      {
+        "question": "How does a compiler decide whether to use a frame pointer? What factors influence this?",
+        "answer": "Optimization settings, debug/profiling needs, dynamic allocations, stack realignment and target ABI affect the choice. A frame pointer may remain at -O2 when it simplifies addressing or unwinding."
+      },
+      {
+        "question": "How do you handle variable-length stack allocation? Why is a frame pointer helpful?",
+        "answer": "Validate a bounded size, round it up with overflow checks, reserve aligned space, and restore RSP from a stable saved value before return. RBP provides that stable reference. Large allocations need stack probing; stack-backed pointers must not escape their lifetime."
+      },
+      {
+        "question": "In disassembly, how can you identify a function that uses the red zone? What are the clues?",
+        "answer": "A leaf may store at negative RSP offsets without subtracting RSP, then return with RSP unchanged. Check that accesses stay within 128 bytes and do not overlap live caller data; the absence of calls alone does not prove red-zone use."
       }
     ],
-    summary: ['Stack frames manage execution state and locals.', 'Frame pointers simplify debugging and dynamic allocation.']
+    "summary": [
+      "Stack frames provide a structured way to manage function state.",
+      "Standard prologue: push rbp; mov rbp, rsp; sub rsp, N. Epilogue: mov rsp, rbp; pop rbp; ret or leave; ret.",
+      "Frame pointer omission frees rbp but requires careful rsp-relative addressing.",
+      "Leaf functions can use the 128-byte red zone to avoid stack pointer adjustments.",
+      "Functions with more than six arguments receive extra args on the stack; access via [rbp+16] onward.",
+      "Compilers vary prologue/epilogue based on optimization; reading disassembly requires understanding these patterns.",
+      "Dynamic stack allocation (alloca) works best with a frame pointer.",
+      "In the next chapter, we'll explore reverse engineering fundamentals, applying these skills to understand unknown binaries."
+    ]
   },
   {
     id: 26,
