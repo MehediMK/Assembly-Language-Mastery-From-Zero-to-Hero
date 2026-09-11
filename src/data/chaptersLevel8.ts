@@ -1312,586 +1312,527 @@ export const CHAPTERS_LEVEL_8: Chapter[] = [
     ]
   },
   {
-    id: 43,
-    slug: 'chapter-43-anti-debugging-anti-analysis',
-    level: 8,
-    levelTitle: 'Security and Binary Exploitation',
-    title: 'Chapter 43: Anti-Debugging and Anti-Analysis Techniques',
-    subtitle: 'Ptrace Detection, TracerPid Scanning, Timing Checks, and Junk Byte Obfuscation',
-    learningObjectives: [
-      'Understand anti-debugging and anti-analysis concepts.',
-      'Recognize anti-debugging techniques: ptrace(PTRACE_TRACEME), TracerPid, and INT 3.',
-      'Detect virtual machines using CPUID hypervisor bit and artifact scanning.',
-      'Deconstruct anti-disassembly tricks like overlapping instructions and opaque predicates.',
-      'Bypass anti-debugging checks in GDB by patching instructions or altering register flags.',
-      'Understand anti-VM and anti-sandbox techniques.',
-      'Learn software obfuscation and anti-reverse engineering methods.',
-      'Study real-world malware analysis case studies.'
+    "id": 43,
+    "slug": "chapter-43-anti-debugging-anti-analysis",
+    "level": 8,
+    "levelTitle": "Security and Binary Exploitation",
+    "title": "Chapter 43: Anti-Debugging and Anti-Analysis Techniques",
+    "subtitle": "Ptrace Detection, TracerPid Scanning, Timing Checks, and Junk Byte Obfuscation",
+    "learningObjectives": [
+      "Understand anti-debugging and anti-analysis concepts.",
+      "Recognize anti-debugging techniques: ptrace(PTRACE_TRACEME), TracerPid, and INT 3.",
+      "Detect virtual machines using CPUID hypervisor bit and artifact scanning.",
+      "Deconstruct anti-disassembly tricks like overlapping instructions and opaque predicates.",
+      "Bypass anti-debugging checks in GDB by patching instructions or altering register flags.",
+      "Understand anti-VM and anti-sandbox techniques.",
+      "Learn software obfuscation and anti-reverse engineering methods.",
+      "Study real-world malware analysis case studies."
     ],
-    prerequisites: ['Chapters 1–42'],
-    keyConcepts: [
-      'ptrace: Linux debugging API; fails if debugger already attached.',
-      'TracerPid: /proc/self/status field showing debugger presence.',
-      'Timing checks: Detect debugger slowdowns via rdtsc/cpuid cycle counts.',
-      'Anti-disassembly: Junk bytes, overlapping instructions confuse disassemblers.',
-      'Opaque predicates: Always-true/false branches mislead control flow analysis.',
-      'Anti-VM: Detect virtualization artifacts (CPUID, registry, files).',
-      'Anti-sandbox: Detect automated analysis environments.',
-      'Obfuscation: Code transformation to resist reverse engineering.'
+    "prerequisites": [
+      "Chapters 1–42"
     ],
-    diagramType: 'anti_debugging',
-    sections: [
+    "keyConcepts": [
+      "ptrace: Linux debugging API; fails if debugger already attached.",
+      "TracerPid: /proc/self/status field showing debugger presence.",
+      "Timing checks: Detect debugger slowdowns via rdtsc/cpuid cycle counts.",
+      "Anti-disassembly: Junk bytes, overlapping instructions confuse disassemblers.",
+      "Opaque predicates: Always-true/false branches mislead control flow analysis.",
+      "Anti-VM: Detect virtualization artifacts (CPUID, registry, files).",
+      "Anti-sandbox: Detect automated analysis environments.",
+      "Obfuscation: Code transformation to resist reverse engineering."
+    ],
+    "diagramType": "anti_debugging",
+    "sections": [
       {
-        id: 'sec-43-1',
-        title: '43.1 Anti-Debugging Techniques',
-        content: `Anti-debugging detects or prevents debugger attachment to protect software.
-
-### Why Anti-Debugging?
-• Protect intellectual property
-• Prevent software piracy
-• Resist reverse engineering
-• Malware evasion (hide from analysts)
-
-### ptrace Detection (Linux)
-The most common technique:
-
-if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) == -1) {
-    // Debugger detected!
-    exit(1);
-}
-
-If a debugger is already attached, ptrace fails with EPERM.
-
-### TracerPid Check
-Read /proc/self/status for TracerPid:
-
-int tracer_pid = 0;
-FILE *fp = fopen("/proc/self/status", "r");
-while (fgets(line, sizeof(line), fp)) {
-    if (sscanf(line, "TracerPid: %d", &tracer_pid) == 1) {
-        if (tracer_pid != 0) {
-            // Debugger detected!
-        }
-    }
-}
-
-TracerPid > 0 means a debugger is attached.
-
-### INT 3 / INT 2D (x86)
-Software breakpoint detection:
-• INT 3 (0xCC) is used by debuggers for breakpoints
-• Malware checks for 0xCC in code
-• INT 2D (Windows) causes exception in debugger, skips in normal execution
-
-### IsDebuggerPresent (Windows)
-Windows API check:
-
-if (IsDebuggerPresent()) {
-    // Debugger detected!
-    exit(1);
-}
-
-
-### NtGlobalFlag (Windows)
-Debug flags in PEB:
-
-// PEB->NtGlobalFlag
-// 0x70 = FLG_HEAP_ENABLE_TAIL_CHECK | FLG_HEAP_ENABLE_FREE_CHECK
-if (NtGlobalFlag & 0x70) {
-    // Debugger detected!
-}
-
-
-### Hardware Breakpoint Detection
-Check DR0-DR3 registers:
-
-CONTEXT ctx;
-GetThreadContext(GetCurrentThread(), &ctx);
-if (ctx.Dr0 != 0 || ctx.Dr1 != 0 || ctx.Dr2 != 0 || ctx.Dr3 != 0) {
-    // Hardware breakpoints detected!
-}
-
-
-### Debug Object Check (Windows)
-
-HANDLE debug_port;
-NtQueryInformationProcess(GetCurrentProcess(),
-    ProcessDebugPort, &debug_port, sizeof(debug_port), NULL);
-if (debug_port != 0) {
-    // Debugger detected!
-}
-`,
-        codeSnippets: [
+        "id": "sec-43-1",
+        "title": "43.1 Anti-Debugging Techniques",
+        "content": "Anti-debugging detects or prevents debugger attachment to protect software."
+      },
+      {
+        "id": "sec-43-1-1",
+        "title": "43.1.1 Why Anti-Debugging?",
+        "content": "• Protect intellectual property\n• Prevent software piracy\n• Resist reverse engineering\n• Malware evasion (hide from analysts)"
+      },
+      {
+        "id": "sec-43-1-2",
+        "title": "43.1.2 ptrace Detection (Linux)",
+        "content": "The most common technique:",
+        "codeSnippets": [
           {
-            language: 'c',
-            title: 'Anti-Debugging Example',
-            code: `#include <stdio.h>
-#include <stdlib.h>
-#include <sys/ptrace.h>
-#include <unistd.h>
-
-int check_debugger() {
-    // Method 1: ptrace
-    if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) == -1) {
-        return 1;  // Debugger detected
-    }
-    
-    // Method 2: TracerPid
-    FILE *fp = fopen("/proc/self/status", "r");
-    if (fp) {
-        char line[256];
-        while (fgets(line, sizeof(line), fp)) {
-            int tracer_pid;
-            if (sscanf(line, "TracerPid: %d", &tracer_pid) == 1) {
-                if (tracer_pid != 0) {
-                    fclose(fp);
-                    return 1;
-                }
-            }
-        }
-        fclose(fp);
-    }
-    
-    return 0;
-}
-
-int main() {
-    if (check_debugger()) {
-        printf("Debugger detected! Exiting.\\n");
-        exit(1);
-    }
-    
-    printf("No debugger detected.\\n");
-    // Normal program execution
-    return 0;
-}`
+            "title": "ptrace Detection (Linux) — example",
+            "language": "c",
+            "code": "if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) == -1) {\n    // Debugger detected!\n    exit(1);\n}"
           }
         ]
       },
       {
-        id: 'sec-43-2',
-        title: '43.2 Anti-VM and Anti-Sandbox Detection',
-        content: `Malware often checks for virtualization or sandbox environments.
-
-### CPUID Hypervisor Bit
-Check for VM presence:
-
-int is_vm() {
-    int eax, ebx, ecx, edx;
-    __cpuid(1, eax, ebx, ecx, edx);
-    return (ecx >> 31) & 1;  // Hypervisor bit
-}
-
-Hypervisor bit set in VMware, VirtualBox, Hyper-V, etc.
-
-### VM Artifacts
-| VM Type | Detection Artifacts |
-|---------|---------------------|
-| VMware | VMware tools, registry keys, MAC prefix 00:0C:29 |
-| VirtualBox | VBoxGuest, VBoxTray, registry keys |
-| Hyper-V | HvService, VMIC service |
-| QEMU | QEMU Guest Agent |
-
-### Registry Keys (Windows)
-
-// VMware
-HKEY_LOCAL_MACHINE\\SOFTWARE\\VMware, Inc.\\VMware Tools
-
-// VirtualBox
-HKEY_LOCAL_MACHINE\\SOFTWARE\\Oracle\\VirtualBox Guest Additions
-
-// Hyper-V
-HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Virtual Machine\\Guest\\Parameters
-
-
-### File System Artifacts
-
-// Common VM files
-char *vm_files[] = {
-    "/usr/bin/vmtoolsd",           // VMware
-    "/usr/bin/VBoxClient",         // VirtualBox
-    "/mnt/.guestfs",              // Guest additions
-    "/proc/scsi/scsi",           // Virtual SCSI
-    NULL
-};
-
-
-### MAC Address Prefixes
-
-VMware:     00:0C:29, 00:50:56
-VirtualBox: 08:00:27
-Hyper-V:    00:15:5D
-
-
-### Timing-Based Detection
-VMs introduce timing overhead:
-
-uint64_t start = __rdtsc();
-// Execute code
-uint64_t end = __rdtsc();
-uint64_t cycles = end - start;
-if (cycles > THRESHOLD) {
-    // Possible VM or sandbox
-}
-
-
-### Sandbox Detection
-• Check for analysis tools (Wireshark, Process Monitor)
-• Check system uptime (sandboxes restart frequently)
-• Check user interaction (mouse movements)
-• Check network connectivity
-• Check for minimum hardware specs`,
-        codeSnippets: [
+        "id": "sec-43-1-3",
+        "title": "43.1.3 Explanation",
+        "content": "If a debugger is already attached, ptrace fails with EPERM."
+      },
+      {
+        "id": "sec-43-1-4",
+        "title": "43.1.4 TracerPid Check",
+        "content": "Read /proc/self/status for TracerPid:",
+        "codeSnippets": [
           {
-            language: 'c',
-            title: 'VM Detection Example',
-            code: `#include <stdio.h>
-#include <string.h>
-#include <cpuid.h>
-
-int check_vm() {
-    unsigned int eax, ebx, ecx, edx;
-    
-    // Check hypervisor bit
-    __cpuid(1, eax, ebx, ecx, edx);
-    if ((ecx >> 31) & 1) {
-        return 1;  // Hypervisor detected
-    }
-    
-    // Check VMware backdoor
-    __cpuid(0x40000000, eax, ebx, ecx, edx);
-    if (eax == 0x564D5868) {  // "VMXh"
-        return 1;
-    }
-    
-    // Check VirtualBox
-    __cpuid(0x40000000, eax, ebx, ecx, edx);
-    if (eax == 0x564D5868 && ebx == 0x564D5868) {
-        return 1;
-    }
-    
-    return 0;
-}
-
-int check_vm_artifacts() {
-    char *artifacts[] = {
-        "/usr/bin/vmtoolsd",
-        "/usr/bin/VBoxClient",
-        "/mnt/.guestfs",
-        NULL
-    };
-    
-    for (int i = 0; artifacts[i] != NULL; i++) {
-        if (access(artifacts[i], F_OK) == 0) {
-            return 1;
-        }
-    }
-    return 0;
-}`
+            "title": "TracerPid Check — example",
+            "language": "c",
+            "code": "int tracer_pid = 0;\nFILE *fp = fopen(\"/proc/self/status\", \"r\");\nwhile (fgets(line, sizeof(line), fp)) {\n    if (sscanf(line, \"TracerPid: %d\", &tracer_pid) == 1) {\n        if (tracer_pid != 0) {\n            // Debugger detected!\n        }\n    }\n}"
           }
         ]
       },
       {
-        id: 'sec-43-3',
-        title: '43.3 Anti-Disassembly and Obfuscation',
-        content: `Techniques to confuse static analysis tools and human analysts.
-
-### Junk Byte Insertion
-Add meaningless bytes that confuse disassemblers:
-
-jmp .real_code
-db 0xE8          ; Looks like 'call' opcode to linear disassembler
-.real_code:
-    mov rax, 60
-
-
-### Overlapping Instructions
-Create multiple valid disassembly paths:
-
-db 0xEB, 0x01    ; JMP +1 (skips next byte)
-db 0xE8          ; Junk byte
-; Actual code:
-    mov eax, 1
-
-
-### Opaque Predicates
-Branches that always evaluate the same way:
-
-xor eax, eax      ; EAX = 0
-test eax, eax      ; ZF = 1
-jz .always_taken   ; Always taken (dead code below)
-; Dead code (never executed):
-    mov rax, 999
-.always_taken:
-    ; Real code here
-
-
-### Control Flow Flattening
-Transform structured code into state machine:
-
-// Original
-if (a > b) {
-    x = 1;
-} else {
-    x = 2;
-}
-
-// Flattened
-int state = 0;
-while (1) {
-    switch(state) {
-        case 0: state = (a > b) ? 1 : 2; break;
-        case 1: x = 1; state = 3; break;
-        case 2: x = 2; state = 3; break;
-        case 3: goto done;
-    }
-}
-done:
-
-
-### String Encryption
-Encrypt strings and decrypt at runtime:
-
-char encrypted[] = {0x52, 0x45, 0x56, 0x45, 0x4E, 0x53, 0x45}; // XOR with 0x41
-// Decrypted: "REVERSE"
-
-
-### Code Virtualization
-Custom virtual machine to interpret bytecode:
-• Bytecode is not real machine code
-• Requires custom VM to execute
-• Very hard to reverse engineer
-• Used in commercial protectors (Themida, VMProtect)
-
-### Anti-Analysis Tools
-| Tool | Detection Method |
-|------|------------------|
-| IDA Pro | Check for IDA-specific patterns |
-| OllyDbg | Check for OllyDbg window |
-| GDB | ptrace/TracerPid checks |
-| Wireshark | Check for capture driver |
-| Wireshark | Process name check |
-
-### Bypassing Anti-Analysis
-1. Patch checks (NOP out jumps)
-2. Modify return values (set EAX=0)
-3. Use dynamic instrumentation (Frida, DynamoRIO)
-4. Modify analysis environment (remove artifacts)
-5. Use unpackers/deobfuscators`,
-        codeSnippets: [
+        "id": "sec-43-1-5",
+        "title": "43.1.5 Explanation",
+        "content": "TracerPid > 0 means a debugger is attached."
+      },
+      {
+        "id": "sec-43-1-6",
+        "title": "43.1.6 INT 3 / INT 2D (x86)",
+        "content": "Software breakpoint detection:\n• INT 3 (0xCC) is used by debuggers for breakpoints\n• Malware checks for 0xCC in code\n• INT 2D (Windows) causes exception in debugger, skips in normal execution"
+      },
+      {
+        "id": "sec-43-1-7",
+        "title": "43.1.7 IsDebuggerPresent (Windows)",
+        "content": "Windows API check:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'Anti-Disassembly Example',
-            code: `section .text
-    global _start
-
-_start:
-    ; Opaque predicate
-    xor eax, eax        ; EAX = 0
-    test eax, eax        ; ZF = 1
-    jnz .fake_path       ; Never taken
-    
-    ; Real code
-    mov rax, 60
-    xor rdi, rdi
-    syscall
-    
-.fake_path:
-    ; Dead code (never executes)
-    ; Confuses linear disassembly
-    jmp .real_code
-    db 0xE8, 0x12, 0x34, 0x56, 0x78  ; Junk bytes
-    
-.real_code:
-    mov rax, 60
-    xor rdi, rdi
-    syscall`
+            "title": "IsDebuggerPresent (Windows) — example",
+            "language": "c",
+            "code": "if (IsDebuggerPresent()) {\n    // Debugger detected!\n    exit(1);\n}"
           }
         ]
       },
       {
-        id: 'sec-43-4',
-        title: '43.4 Bypassing Anti-Debugging',
-        content: `Analysts use various techniques to overcome anti-debugging.
-
-### GDB Bypass Techniques
-1. **Patch Instructions**: NOP out check instructions
-2. **Modify Registers**: Change return values (set $eax = 0)
-3. **Hardware Breakpoints**: Avoid software breakpoint detection
-4. **Modify Memory**: Change TracerPid in /proc/self/status
-5. **Custom GDB Scripts**: Automate bypass
-
-### Patching Anti-Debugging
-
-# Find check function
-objdump -d binary | grep -A 10 "ptrace"
-
-# Patch with NOP
-printf '\\x90\\x90\\x90\\x90\\x90' | dd of=binary bs=1 seek=OFFSET conv=notrunc
-
-
-### GDB Script for Bypass
-
-# bypass_anti_debug.gdb
-set follow-fork-mode child
-set detach-on-fork off
-
-# Before ptrace check
-b *0x401000
-commands
-    set $eax = 0
-    continue
-end
-
-# Before TracerPid check
-b *0x401050
-commands
-    # Write "TracerPid: 0" to /proc/self/status
-    # (Complex, better to patch binary)
-end
-
-
-### Using Frida for Dynamic Instrumentation
-
-// Frida script to bypass anti-debug
-Interceptor.attach(Module.findExportByName(null, "ptrace"), {
-    onEnter: function(args) {
-        this.is_traceme = (args[0].toInt32() == 0);
-    },
-    onLeave: function(retval) {
-        if (this.is_traceme) {
-            retval.replace(0);  // Fake success
-        }
-    }
-});
-
-
-### Binary Ninja / Radare2 Patching
-
-# Radare2: Patch instruction to NOP
-r2 -w binary
-afl  # List functions
-s 0x401000  # Seek to check
-wa nop      # Write NOP
-q           # Quit
-
-
-### Anti-VM Bypass
-1. Run on bare metal (no VM)
-2. Hide VM artifacts (rename files, modify registry)
-3. Spoof CPUID results
-4. Use VM escape techniques
-5. Modify timing behavior
-
-### Complete Bypass Workflow
-1. Identify anti-debugging checks
-2. Locate check functions in binary
-3. Patch or hook checks
-4. Verify bypass works
-5. Test program functionality`,
-        codeSnippets: [
+        "id": "sec-43-1-8",
+        "title": "43.1.8 NtGlobalFlag (Windows)",
+        "content": "Debug flags in PEB:",
+        "codeSnippets": [
           {
-            language: 'bash',
-            title: 'GDB Bypass Automation',
-            code: `#!/bin/bash
-# bypass_debug.sh - Automated anti-debug bypass
-
-BINARY=$1
-
-# Create GDB script
-cat > bypass.gdb << 'EOF'
-set pagination off
-set confirm off
-
-# Find and patch ptrace check
-# (Adjust addresses for your binary)
-b *0x401000
-commands
-    silent
-    set $eax = 0
-    continue
-end
-
-# Find and patch TracerPid check
-b *0x401050
-commands
-    silent
-    # Skip the check
-    set $rip = 0x401080
-    continue
-end
-
-# Run
-run
-EOF
-
-# Run GDB with script
-gdb -x bypass.gdb $BINARY`
+            "title": "NtGlobalFlag (Windows) — example",
+            "language": "c",
+            "code": "// PEB->NtGlobalFlag\n// 0x70 = FLG_HEAP_ENABLE_TAIL_CHECK | FLG_HEAP_ENABLE_FREE_CHECK\nif (NtGlobalFlag & 0x70) {\n    // Debugger detected!\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-1-9",
+        "title": "43.1.9 Hardware Breakpoint Detection",
+        "content": "Check DR0-DR3 registers:",
+        "codeSnippets": [
+          {
+            "title": "Hardware Breakpoint Detection — example",
+            "language": "c",
+            "code": "CONTEXT ctx;\nGetThreadContext(GetCurrentThread(), &ctx);\nif (ctx.Dr0 != 0 || ctx.Dr1 != 0 || ctx.Dr2 != 0 || ctx.Dr3 != 0) {\n    // Hardware breakpoints detected!\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-1-10",
+        "title": "43.1.10 Debug Object Check (Windows)",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Debug Object Check (Windows) — example",
+            "language": "c",
+            "code": "HANDLE debug_port;\nNtQueryInformationProcess(GetCurrentProcess(),\n    ProcessDebugPort, &debug_port, sizeof(debug_port), NULL);\nif (debug_port != 0) {\n    // Debugger detected!\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-1-11",
+        "title": "43.1.11 Code examples",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "Anti-Debugging Example",
+            "code": "#include <stdio.h>\n#include <stdlib.h>\n#include <sys/ptrace.h>\n#include <unistd.h>\n\nint check_debugger() {\n    // Method 1: ptrace\n    if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) == -1) {\n        return 1;  // Debugger detected\n    }\n    \n    // Method 2: TracerPid\n    FILE *fp = fopen(\"/proc/self/status\", \"r\");\n    if (fp) {\n        char line[256];\n        while (fgets(line, sizeof(line), fp)) {\n            int tracer_pid;\n            if (sscanf(line, \"TracerPid: %d\", &tracer_pid) == 1) {\n                if (tracer_pid != 0) {\n                    fclose(fp);\n                    return 1;\n                }\n            }\n        }\n        fclose(fp);\n    }\n    \n    return 0;\n}\n\nint main() {\n    if (check_debugger()) {\n        printf(\"Debugger detected! Exiting.\\n\");\n        exit(1);\n    }\n    \n    printf(\"No debugger detected.\\n\");\n    // Normal program execution\n    return 0;\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-2",
+        "title": "43.2 Anti-VM and Anti-Sandbox Detection",
+        "content": "Malware often checks for virtualization or sandbox environments."
+      },
+      {
+        "id": "sec-43-2-1",
+        "title": "43.2.1 CPUID Hypervisor Bit",
+        "content": "Check for VM presence:",
+        "codeSnippets": [
+          {
+            "title": "CPUID Hypervisor Bit — example",
+            "language": "nasm",
+            "code": "int is_vm() {\n    int eax, ebx, ecx, edx;\n    __cpuid(1, eax, ebx, ecx, edx);\n    return (ecx >> 31) & 1;  // Hypervisor bit\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-2-2",
+        "title": "43.2.2 Explanation",
+        "content": "Hypervisor bit set in VMware, VirtualBox, Hyper-V, etc."
+      },
+      {
+        "id": "sec-43-2-3",
+        "title": "43.2.3 VM Artifacts",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "VM Type",
+            "Detection Artifacts"
+          ],
+          "rows": [
+            [
+              "VMware",
+              "VMware tools, registry keys, MAC prefix 00:0C:29"
+            ],
+            [
+              "VirtualBox",
+              "VBoxGuest, VBoxTray, registry keys"
+            ],
+            [
+              "Hyper-V",
+              "HvService, VMIC service"
+            ],
+            [
+              "QEMU",
+              "QEMU Guest Agent"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-43-2-4",
+        "title": "43.2.4 Registry Keys (Windows)",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Registry Keys (Windows) — example",
+            "language": "nasm",
+            "code": "// VMware\nHKEY_LOCAL_MACHINE\\SOFTWARE\\VMware, Inc.\\VMware Tools\n\n// VirtualBox\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Oracle\\VirtualBox Guest Additions\n\n// Hyper-V\nHKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Virtual Machine\\Guest\\Parameters"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-2-5",
+        "title": "43.2.5 File System Artifacts",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "File System Artifacts — example",
+            "language": "c",
+            "code": "// Common VM files\nchar *vm_files[] = {\n    \"/usr/bin/vmtoolsd\",           // VMware\n    \"/usr/bin/VBoxClient\",         // VirtualBox\n    \"/mnt/.guestfs\",              // Guest additions\n    \"/proc/scsi/scsi\",           // Virtual SCSI\n    NULL\n};"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-2-6",
+        "title": "43.2.6 MAC Address Prefixes",
+        "content": "VMware:     00:0C:29, 00:50:56\nVirtualBox: 08:00:27\nHyper-V:    00:15:5D"
+      },
+      {
+        "id": "sec-43-2-7",
+        "title": "43.2.7 Timing-Based Detection",
+        "content": "VMs introduce timing overhead:",
+        "codeSnippets": [
+          {
+            "title": "Timing-Based Detection — example",
+            "language": "c",
+            "code": "uint64_t start = __rdtsc();\n// Execute code\nuint64_t end = __rdtsc();\nuint64_t cycles = end - start;\nif (cycles > THRESHOLD) {\n    // Possible VM or sandbox\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-2-8",
+        "title": "43.2.8 Sandbox Detection",
+        "content": "• Check for analysis tools (Wireshark, Process Monitor)\n• Check system uptime (sandboxes restart frequently)\n• Check user interaction (mouse movements)\n• Check network connectivity\n• Check for minimum hardware specs"
+      },
+      {
+        "id": "sec-43-2-9",
+        "title": "43.2.9 Code examples",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "c",
+            "title": "VM Detection Example",
+            "code": "#include <stdio.h>\n#include <string.h>\n#include <cpuid.h>\n\nint check_vm() {\n    unsigned int eax, ebx, ecx, edx;\n    \n    // Check hypervisor bit\n    __cpuid(1, eax, ebx, ecx, edx);\n    if ((ecx >> 31) & 1) {\n        return 1;  // Hypervisor detected\n    }\n    \n    // Check VMware backdoor\n    __cpuid(0x40000000, eax, ebx, ecx, edx);\n    if (eax == 0x564D5868) {  // \"VMXh\"\n        return 1;\n    }\n    \n    // Check VirtualBox\n    __cpuid(0x40000000, eax, ebx, ecx, edx);\n    if (eax == 0x564D5868 && ebx == 0x564D5868) {\n        return 1;\n    }\n    \n    return 0;\n}\n\nint check_vm_artifacts() {\n    char *artifacts[] = {\n        \"/usr/bin/vmtoolsd\",\n        \"/usr/bin/VBoxClient\",\n        \"/mnt/.guestfs\",\n        NULL\n    };\n    \n    for (int i = 0; artifacts[i] != NULL; i++) {\n        if (access(artifacts[i], F_OK) == 0) {\n            return 1;\n        }\n    }\n    return 0;\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-3",
+        "title": "43.3 Anti-Disassembly and Obfuscation",
+        "content": "Techniques to confuse static analysis tools and human analysts."
+      },
+      {
+        "id": "sec-43-3-1",
+        "title": "43.3.1 Junk Byte Insertion",
+        "content": "Add meaningless bytes that confuse disassemblers:",
+        "codeSnippets": [
+          {
+            "title": "Junk Byte Insertion — example",
+            "language": "nasm",
+            "code": "jmp .real_code\ndb 0xE8          ; Looks like 'call' opcode to linear disassembler\n.real_code:\n    mov rax, 60"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-3-2",
+        "title": "43.3.2 Overlapping Instructions",
+        "content": "Create multiple valid disassembly paths:",
+        "codeSnippets": [
+          {
+            "title": "Overlapping Instructions — example",
+            "language": "nasm",
+            "code": "db 0xEB, 0x01    ; JMP +1 (skips next byte)\ndb 0xE8          ; Junk byte\n; Actual code:\n    mov eax, 1"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-3-3",
+        "title": "43.3.3 Opaque Predicates",
+        "content": "Branches that always evaluate the same way:",
+        "codeSnippets": [
+          {
+            "title": "Opaque Predicates — example",
+            "language": "nasm",
+            "code": "xor eax, eax      ; EAX = 0\ntest eax, eax      ; ZF = 1\njz .always_taken   ; Always taken (dead code below)\n; Dead code (never executed):\n    mov rax, 999\n.always_taken:\n    ; Real code here"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-3-4",
+        "title": "43.3.4 Control Flow Flattening",
+        "content": "Transform structured code into state machine:",
+        "codeSnippets": [
+          {
+            "title": "Control Flow Flattening — example",
+            "language": "c",
+            "code": "// Original\nif (a > b) {\n    x = 1;\n} else {\n    x = 2;\n}"
+          },
+          {
+            "title": "Control Flow Flattening — example",
+            "language": "nasm",
+            "code": "// Flattened\nint state = 0;\nwhile (1) {\n    switch(state) {\n        case 0: state = (a > b) ? 1 : 2; break;\n        case 1: x = 1; state = 3; break;\n        case 2: x = 2; state = 3; break;\n        case 3: goto done;\n    }\n}\ndone:"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-3-5",
+        "title": "43.3.5 String Encryption",
+        "content": "Encrypt strings and decrypt at runtime:\n\nchar encrypted[] = {0x52, 0x45, 0x56, 0x45, 0x4E, 0x53, 0x45}; // XOR with 0x41",
+        "codeSnippets": [
+          {
+            "title": "String Encryption — example",
+            "language": "nasm",
+            "code": "// Decrypted: \"REVERSE\""
+          }
+        ]
+      },
+      {
+        "id": "sec-43-3-6",
+        "title": "43.3.6 Code Virtualization",
+        "content": "Custom virtual machine to interpret bytecode:\n• Bytecode is not real machine code\n• Requires custom VM to execute\n• Very hard to reverse engineer\n• Used in commercial protectors (Themida, VMProtect)"
+      },
+      {
+        "id": "sec-43-3-7",
+        "title": "43.3.7 Anti-Analysis Tools",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Tool",
+            "Detection Method"
+          ],
+          "rows": [
+            [
+              "IDA Pro",
+              "Check for IDA-specific patterns"
+            ],
+            [
+              "OllyDbg",
+              "Check for OllyDbg window"
+            ],
+            [
+              "GDB",
+              "ptrace/TracerPid checks"
+            ],
+            [
+              "Wireshark",
+              "Check for capture driver"
+            ],
+            [
+              "Wireshark",
+              "Process name check"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-43-3-8",
+        "title": "43.3.8 Bypassing Anti-Analysis",
+        "content": "1. Patch checks (NOP out jumps)\n2. Modify return values (set EAX=0)\n3. Use dynamic instrumentation (Frida, DynamoRIO)\n4. Modify analysis environment (remove artifacts)\n5. Use unpackers/deobfuscators"
+      },
+      {
+        "id": "sec-43-3-9",
+        "title": "43.3.9 Code examples",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Anti-Disassembly Example",
+            "code": "section .text\n    global _start\n\n_start:\n    ; Opaque predicate\n    xor eax, eax        ; EAX = 0\n    test eax, eax        ; ZF = 1\n    jnz .fake_path       ; Never taken\n    \n    ; Real code\n    mov rax, 60\n    xor rdi, rdi\n    syscall\n    \n.fake_path:\n    ; Dead code (never executes)\n    ; Confuses linear disassembly\n    jmp .real_code\n    db 0xE8, 0x12, 0x34, 0x56, 0x78  ; Junk bytes\n    \n.real_code:\n    mov rax, 60\n    xor rdi, rdi\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-4",
+        "title": "43.4 Bypassing Anti-Debugging",
+        "content": "Analysts use various techniques to overcome anti-debugging."
+      },
+      {
+        "id": "sec-43-4-1",
+        "title": "43.4.1 GDB Bypass Techniques",
+        "content": "1. Patch Instructions: NOP out check instructions\n2. Modify Registers: Change return values (set $eax = 0)\n3. Hardware Breakpoints: Avoid software breakpoint detection\n4. Modify Memory: Change TracerPid in /proc/self/status\n5. Custom GDB Scripts: Automate bypass"
+      },
+      {
+        "id": "sec-43-4-2",
+        "title": "43.4.2 Patching Anti-Debugging",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Patching Anti-Debugging — example",
+            "language": "nasm",
+            "code": "# Find check function\nobjdump -d binary | grep -A 10 \"ptrace\"\n\n# Patch with NOP\nprintf '\\x90\\x90\\x90\\x90\\x90' | dd of=binary bs=1 seek=OFFSET conv=notrunc"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-4-3",
+        "title": "43.4.3 GDB Script for Bypass",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "GDB Script for Bypass — example",
+            "language": "bash",
+            "code": "# bypass_anti_debug.gdb\nset follow-fork-mode child\nset detach-on-fork off"
+          },
+          {
+            "title": "GDB Script for Bypass — example",
+            "language": "nasm",
+            "code": "# Before ptrace check\nb *0x401000\ncommands\n    set $eax = 0\n    continue\nend\n\n# Before TracerPid check\nb *0x401050\ncommands\n    # Write \"TracerPid: 0\" to /proc/self/status\n    # (Complex, better to patch binary)\nend"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-4-4",
+        "title": "43.4.4 Using Frida for Dynamic Instrumentation",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Using Frida for Dynamic Instrumentation — example",
+            "language": "c",
+            "code": "// Frida script to bypass anti-debug\nInterceptor.attach(Module.findExportByName(null, \"ptrace\"), {\n    onEnter: function(args) {\n        this.is_traceme = (args[0].toInt32() == 0);\n    },\n    onLeave: function(retval) {\n        if (this.is_traceme) {\n            retval.replace(0);  // Fake success\n        }\n    }\n});"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-4-5",
+        "title": "43.4.5 Binary Ninja / Radare2 Patching",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Binary Ninja / Radare2 Patching — example",
+            "language": "nasm",
+            "code": "# Radare2: Patch instruction to NOP\nr2 -w binary\nafl  # List functions\ns 0x401000  # Seek to check\nwa nop      # Write NOP\nq           # Quit"
+          }
+        ]
+      },
+      {
+        "id": "sec-43-4-6",
+        "title": "43.4.6 Anti-VM Bypass",
+        "content": "1. Run on bare metal (no VM)\n2. Hide VM artifacts (rename files, modify registry)\n3. Spoof CPUID results\n4. Use VM escape techniques\n5. Modify timing behavior"
+      },
+      {
+        "id": "sec-43-4-7",
+        "title": "43.4.7 Complete Bypass Workflow",
+        "content": "1. Identify anti-debugging checks\n2. Locate check functions in binary\n3. Patch or hook checks\n4. Verify bypass works\n5. Test program functionality"
+      },
+      {
+        "id": "sec-43-4-8",
+        "title": "43.4.8 Code examples",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "bash",
+            "title": "GDB Bypass Automation",
+            "code": "#!/bin/bash\n# bypass_debug.sh - Automated anti-debug bypass\n\nBINARY=$1\n\n# Create GDB script\ncat > bypass.gdb << 'EOF'\nset pagination off\nset confirm off\n\n# Find and patch ptrace check\n# (Adjust addresses for your binary)\nb *0x401000\ncommands\n    silent\n    set $eax = 0\n    continue\nend\n\n# Find and patch TracerPid check\nb *0x401050\ncommands\n    silent\n    # Skip the check\n    set $rip = 0x401080\n    continue\nend\n\n# Run\nrun\nEOF\n\n# Run GDB with script\ngdb -x bypass.gdb $BINARY"
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-43-1',
-        title: 'Exercise 43.1: Bypass ptrace Check in GDB',
-        description: 'Bypass a ptrace check by setting rax=0 or patching the conditional branch.',
-        solution: 'In GDB: break _start -> stepi past syscall -> set $rax = 0 -> continue. Or patch the js branch to nop nop.'
+        "id": "ex-43-1",
+        "title": "Exercise 43.1: Bypass ptrace Check in GDB",
+        "description": "Bypass a ptrace check by setting rax=0 or patching the conditional branch.",
+        "solution": "In GDB: break _start -> stepi past syscall -> set $rax = 0 -> continue. Or patch the js branch to nop nop."
       },
       {
-        id: 'ex-43-2',
-        title: 'Exercise 43.2: VM Detection',
-        description: 'Write a program that detects if running in a VMware virtual machine.',
-        solution: 'Check CPUID hypervisor bit (ecx bit 31). Check for VMware MAC prefix (00:0C:29). Check for VMware tools installation. Check registry keys on Windows.'
+        "id": "ex-43-2",
+        "title": "Exercise 43.2: VM Detection",
+        "description": "Write a program that detects if running in a VMware virtual machine.",
+        "solution": "Check CPUID hypervisor bit (ecx bit 31). Check for VMware MAC prefix (00:0C:29). Check for VMware tools installation. Check registry keys on Windows."
       },
       {
-        id: 'ex-43-3',
-        title: 'Exercise 43.3: Anti-Disassembly Bypass',
-        description: 'Identify and bypass a junk byte anti-disassembly technique.',
-        solution: 'Find jmp over junk bytes, patch jmp to nop or modify disassembler to skip junk bytes. Use IDA Pro or Binary Ninja with manual analysis to trace actual execution path.'
+        "id": "ex-43-3",
+        "title": "Exercise 43.3: Anti-Disassembly Bypass",
+        "description": "Identify and bypass a junk byte anti-disassembly technique.",
+        "solution": "Find jmp over junk bytes, patch jmp to nop or modify disassembler to skip junk bytes. Use IDA Pro or Binary Ninja with manual analysis to trace actual execution path."
       },
       {
-        id: 'ex-43-4',
-        title: 'Exercise 43.4: Timing Check Bypass',
-        description: 'Explain how to bypass timing-based anti-debugging.',
-        solution: 'Modify rdtsc/cpuid cycle count by: (1) Patching timing checks, (2) Using hardware performance counters, (3) Running in VM with constant TSC, (4) Hooking timing functions to return consistent values.'
+        "id": "ex-43-4",
+        "title": "Exercise 43.4: Timing Check Bypass",
+        "description": "Explain how to bypass timing-based anti-debugging.",
+        "solution": "Modify rdtsc/cpuid cycle count by: (1) Patching timing checks, (2) Using hardware performance counters, (3) Running in VM with constant TSC, (4) Hooking timing functions to return consistent values."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'How do timing checks detect debugger presence?',
-        answer: 'Human-driven breakpoints and single-stepping take millions of clock cycles compared to bare CPU execution. Instructions like rdtsc measure cycles elapsed across a code block; an abnormally high difference signals active debugging. Debuggers introduce significant overhead that timing checks can detect.'
+        "question": "How do timing checks detect debugger presence?",
+        "answer": "Human-driven breakpoints and single-stepping take millions of clock cycles compared to bare CPU execution. Instructions like rdtsc measure cycles elapsed across a code block; an abnormally high difference signals active debugging. Debuggers introduce significant overhead that timing checks can detect."
       },
       {
-        question: 'What is ptrace and how does it detect debuggers?',
-        answer: 'ptrace is the Linux debugging API used by debuggers like GDB. When a program calls ptrace(PTRACE_TRACEME), it allows debugging. If a debugger is already attached, ptrace fails with EPERM. Malware uses this to detect debuggers by checking if ptrace(PTRACE_TRACEME) fails.'
+        "question": "What is ptrace and how does it detect debuggers?",
+        "answer": "ptrace is the Linux debugging API used by debuggers like GDB. When a program calls ptrace(PTRACE_TRACEME), it allows debugging. If a debugger is already attached, ptrace fails with EPERM. Malware uses this to detect debuggers by checking if ptrace(PTRACE_TRACEME) fails."
       },
       {
-        question: 'How do opaque predicates confuse disassemblers?',
-        answer: 'Opaque predicates are branches that always evaluate the same way (always true or always false) but are not obvious to static analysis. They create dead code paths that confuse disassemblers, making control flow analysis difficult. The analyst must determine which paths are actually taken.'
+        "question": "How do opaque predicates confuse disassemblers?",
+        "answer": "Opaque predicates are branches that always evaluate the same way (always true or always false) but are not obvious to static analysis. They create dead code paths that confuse disassemblers, making control flow analysis difficult. The analyst must determine which paths are actually taken."
       },
       {
-        question: 'What are common VM detection techniques?',
-        answer: 'Common techniques include: CPUID hypervisor bit check, MAC address prefix detection (VMware: 00:0C:29), checking for VM tools (vmtoolsd, VBoxClient), examining registry keys, timing analysis (VMs have overhead), and checking for VM-specific hardware devices.'
+        "question": "What are common VM detection techniques?",
+        "answer": "Common techniques include: CPUID hypervisor bit check, MAC address prefix detection (VMware: 00:0C:29), checking for VM tools (vmtoolsd, VBoxClient), examining registry keys, timing analysis (VMs have overhead), and checking for VM-specific hardware devices."
       },
       {
-        question: 'How can anti-disassembly be bypassed?',
-        answer: 'Bypass techniques include: (1) Manual analysis to trace actual execution path, (2) Patching junk bytes or overlapping instructions, (3) Using advanced disassemblers (IDA Pro) with manual analysis, (4) Dynamic analysis with debuggers to follow actual control flow, (5) Using deobfuscation tools.'
+        "question": "How can anti-disassembly be bypassed?",
+        "answer": "Bypass techniques include: (1) Manual analysis to trace actual execution path, (2) Patching junk bytes or overlapping instructions, (3) Using advanced disassemblers (IDA Pro) with manual analysis, (4) Dynamic analysis with debuggers to follow actual control flow, (5) Using deobfuscation tools."
       },
       {
-        question: 'What is code virtualization and why is it used?',
-        answer: 'Code virtualization transforms code into custom bytecode executed by a virtual machine. It is used in commercial software protection (Themida, VMProtect) because the bytecode is not standard machine code, making reverse engineering extremely difficult. Analysts must understand the custom VM to analyze the code.'
+        "question": "What is code virtualization and why is it used?",
+        "answer": "Code virtualization transforms code into custom bytecode executed by a virtual machine. It is used in commercial software protection (Themida, VMProtect) because the bytecode is not standard machine code, making reverse engineering extremely difficult. Analysts must understand the custom VM to analyze the code."
       }
     ],
-    summary: [
-      'Anti-debugging detects or prevents debugger attachment.',
-      'ptrace and TracerPid are common Linux debugging detection methods.',
-      'Anti-VM detects virtualization environments via artifacts and timing.',
-      'Anti-disassembly uses junk bytes and overlapping instructions.',
-      'Opaque predicates create dead code paths to confuse analysis.',
-      'Bypassing requires patching, hooking, or dynamic instrumentation.',
-      'Anti-analysis is essential for software protection and malware evasion.',
-      'Understanding anti-analysis helps both defenders and attackers.'
+    "summary": [
+      "Anti-debugging detects or prevents debugger attachment.",
+      "ptrace and TracerPid are common Linux debugging detection methods.",
+      "Anti-VM detects virtualization environments via artifacts and timing.",
+      "Anti-disassembly uses junk bytes and overlapping instructions.",
+      "Opaque predicates create dead code paths to confuse analysis.",
+      "Bypassing requires patching, hooking, or dynamic instrumentation.",
+      "Anti-analysis is essential for software protection and malware evasion.",
+      "Understanding anti-analysis helps both defenders and attackers."
     ]
   },
   {
