@@ -20,7 +20,7 @@ export interface Exercise {
   description: string;
   hints?: string;
   solution: string;
-  solutionLanguage?: 'nasm' | 'c' | 'bash' | 'gdb' | 'python' | 'make' | 'arm' | 'riscv' | 'mips';
+  solutionLanguage?: 'text' | 'nasm' | 'c' | 'bash' | 'gdb' | 'python' | 'make' | 'arm' | 'riscv' | 'mips';
   solutionExplanation?: string;
 }
 
