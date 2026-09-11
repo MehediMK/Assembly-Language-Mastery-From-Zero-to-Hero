@@ -113,7 +113,7 @@ _start:
         content: `ARM64 uses fixed-length 32-bit instructions with 3-operand format.
 
 ### Data Processing Instructions
-```arm
+
 // Arithmetic
 add x0, x1, x2        // x0 = x1 + x2
 sub x0, x1, x2        // x0 = x1 - x2
@@ -132,10 +132,10 @@ asr x0, x1, #3        // x0 = x1 >> 3 (arithmetic)
 // Multiply
 mul x0, x1, x2        // x0 = x1 * x2
 madd x0, x1, x2, x3   // x0 = x1 * x2 + x3
-```
+
 
 ### Load/Store Instructions
-```arm
+
 // Basic load/store
 ldr x0, [x1]          // Load 64-bit from [x1]
 ldr w0, [x1]          // Load 32-bit from [x1]
@@ -158,10 +158,10 @@ ldr x0, [x1], #8      // Load, then x1 = x1 + 8
 // Pair load/store (efficient)
 ldp x0, x1, [sp]      // Load x0 from [sp], x1 from [sp+8]
 stp x0, x1, [sp, #-16]!  // sp = sp-16, store x0, x1
-```
+
 
 ### Branch Instructions
-```arm
+
 // Unconditional
 b label               // Branch to label
 bl label              // Branch with link (call)
@@ -178,11 +178,11 @@ b.ge label            // Branch if greater or equal
 
 // Return
 ret                   // Return (branch to x30/LR)
-```
+
 
 ### Conditional Select (CSEL)
 Branchless conditional assignments:
-```arm
+
 // max(x0, x1) -> x0
 cmp x0, x1
 csel x0, x0, x1, ge  // if x0 >= x1, x0 = x0; else x0 = x1
@@ -195,10 +195,10 @@ csel x0, x0, x1, le  // if x0 <= x1, x0 = x0; else x0 = x1
 cmp x0, #0
 csel x0, x0, x0, ge  // if x0 >= 0, keep; else negate
 cneg x0, x0, lt      // Conditional negate
-```
+
 
 ### Bit Manipulation
-```arm
+
 // Count leading zeros
 clz x0, x1           // x0 = number of leading zeros in x1
 
@@ -208,7 +208,7 @@ bfi x0, x1, #0, #8   // Insert bits [7:0] of x1 into x0
 // Reverse bits
 rbit x0, x1          // Reverse all bits in x1
 rev x0, x1           // Reverse bytes (endian swap)
-````,
+`,
         codeSnippets: [
           {
             language: 'arm',
@@ -298,7 +298,7 @@ data:
 | 220 | getpid | None |
 
 ### Function Call Convention (AAPCS64)
-```arm
+
 // Caller-saved (temporary) registers
 // X0-X7: Arguments/return values
 // X9-X15: Temporary
@@ -309,10 +309,10 @@ data:
 // Stack frame
 // X29 (FP): Frame pointer
 // X30 (LR): Return address
-```
+
 
 ### Function Prologue/Epilogue
-```arm
+
 // Prologue
 func:
     stp x29, x30, [sp, #-16]!  // Save FP and LR
@@ -325,10 +325,10 @@ func:
     ldp x19, x20, [sp], #16    // Restore callee-saved regs
     ldp x29, x30, [sp], #16    // Restore FP and LR
     ret                         // Return
-```
+
 
 ### Structure Passing
-```arm
+
 // Small structures: passed in registers
 // Large structures: passed by pointer
 
@@ -346,16 +346,16 @@ struct ret_large() {
     return result;
 }
 // X8 = pointer to result
-```
+
 
 ### Stack Alignment
 ARM64 requires 16-byte stack alignment:
-```arm
+
 // Allocate stack frame (must be multiple of 16)
 sub sp, sp, #32     // 32 is multiple of 16
 // ... use stack ...
 add sp, sp, #32     // Restore stack
-````,
+`,
         codeSnippets: [
           {
             language: 'arm',
@@ -443,13 +443,13 @@ buf:
 | Return | RAX | X0 |
 
 ### Code Density Example
-x86-64: `add rax, [rbx+rcx*8+16]` (4 bytes)
+x86-64: add rax, [rbx+rcx*8+16] (4 bytes)
 ARM64:
-```arm
+
 add x9, x1, x2, LSL #3    // x9 = x2 * 8
 ldr x0, [x9, #16]          // Load from x9 + 16
 // 8 bytes total
-```
+
 
 ### When to Use Which?
 | Use Case | Recommended |
@@ -681,7 +681,7 @@ _start:
 | J-type | Jump | imm[31] imm[19:12] imm[20] imm[30:21] rd[11:7] opcode[6:0] |
 
 ### Arithmetic Instructions
-```riscv
+riscv
 # Integer register-register (R-type)
 add  x1, x2, x3      # x1 = x2 + x3
 sub  x1, x2, x3      # x1 = x2 - x3
@@ -710,10 +710,10 @@ div    x1, x2, x3    # x1 = x2 / x3 (signed)
 divu   x1, x2, x3    # x1 = x2 / x3 (unsigned)
 rem    x1, x2, x3    # x1 = x2 % x3 (signed)
 remu   x1, x2, x3    # x1 = x2 % x3 (unsigned)
-```
+
 
 ### Load/Store Instructions
-```riscv
+riscv
 # Load (I-type)
 lb   x1, 0(x2)       # Load byte (sign-extended)
 lbu  x1, 0(x2)       # Load byte unsigned (zero-extended)
@@ -731,10 +731,10 @@ sd   x1, 0(x2)       # Store doubleword
 # Example: Load/Store with offset
 lw   x5, 8(x1)       # Load word from x1+8
 sw   x5, 12(x1)      # Store word to x1+12
-```
+
 
 ### Branch Instructions (B-type)
-```riscv
+riscv
 # No condition codes! Compare registers directly.
 beq  x1, x2, label   # Branch if x1 == x2
 bne  x1, x2, label   # Branch if x1 != x2
@@ -750,10 +750,10 @@ blez x1, label       # Branch if x1 <= 0
 bgez x1, label       # Branch if x1 >= 0
 bltz x1, label       # Branch if x1 < 0
 bgtz x1, label       # Branch if x1 > 0
-```
+
 
 ### Jump Instructions
-```riscv
+riscv
 # Jump and Link (J-type)
 jal  x1, label       # x1 = PC+4, jump to label (call)
 
@@ -768,17 +768,17 @@ ret                  # jalr x0, x1, 0 (return = jump to ra)
 # Example: Function call
 call func            # jal x1, func (link in x1)
 ret                  # jalr x0, x1, 0 (return to caller)
-```
+
 
 ### Upper Immediate (U-type)
-```riscv
+riscv
 lui  x1, 0x12345     # x1 = 0x12345000 (load upper 20 bits)
 auipc x1, 0x12345    # x1 = PC + 0x12345000
 
 # Common pattern for 32-bit immediate:
 lui  x1, upper20     # Load upper 20 bits
 addi x1, x1, lower12 # Add lower 12 bits
-````,
+`,
         codeSnippets: [
           {
             language: 'riscv',
@@ -861,7 +861,7 @@ data:
 | 57 | close | a0=fd |
 
 ### Function Call Convention (RISC-V)
-```riscv
+riscv
 # Caller-saved (temporary) registers
 # t0-t6 (x5-x7, x28-x31): Not preserved
 
@@ -876,10 +876,10 @@ data:
 # sp (x2): Stack pointer
 # gp (x3): Global pointer
 # tp (x4): Thread pointer
-```
+
 
 ### Function Prologue/Epilogue
-```riscv
+riscv
 # Prologue
 func:
     addi sp, sp, -32    # Allocate stack frame
@@ -896,20 +896,20 @@ func:
     ld   ra, 24(sp)     # Restore return address
     addi sp, sp, 32     # Deallocate stack frame
     ret                 # Return (jump to ra)
-```
+
 
 ### Tail Call Optimization
-```riscv
+riscv
 # Tail call: reuse caller's stack frame
 tail_call:
     ld   t0, 0(s0)      # Load function pointer
     ld   a0, 8(s0)      # Load argument
     jr   t0             # Jump to function (no return)
     # No stack frame setup needed
-```
+
 
 ### Structure Passing
-```riscv
+riscv
 # Small structures: passed in registers
 # Large structures: passed by pointer
 
@@ -926,16 +926,16 @@ ret_large:
     sd t1, 0(t0)
     mv a0, t0
     ret
-```
+
 
 ### Stack Alignment
 RISC-V requires 16-byte stack alignment:
-```riscv
+riscv
 # Allocate stack frame (must be multiple of 16)
 addi sp, sp, -32     # 32 is multiple of 16
 # ... use stack ...
 addi sp, sp, 32      # Restore stack
-````,
+`,
         codeSnippets: [
           {
             language: 'riscv',
@@ -1109,7 +1109,7 @@ buf:
 5. **WB**: Write Back
 
 ### Branch Delay Slot Trade-off
-```mips
+mips
 # Branch delay slot: instruction AFTER branch executes
 beq $a0, $a1, target
 nop                  # Delay slot (often nop)
@@ -1117,7 +1117,7 @@ nop                  # Delay slot (often nop)
 # Or use useful instruction:
 beq $a0, $a1, target
 add $v0, $a0, $a1   # Delay slot (useful work)
-```
+
 
 ### Why Delay Slots Exist
 In early pipelined processors, by the time the branch condition was evaluated, the next instruction had already been fetched. Instead of flushing the pipeline, MIPS architecturally executes the delay slot instruction.
@@ -1167,7 +1167,7 @@ _start:
 | J-type | Jump | op[31:26] addr[25:0] |
 
 ### Arithmetic Instructions
-```mips
+mips
 # Register-register (R-type)
 add  $t0, $t1, $t2    # $t0 = $t1 + $t2 (trap on overflow)
 addu $t0, $t1, $t2    # $t0 = $t1 + $t2 (no trap)
@@ -1194,10 +1194,10 @@ div  $t0, $t1          # LO = $t0 / $t1, HI = $t0 % $t1
 divu $t0, $t1          # LO = $t0 / $t1, HI = $t0 % $t1 (unsigned)
 mfhi $t0               # Move from HI
 mflo $t0               # Move from LO
-```
+
 
 ### Load/Store Instructions
-```mips
+mips
 # Load (I-type)
 lb   $t0, 0($t1)      # Load byte (sign-extended)
 lbu  $t0, 0($t1)      # Load byte unsigned
@@ -1217,10 +1217,10 @@ swr  $t0, 0($t1)      # Store word right
 # Example: Load/Store with offset
 lw   $t0, 8($sp)      # Load word from sp+8
 sw   $t0, 12($sp)     # Store word to sp+12
-```
+
 
 ### Branch Instructions (I-type)
-```mips
+mips
 # Branch on condition
 beq  $t0, $t1, label  # Branch if $t0 == $t1
 bne  $t0, $t1, label  # Branch if $t0 != $t1
@@ -1240,10 +1240,10 @@ beqz $t0, label       # Branch if $t0 == 0
 bnez $t0, label       # Branch if $t0 != 0
 blt  $t0, $t1, label  # Branch if $t0 < $t1 (pseudo)
 bge  $t0, $t1, label  # Branch if $t0 >= $t1 (pseudo)
-```
+
 
 ### Delay Slot Handling
-```mips
+mips
 # Bad: Delay slot contains instruction that affects branch
 add $t0, $t1, $t2
 beq $t0, $zero, target
@@ -1256,7 +1256,7 @@ add $v0, $a0, $a1   # Delay slot does useful work
 # Or use nop (assembler fills delay slot)
 beq $a0, $a1, target
 nop                  # Safe but wastes cycle
-````,
+`,
         codeSnippets: [
           {
             language: 'mips',
@@ -1326,12 +1326,12 @@ data:
 • Used in: Sun/Oracle servers, embedded systems
 • Features: Delay slots, condition codes (ICC, XCC)
 
-```sparc
+sparc
 # SPARC register window example
 save %sp, -96, %sp    # Create new register window
 ...                    # Function body
 restore               # Restore previous window
-```
+
 
 ### PowerPC
 • Big-endian by default (configurable)
@@ -1339,35 +1339,35 @@ restore               # Restore previous window
 • Used in: Game consoles (Wii, Xbox 360), embedded
 • Features: Link register, count register
 
-```powerpc
+powerpc
 # PowerPC example
 add r3, r4, r5        # r3 = r4 + r5
 bctrl                 # Branch to count register (call)
 mflr r0               # Move from link register
-```
+
 
 ### AVR (8-bit Microcontrollers)
 • Harvard architecture (separate program/data)
 • Used in: Arduino, embedded systems
 • Features: Limited registers (R0-R31), I/O ports
 
-```avr
+avr
 ; AVR assembly example
 ldi r16, 42           ; Load immediate
 out PORTB, r16        ; Output to port
 in r17, PINB          ; Input from port
-```
+
 
 ### MSP430 (16-bit Ultra-Low-Power)
 • RISC architecture for ultra-low power
 • Used in: TI LaunchPad, sensors
 • Features: 16 registers, simple instruction set
 
-```msp430
+msp430
 ; MSP430 assembly example
 mov.w #0x0200, SP     ; Initialize stack pointer
 mov.w #0x0001, &P1OUT ; Set output bit
-```
+
 
 ### VLIW/EPIC (Itanium)
 • Very Long Instruction Word
@@ -1375,11 +1375,11 @@ mov.w #0x0001, &P1OUT ; Set output bit
 • Used in: Intel Itanium (IA-64)
 • Features: Explicit parallelism, predication
 
-```itanium
+itanium
 ; IA-64 (Itanium) example
 (p1) add r1 = r2, r3  ; Predicate p1 controls execution
 (p2) sub r4 = r5, r6
-```
+
 
 ### Comparison Table
 | Architecture | Bits | Registers | Endian | Features |
@@ -1617,7 +1617,7 @@ msg_ne:
 All architectures implement write(1, msg, len) and exit(0):
 
 **x86-64:**
-```asm
+asm
 mov rax, 1      ; sys_write
 mov rdi, 1      ; fd
 mov rsi, msg    ; buf
@@ -1627,10 +1627,10 @@ syscall
 mov rax, 60     ; sys_exit
 xor rdi, rdi    ; status
 syscall
-```
+
 
 **ARM64:**
-```arm
+
 mov x0, #1      ; fd
 adr x1, msg     ; buf
 mov x2, #len    ; count
@@ -1640,10 +1640,10 @@ svc #0
 mov x0, #0      ; status
 mov x8, #93     ; sys_exit
 svc #0
-```
+
 
 **RISC-V:**
-```riscv
+riscv
 li a0, 1        # fd
 la a1, msg      # buf
 li a2, len      # count
@@ -1653,10 +1653,10 @@ ecall
 li a0, 0        # status
 li a7, 93       # sys_exit
 ecall
-```
+
 
 **MIPS:**
-```mips
+mips
 li $v0, 4004    # sys_write
 li $a0, 1       # fd
 la $a1, msg     # buf
@@ -1666,13 +1666,13 @@ syscall
 li $v0, 4001    # sys_exit
 li $a0, 0       # status
 syscall
-```
+
 
 ### Fibonacci Comparison
 All architectures compute Fibonacci(10):
 
 **x86-64:**
-```asm
+asm
 fib:
     xor eax, eax
     mov ecx, 10
@@ -1680,10 +1680,10 @@ fib:
     add eax, 1
     loop .loop
     ret
-```
+
 
 **ARM64:**
-```arm
+
 fib:
     mov w0, #0
     mov w1, #1
@@ -1693,10 +1693,10 @@ fib:
     subs w2, w2, #1
     b.ne .loop
     ret
-```
+
 
 **RISC-V:**
-```riscv
+riscv
 fib:
     li a0, 0
     li a1, 1
@@ -1706,10 +1706,10 @@ fib:
     addi a2, a2, -1
     bnez a2, .loop
     ret
-```
+
 
 **MIPS:**
-```mips
+mips
 fib:
     li $v0, 0
     li $v1, 1
@@ -1719,13 +1719,13 @@ loop:
     addi $t0, $t0, -1
     bnez $t0, loop
     jr $ra
-```
+
 
 ### String Length Comparison
 All architectures compute strlen:
 
 **x86-64:**
-```asm
+asm
 strlen:
     xor eax, eax
 .loop:
@@ -1735,10 +1735,10 @@ strlen:
     jmp .loop
 .done:
     ret
-```
+
 
 **ARM64:**
-```arm
+
 strlen:
     mov x2, x0
 .loop:
@@ -1746,10 +1746,10 @@ strlen:
     cbnz w1, .loop
     sub x0, x2, x0
     ret
-```
+
 
 **RISC-V:**
-```riscv
+riscv
 strlen:
     li a1, 0
 .loop:
@@ -1759,10 +1759,10 @@ strlen:
     bnez a2, .loop
     addi a0, a1, -1
     ret
-```
+
 
 **MIPS:**
-```mips
+mips
 strlen:
     li $v0, 0
 loop:
@@ -1772,7 +1772,7 @@ loop:
     bnez $t0, loop
     addi $v0, $v0, -1
     jr $ra
-````,
+`,
         codeSnippets: []
       },
       {
@@ -1973,7 +1973,7 @@ loop:
 6. **Byte order macros**: Check endianness at compile time
 
 ### Project Structure
-```
+
 project/
 ├── include/
 │   ├── asm/
@@ -1994,7 +1994,7 @@ project/
 │   └── portable/
 │       └── strlen.S
 └── Makefile
-````,
+`,
         codeSnippets: []
       },
       {
@@ -2004,7 +2004,7 @@ project/
 
 ### Architecture Detection Macros
 GCC/Clang provide predefined macros:
-```c
+c
 #if defined(__x86_64__)
     // x86-64 code
 #elif defined(__aarch64__)
@@ -2016,10 +2016,10 @@ GCC/Clang provide predefined macros:
 #else
     #error "Unsupported architecture"
 #endif
-```
+
 
 ### Register Abstraction Macros
-```c
+c
 // x86-64
 #define REG_A  rax
 #define REG_B  rbx
@@ -2043,10 +2043,10 @@ GCC/Clang provide predefined macros:
 #define REG_D  a3
 #define REG_DI a0
 #define REG_SI a1
-```
+
 
 ### Instruction Abstraction Macros
-```c
+c
 // Return instruction
 #if defined(__x86_64__)
     #define RET ret
@@ -2073,10 +2073,10 @@ GCC/Clang provide predefined macros:
 #elif defined(__riscv)
     #define SYSCALL ecall
 #endif
-```
+
 
 ### Function Prologue/Epilogue Macros
-```c
+c
 // Function prologue
 #if defined(__x86_64__)
     #define FUNC_PROLOGUE \
@@ -2109,10 +2109,10 @@ GCC/Clang provide predefined macros:
         addi sp, sp, 16; \
         ret
 #endif
-```
+
 
 ### Data Section Macros
-```c
+c
 // Data declaration
 #if defined(__x86_64__) || defined(__aarch64__) || defined(__riscv)
     #define QUAD .quad
@@ -2127,7 +2127,7 @@ GCC/Clang provide predefined macros:
 #define SECTION_DATA .section .data
 #define SECTION_TEXT .section .text
 #define SECTION_BSS  .section .bss
-````,
+`,
         codeSnippets: [
           {
             language: 'c',
@@ -2198,7 +2198,7 @@ GCC/Clang provide predefined macros:
         content: `Abstracting system call differences across architectures.
 
 ### System Call Abstraction
-```c
+c
 // syscalls.h - Portable system call numbers
 #ifndef SYSCALLS_H
 #define SYSCALLS_H
@@ -2256,10 +2256,10 @@ GCC/Clang provide predefined macros:
 #endif
 
 #endif // SYSCALLS_H
-```
+
 
 ### Assembly System Call Wrapper
-```asm
+asm
 // syscall_wrapper.S - Portable syscall wrapper
 #include "portable_macros.h"
 
@@ -2279,10 +2279,10 @@ portable_exit:
     LI REG_RET, SYS_EXIT
     SYSCALL
     FUNC_EPILOGUE
-```
+
 
 ### Building Multi-Architecture
-```makefile
+makefile
 # Makefile for cross-compilation
 CC_X86_64 = gcc
 CC_AARCH64 = aarch64-linux-gnu-gcc
@@ -2303,10 +2303,10 @@ riscv:
 
 clean:
 	rm -f program_*
-```
+
 
 ### Testing with QEMU
-```bash
+bash
 # Run ARM64 binary on x86-64 host
 qemu-aarch64 ./program_aarch64
 
@@ -2315,7 +2315,7 @@ qemu-riscv64 ./program_riscv
 
 # Or use Docker with multi-arch support
 docker run --rm -v $(pwd):/work -w /work arm64v8/ubuntu ./program_aarch64
-````,
+`,
         codeSnippets: []
       },
       {
@@ -2324,7 +2324,7 @@ docker run --rm -v $(pwd):/work -w /work arm64v8/ubuntu ./program_aarch64
         content: `A complete portable strlen implementation across x86-64, ARM64, and RISC-V.
 
 ### Portable strlen Design
-```c
+c
 // strlen.h - Portable strlen declaration
 #ifndef STRLEN_H
 #define STRLEN_H
@@ -2334,10 +2334,10 @@ docker run --rm -v $(pwd):/work -w /work arm64v8/ubuntu ./program_aarch64
 size_t portable_strlen(const char *s);
 
 #endif // STRLEN_H
-```
+
 
 ### Architecture-Specific Implementations
-```asm
+asm
 // strlen_x86_64.S - x86-64 implementation
 .section .text
 .global portable_strlen
@@ -2351,9 +2351,9 @@ portable_strlen:
     jmp .loop
 .done:
     ret
-```
 
-```asm
+
+asm
 // strlen_aarch64.S - ARM64 implementation
 .section .text
 .global portable_strlen
@@ -2365,9 +2365,9 @@ portable_strlen:
     cbnz w1, .loop
     sub x0, x2, x0
     ret
-```
 
-```asm
+
+asm
 // strlen_riscv.S - RISC-V implementation
 .section .text
 .global portable_strlen
@@ -2381,10 +2381,10 @@ portable_strlen:
     bnez a2, .loop
     addi a0, a1, -1
     ret
-```
+
 
 ### Build System
-```makefile
+makefile
 # Makefile
 CC_X86_64 = gcc
 CC_AARCH64 = aarch64-linux-gnu-gcc
@@ -2411,10 +2411,10 @@ test: all
 
 clean:
 	rm -f test_*
-```
+
 
 ### Test Program
-```c
+c
 // test.c - Test portable strlen
 #include <stdio.h>
 #include <string.h>
@@ -2444,10 +2444,10 @@ int main() {
     printf("All tests passed!\\n");
     return 0;
 }
-```
+
 
 ### Running Tests
-```bash
+bash
 # Build and test
 make test
 
@@ -2455,10 +2455,10 @@ make test
 make all
 qemu-aarch64 ./test_aarch64
 qemu-riscv64 ./test_riscv
-```
+
 
 ### Alternative: Unified Source File
-```asm
+asm
 // strlen_portable.S - Single file with conditional compilation
 #include "portable_macros.h"
 
@@ -2497,7 +2497,7 @@ portable_strlen:
 #else
     #error "Unsupported architecture"
 #endif
-````,
+`,
         codeSnippets: []
       }
     ],

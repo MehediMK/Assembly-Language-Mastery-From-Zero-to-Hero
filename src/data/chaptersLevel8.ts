@@ -183,10 +183,10 @@ gcc -o harness harness.c -z execstack
 String functions like strcpy(), gets(), and sprintf() treat 0x00 as the null terminator. If shellcode contains null bytes, the copy stops early, truncating the payload.
 
 ### Technique 1: XOR Zeroing
-Instead of `mov eax, 0`, use `xor eax, eax` to zero a register without null bytes.
+Instead of mov eax, 0, use xor eax, eax to zero a register without null bytes.
 
 ### Technique 2: Sub-Register Writes
-Instead of `mov al, 59` (which may contain null in upper bytes), use `xor eax, eax; mov al, 59`.
+Instead of mov al, 59 (which may contain null in upper bytes), use xor eax, eax; mov al, 59.
 
 ### Technique 3: Stack Construction
 Push values onto the stack byte-by-byte or use PUSH with immediate values.
@@ -508,7 +508,7 @@ _start:
 | Use-after-free | Freed heap memory | Overwrite freed object |
 
 ### Stack Buffer Overflow Anatomy
-```
+
 High Address
 ┌─────────────────────┐
 │   Function Args     │
@@ -522,7 +522,7 @@ High Address
 │                     │
 └─────────────────────┘
 Low Address
-```
+
 
 ### Why Stack Overflows Occur
 1. No bounds checking on input functions
@@ -576,11 +576,11 @@ int main(int argc, char *argv[]) {
         content: `The exploit payload must precisely overflow the buffer to overwrite the return address.
 
 ### Payload Structure
-```
+
 [NOP Sled] [Shellcode] [Padding] [Return Address]
    ↓           ↓           ↓           ↓
  0x90      Actual code   'A' * N    Address into sled
-```
+
 
 ### Calculating the Offset
 1. Use GDB to examine stack layout
@@ -885,11 +885,11 @@ NX/DEP prevents execution from stack/heap. ROP uses existing executable code seg
 
 ### What is a Gadget?
 A gadget is a short instruction sequence ending in ret:
-• `pop rdi; ret` (5f c3) - Load value into RDI
-• `pop rsi; ret` (5e c3) - Load value into RSI
-• `pop rdx; ret` (5a c3) - Load value into RDX
-• `mov rax, rdi; ret` (48 89 f8 c3) - Copy RDI to RAX
-• `add rax, rsi; ret` (48 01 f0 c3) - Add RSI to RAX
+• pop rdi; ret (5f c3) - Load value into RDI
+• pop rsi; ret (5e c3) - Load value into RSI
+• pop rdx; ret (5a c3) - Load value into RDX
+• mov rax, rdi; ret (48 89 f8 c3) - Copy RDI to RAX
+• add rax, rsi; ret (48 01 f0 c3) - Add RSI to RAX
 
 ### How ROP Works
 1. Attacker overwrites return address with gadget address
@@ -907,10 +907,10 @@ A gadget is a short instruction sequence ending in ret:
 | Detection | Easier | Harder |
 
 ### ROP Chain Example (Calling system("/bin/sh"))
-```
+
 [pop rdi; ret]  →  Address of "/bin/sh"
 [system]         →  Execute system("/bin/sh")
-```
+
 
 ### Gadget Requirements
 • Must end in ret for chaining
@@ -961,11 +961,11 @@ ROPgadget --binary vulnerable_binary | wc -l`
 • RAX = Return value / syscall number
 
 ### ret2libc Chain Structure
-```
+
 [pop rdi; ret]  →  Address of "/bin/sh"
 [system]        →  system("/bin/sh")
 [exit]          →  Clean exit (optional)
-```
+
 
 ### Finding Libc Addresses
 1. Leak libc base from GOT/PLT
@@ -974,13 +974,13 @@ ROPgadget --binary vulnerable_binary | wc -l`
 
 ### Alternative: execve("/bin/sh", NULL, NULL)
 More complex but more powerful:
-```
+
 [pop rdi; ret]  →  "/bin/sh"
 [pop rsi; ret]  →  0 (NULL)
 [pop rdx; ret]  →  0 (NULL)
 [pop rax; ret]  →  59 (execve syscall)
 [syscall]       →  execve("/bin/sh", NULL, NULL)
-```
+
 
 ### Handling ASLR
 With ASLR enabled, libc address varies. Solutions:
@@ -1032,33 +1032,33 @@ with open("ret2libc.bin", "wb") as f:
 
 ### Stack Pivoting
 Redirect RSP to controlled memory (e.g., heap, .bss):
-• `xchg rax, rsp; ret` - Swap RAX and RSP
-• `leave; ret` - MOV RSP, RBP; POP RBP; RET
-• `add rsp, N; ret` - Adjust stack pointer
+• xchg rax, rsp; ret - Swap RAX and RSP
+• leave; ret - MOV RSP, RBP; POP RBP; RET
+• add rsp, N; ret - Adjust stack pointer
 
 ### Memory Write via ROP
 Write arbitrary values to arbitrary addresses:
-```
+
 [pop rdi; ret]  →  Target address
 [pop rsi; ret]  →  Value to write
 [mov [rdi], rsi; ret]  →  Write value
-```
+
 
 ### Memory Read via ROP
 Read arbitrary memory:
-```
+
 [pop rdi; ret]  →  Source address
 [pop rsi; ret]  →  Destination buffer
 [call read]     →  Read memory
-```
+
 
 ### Conditional Logic in ROP
 Use arithmetic and conditional jumps:
-```
+
 [pop rax; ret]  →  Condition
 [cmp rax, 0; ret]  →  Set flags
 [je addr; ret]  →  Conditional branch
-```
+
 
 ### ROP Empires
 Large ROP chains that:
@@ -1343,17 +1343,17 @@ print(f"Chain length: {len(rop.build())} bytes")`
 
 ### ptrace Detection (Linux)
 The most common technique:
-```c
+
 if (ptrace(PTRACE_TRACEME, 0, NULL, NULL) == -1) {
     // Debugger detected!
     exit(1);
 }
-```
+
 If a debugger is already attached, ptrace fails with EPERM.
 
 ### TracerPid Check
 Read /proc/self/status for TracerPid:
-```c
+
 int tracer_pid = 0;
 FILE *fp = fopen("/proc/self/status", "r");
 while (fgets(line, sizeof(line), fp)) {
@@ -1363,7 +1363,7 @@ while (fgets(line, sizeof(line), fp)) {
         }
     }
 }
-```
+
 TracerPid > 0 means a debugger is attached.
 
 ### INT 3 / INT 2D (x86)
@@ -1374,42 +1374,42 @@ Software breakpoint detection:
 
 ### IsDebuggerPresent (Windows)
 Windows API check:
-```c
+
 if (IsDebuggerPresent()) {
     // Debugger detected!
     exit(1);
 }
-```
+
 
 ### NtGlobalFlag (Windows)
 Debug flags in PEB:
-```c
+
 // PEB->NtGlobalFlag
 // 0x70 = FLG_HEAP_ENABLE_TAIL_CHECK | FLG_HEAP_ENABLE_FREE_CHECK
 if (NtGlobalFlag & 0x70) {
     // Debugger detected!
 }
-```
+
 
 ### Hardware Breakpoint Detection
 Check DR0-DR3 registers:
-```c
+
 CONTEXT ctx;
 GetThreadContext(GetCurrentThread(), &ctx);
 if (ctx.Dr0 != 0 || ctx.Dr1 != 0 || ctx.Dr2 != 0 || ctx.Dr3 != 0) {
     // Hardware breakpoints detected!
 }
-```
+
 
 ### Debug Object Check (Windows)
-```c
+
 HANDLE debug_port;
 NtQueryInformationProcess(GetCurrentProcess(),
     ProcessDebugPort, &debug_port, sizeof(debug_port), NULL);
 if (debug_port != 0) {
     // Debugger detected!
 }
-````,
+`,
         codeSnippets: [
           {
             language: 'c',
@@ -1464,13 +1464,13 @@ int main() {
 
 ### CPUID Hypervisor Bit
 Check for VM presence:
-```c
+
 int is_vm() {
     int eax, ebx, ecx, edx;
     __cpuid(1, eax, ebx, ecx, edx);
     return (ecx >> 31) & 1;  // Hypervisor bit
 }
-```
+
 Hypervisor bit set in VMware, VirtualBox, Hyper-V, etc.
 
 ### VM Artifacts
@@ -1482,7 +1482,7 @@ Hypervisor bit set in VMware, VirtualBox, Hyper-V, etc.
 | QEMU | QEMU Guest Agent |
 
 ### Registry Keys (Windows)
-```c
+
 // VMware
 HKEY_LOCAL_MACHINE\\SOFTWARE\\VMware, Inc.\\VMware Tools
 
@@ -1491,10 +1491,10 @@ HKEY_LOCAL_MACHINE\\SOFTWARE\\Oracle\\VirtualBox Guest Additions
 
 // Hyper-V
 HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Virtual Machine\\Guest\\Parameters
-```
+
 
 ### File System Artifacts
-```c
+
 // Common VM files
 char *vm_files[] = {
     "/usr/bin/vmtoolsd",           // VMware
@@ -1503,18 +1503,18 @@ char *vm_files[] = {
     "/proc/scsi/scsi",           // Virtual SCSI
     NULL
 };
-```
+
 
 ### MAC Address Prefixes
-```
+
 VMware:     00:0C:29, 00:50:56
 VirtualBox: 08:00:27
 Hyper-V:    00:15:5D
-```
+
 
 ### Timing-Based Detection
 VMs introduce timing overhead:
-```c
+
 uint64_t start = __rdtsc();
 // Execute code
 uint64_t end = __rdtsc();
@@ -1522,7 +1522,7 @@ uint64_t cycles = end - start;
 if (cycles > THRESHOLD) {
     // Possible VM or sandbox
 }
-```
+
 
 ### Sandbox Detection
 • Check for analysis tools (Wireshark, Process Monitor)
@@ -1587,25 +1587,25 @@ int check_vm_artifacts() {
 
 ### Junk Byte Insertion
 Add meaningless bytes that confuse disassemblers:
-```asm
+
 jmp .real_code
 db 0xE8          ; Looks like 'call' opcode to linear disassembler
 .real_code:
     mov rax, 60
-```
+
 
 ### Overlapping Instructions
 Create multiple valid disassembly paths:
-```asm
+
 db 0xEB, 0x01    ; JMP +1 (skips next byte)
 db 0xE8          ; Junk byte
 ; Actual code:
     mov eax, 1
-```
+
 
 ### Opaque Predicates
 Branches that always evaluate the same way:
-```asm
+
 xor eax, eax      ; EAX = 0
 test eax, eax      ; ZF = 1
 jz .always_taken   ; Always taken (dead code below)
@@ -1613,11 +1613,11 @@ jz .always_taken   ; Always taken (dead code below)
     mov rax, 999
 .always_taken:
     ; Real code here
-```
+
 
 ### Control Flow Flattening
 Transform structured code into state machine:
-```c
+
 // Original
 if (a > b) {
     x = 1;
@@ -1636,14 +1636,14 @@ while (1) {
     }
 }
 done:
-```
+
 
 ### String Encryption
 Encrypt strings and decrypt at runtime:
-```c
+
 char encrypted[] = {0x52, 0x45, 0x56, 0x45, 0x4E, 0x53, 0x45}; // XOR with 0x41
 // Decrypted: "REVERSE"
-```
+
 
 ### Code Virtualization
 Custom virtual machine to interpret bytecode:
@@ -1711,16 +1711,16 @@ _start:
 5. **Custom GDB Scripts**: Automate bypass
 
 ### Patching Anti-Debugging
-```bash
+
 # Find check function
 objdump -d binary | grep -A 10 "ptrace"
 
 # Patch with NOP
 printf '\\x90\\x90\\x90\\x90\\x90' | dd of=binary bs=1 seek=OFFSET conv=notrunc
-```
+
 
 ### GDB Script for Bypass
-```bash
+
 # bypass_anti_debug.gdb
 set follow-fork-mode child
 set detach-on-fork off
@@ -1738,10 +1738,10 @@ commands
     # Write "TracerPid: 0" to /proc/self/status
     # (Complex, better to patch binary)
 end
-```
+
 
 ### Using Frida for Dynamic Instrumentation
-```javascript
+
 // Frida script to bypass anti-debug
 Interceptor.attach(Module.findExportByName(null, "ptrace"), {
     onEnter: function(args) {
@@ -1753,17 +1753,17 @@ Interceptor.attach(Module.findExportByName(null, "ptrace"), {
         }
     }
 });
-```
+
 
 ### Binary Ninja / Radare2 Patching
-```bash
+
 # Radare2: Patch instruction to NOP
 r2 -w binary
 afl  # List functions
 s 0x401000  # Seek to check
 wa nop      # Write NOP
 q           # Quit
-```
+
 
 ### Anti-VM Bypass
 1. Run on bare metal (no VM)
@@ -1926,7 +1926,7 @@ gdb -x bypass.gdb $BINARY`
 
 ### Bounds-Checked String Copy
 Always verify destination buffer size:
-```nasm
+
 ; safe_strcpy: rdi=dest, rsi=src, rdx=dest_size
 safe_strcpy:
     push rdi; push rsi; push rbx
@@ -1945,7 +1945,7 @@ safe_strcpy:
     mov eax, -1
 .done:
     pop rbx; pop rsi; pop rdi; ret
-```
+
 
 ### Input Validation Patterns
 1. **Length checks**: Verify input length before copy
@@ -1955,7 +1955,7 @@ safe_strcpy:
 5. **Null termination**: Always ensure strings are null-terminated
 
 ### Safe Memory Operations
-```nasm
+
 ; memcpy with bounds check
 ; rdi=dest, rsi=src, rdx=size, rcx=dest_size
 safe_memcpy:
@@ -1963,11 +1963,11 @@ safe_memcpy:
     ja .overflow        ; size > dest_size
     ; Proceed with memcpy
     ...
-```
+
 
 ### Integer Overflow Prevention
 Integer overflow in size calculations causes underallocation:
-```c
+
 // VULNERABLE
 size_t total = count * sizeof(int);  // Can overflow!
 int *arr = malloc(total);
@@ -1977,10 +1977,10 @@ if (count > SIZE_MAX / sizeof(int)) {
     return NULL;  // Overflow check
 }
 size_t total = count * sizeof(int);
-```
+
 
 ### Compiler Built-in Checks
-```c
+
 // GCC/Clang overflow-checked arithmetic
 int result;
 if (__builtin_add_overflow(a, b, &result)) {
@@ -1990,7 +1990,7 @@ if (__builtin_add_overflow(a, b, &result)) {
 if (__builtin_mul_overflow(a, b, &result)) {
     // Overflow occurred
 }
-```
+
 
 ### Fuzzing for Bounds Checking
 Use fuzzing to find bounds violations:
@@ -2081,7 +2081,7 @@ safe_memset:
 | SF | Sign Flag | Result is negative |
 
 ### Detecting Signed Overflow (jo/jno)
-```nasm
+
 ; Safe addition with overflow detection
 ; rdi=a, rsi=b, rdx=ptr_to_result
 safe_add:
@@ -2094,10 +2094,10 @@ safe_add:
 .overflow:
     mov eax, -1         ; Return error
     ret
-```
+
 
 ### Detecting Unsigned Overflow (jc/jnc)
-```nasm
+
 ; Safe multiplication with overflow detection
 ; rdi=a, rsi=b, rdx=ptr_to_result
 safe_mul:
@@ -2110,10 +2110,10 @@ safe_mul:
 .overflow:
     mov eax, -1
     ret
-```
+
 
 ### Compiler Built-in Overflow Checks
-```c
+
 // GCC/Clang built-in functions
 int result;
 
@@ -2131,10 +2131,10 @@ if (__builtin_mul_overflow(a, b, &result)) {
 if (__builtin_sub_overflow(a, b, &result)) {
     handle_overflow();
 }
-```
+
 
 ### Safe Integer Library Pattern
-```c
+
 typedef struct {
     int64_t value;
     int overflow;
@@ -2149,7 +2149,7 @@ safe_int safe_add(safe_int a, safe_int b) {
     }
     return result;
 }
-```
+
 
 ### Common Integer Overflow Vulnerabilities
 1. **malloc(count * size)**: Multiplication overflow
@@ -2224,7 +2224,7 @@ safe_sub:
 
 ### Stack Canaries (Stack Protector)
 Random value placed before saved return address:
-```nasm
+
 ; Function prologue
 push rbp
 mov rbp, rsp
@@ -2238,10 +2238,10 @@ xor rax, qword [fs:0x28]    ; Compare with master
 jnz .stack_chk_fail          ; Abort if modified
 leave
 ret
-```
+
 
 ### Custom Stack Canary Implementation
-```nasm
+
 ; Custom canary using getrandom syscall
 section .text
 global _start
@@ -2278,7 +2278,7 @@ _start:
     mov rax, 60
     mov rdi, 1
     syscall
-```
+
 
 ### RELRO (Relocation Read-Only)
 Protects GOT (Global Offset Table) from modification:
@@ -2288,13 +2288,13 @@ Protects GOT (Global Offset Table) from modification:
 • .dynamic section is read-only
 • Partial protection
 
-**Full RELRO** (`-z relro -z now`):
+**Full RELRO** (-z relro -z now):
 • GOT is read-only after startup
 • All symbols resolved at startup
 • Strong protection against GOT hijacking
 
 ### Compiler Security Flags
-```bash
+
 # Stack canary
 gcc -fstack-protector-strong -o binary source.c
 
@@ -2313,10 +2313,10 @@ gcc -D_FORTIFY_SOURCE=2 -o binary source.c
 # Full protection
 gcc -fstack-protector-strong -z noexecstack -z relro -z now \
     -pie -fPIE -D_FORTIFY_SOURCE=2 -o binary source.c
-```
+
 
 ### Checking Protections
-```bash
+
 # checksec tool
 checksec --file=binary
 
@@ -2328,7 +2328,7 @@ readelf -h binary | grep Type
 
 # readelf for RELRO
 readelf -l binary | grep GNU_RELRO
-```
+
 
 ### Limitations of Protections
 | Protection | Bypass Technique |
@@ -2408,7 +2408,7 @@ check_canary:
 
 ### Memory Zeroization
 Always clear sensitive data after use:
-```nasm
+
 ; Secure memset: Clear buffer with volatile to prevent optimization
 section .text
 ; rdi=buffer, rsi=size
@@ -2432,11 +2432,11 @@ secure_zero:
     pop rcx
     pop rax
     ret
-```
+
 
 ### Stack Variable Clearing
 Clear local variables before return:
-```nasm
+
 function:
     push rbp
     mov rbp, rsp
@@ -2451,10 +2451,10 @@ function:
     
     leave
     ret
-```
+
 
 ### Password Handling
-```c
+
 // BAD: Password stays in memory
 char password[256];
 gets(password);
@@ -2466,7 +2466,7 @@ char password[256];
 gets(password);
 authenticate(password);
 explicit_bzero(password, sizeof(password));  // Clear
-```
+
 
 ### Cryptographic Key Handling
 • Use mlock() to prevent swapping to disk
@@ -2476,7 +2476,7 @@ explicit_bzero(password, sizeof(password));  // Clear
 
 ### Compiler Optimization Issues
 Compilers may optimize away zeroization:
-```c
+
 // May be optimized away!
 memset(sensitive_data, 0, size);
 
@@ -2488,7 +2488,7 @@ for (size_t i = 0; i < size; i++) {
 
 // Or use explicit_bzero (POSIX)
 explicit_bzero(sensitive_data, size);
-```
+
 
 ### Memory Protection Techniques
 | Technique | Purpose |
