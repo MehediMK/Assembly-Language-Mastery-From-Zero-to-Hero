@@ -967,660 +967,287 @@ export const CHAPTERS_LEVEL_7: Chapter[] = [
     ]
   },
   {
-    id: 38,
-    slug: 'chapter-38-low-power-bare-metal',
-    level: 7,
-    levelTitle: 'Embedded Systems and Real-Time Assembly',
-    title: 'Chapter 38: Low-Power and Bare-Metal Programming',
-    subtitle: 'WFI/WFE Instructions, Sleep Modes, Duty Cycling, and SLEEPONEXIT',
-    learningObjectives: [
-      'Understand the importance of power management in embedded systems.',
-      'Master WFI (Wait For Interrupt) and WFE (Wait For Event) instructions.',
-      'Configure sleep modes (Sleep, Deep Sleep, Stop, Standby) via System Control Register (SCR).',
-      'Optimize energy consumption through clock gating and duty cycling.',
-      'Implement a low-power timer-driven blinking LED system.',
-      'Understand voltage scaling and dynamic power management.',
-      'Measure and optimize power consumption in embedded applications.'
+    "id": 38,
+    "slug": "chapter-38-low-power-bare-metal",
+    "level": 7,
+    "levelTitle": "Embedded Systems and Real-Time Assembly",
+    "title": "Chapter 38: Low-Power and Bare-Metal Programming",
+    "subtitle": "WFI/WFE Instructions, Sleep Modes, Duty Cycling, and SLEEPONEXIT",
+    "learningObjectives": [
+      "Understand the importance of low-power design in embedded systems.",
+      "Master the low-power modes available on ARM Cortex-M microcontrollers: Sleep, Deep Sleep, and Standby.",
+      "Use the WFI and WFE instructions to enter low-power states and wake on interrupts or events.",
+      "Configure clock gating and prescalers to reduce dynamic power consumption.",
+      "Disable unused peripherals and unused GPIO pins to minimize leakage.",
+      "Apply bare-metal programming techniques to write energy-efficient assembly code.",
+      "Design an interrupt-driven low-power application that wakes from sleep to perform tasks and returns to sleep.",
+      "Understand the trade-offs between power consumption, wake-up latency, and performance."
     ],
-    prerequisites: ['Chapters 1–37'],
-    keyConcepts: [
-      'Power consumption in digital circuits: P = C × V² × f (dynamic) + V × I_leakage (static).',
-      'WFI halts the CPU clock until an enabled interrupt wakes it.',
-      'WFE halts until an event (interrupt, SEV, or wake-up event) occurs.',
-      'SLEEPONEXIT automatically puts the CPU back to sleep on returning from an ISR.',
-      'Duty cycling keeps the processor asleep >99% of the time to extend battery life.',
-      'Clock gating disables unused peripheral clocks to reduce dynamic power.',
-      'Voltage scaling reduces power by lowering supply voltage (requires frequency adjustment).',
-      'Sleep modes: Sleep (CPU only), Deep Sleep (CPU + some peripherals), Stop (most clocks off), Standby (minimal power).',
-      'RTC and wakeup sources: External interrupts, RTC alarms, UART activity can wake the MCU.'
+    "prerequisites": [
+      "Solid understanding of ARM Cortex-M architecture, registers, and instruction set (Chapter 35).",
+      "Familiarity with memory-mapped I/O and peripheral control (Chapter 36).",
+      "Knowledge of interrupts and the NVIC (Chapter 37).",
+      "Basic understanding of digital electronics: clock signals, power consumption sources.",
+      "Experience with assembly programming and bare-metal development."
     ],
-    diagramType: 'low_power',
-    sections: [
+    "keyConcepts": [
+      "Low-power design: Techniques to minimize energy consumption while meeting functional requirements.",
+      "Dynamic power: Power consumed during switching (proportional to frequency and voltage squared).",
+      "Static power: Power consumed due to leakage currents (even when idle).",
+      "Sleep modes: Hardware states that reduce power by stopping the CPU clock or disabling parts of the chip.",
+      "WFI (Wait For Interrupt): Instruction that halts the CPU until an interrupt or reset; commonly used to enter sleep.",
+      "WFE (Wait For Event): Similar, but wakes on events (including interrupts and SEV instruction).",
+      "Clock gating: Disabling clock to unused peripherals to save power.",
+      "Power scaling: Reducing supply voltage or clock frequency to lower power consumption.",
+      "Wake-up sources: Interrupts, external pins, RTC alarm, etc., that bring the MCU out of sleep.",
+      "Bare-metal programming: Writing software that runs directly on hardware without an OS, giving full control over power management.",
+      "Startup code: Initialization routines that configure clocks and memory before main.",
+      "Linker script: Defines memory layout for code and data."
+    ],
+    "diagramType": "low_power",
+    "sections": [
       {
-        id: 'sec-38-1',
-        title: '38.1 Why Low-Power Matters',
-        content: `Power consumption is critical in battery-operated and energy-harvesting embedded systems.
-
-### Power Consumption Components
-• Dynamic Power: P_dynamic = C × V² × f (switching power)
-  - C: capacitance (chip design)
-  - V: supply voltage
-  - f: switching frequency
-• Static Power: P_static = V × I_leakage (leakage current)
-
-### Key Insights
-• Reducing voltage is most effective (P ∝ V²)
-• Reducing frequency is linear but less effective
-• Disabling clocks eliminates dynamic power for that block
-• Deeper sleep modes reduce leakage
-
-### Battery Life Estimation
-For a CR2032 coin cell (220 mAh):
-• Active mode (10 mA): ~22 hours
-• Sleep mode (10 µA): ~2.5 years
-• Standby mode (1 µA): ~25 years
-
-### Power Domains
-Modern MCUs have multiple power domains:
-• Always-on domain: RTC, wakeup logic, backup registers
-• Main domain: CPU, core peripherals
-• I/O domain: GPIO pins, external interfaces
-
-Each domain can be independently powered or clock-gated.`,
-        codeSnippets: []
+        "id": "sec-38-1",
+        "title": "38.1 Why Low-Power Matters",
+        "content": "Many embedded devices are battery-powered and must operate for months or years without replacing batteries. Examples include IoT sensors, wearables, remote monitoring devices, and medical implants. Even mains-powered devices benefit from low-power design to reduce heat and improve reliability.\n\nPower consumption in CMOS circuits has two main components:\n\n- Dynamic power: \\( P_{dynamic} \\propto C \\cdot V^2 \\cdot f \\), where \\( C \\) is capacitance, \\( V \\) is voltage, and \\( f \\) is switching frequency. Lowering voltage or frequency dramatically reduces dynamic power.\n- Static power: Leakage current that flows even when transistors are not switching. It increases with temperature and lower threshold voltages.\n\nLow-power techniques aim to reduce both by:\n- Slowing or stopping the clock when idle.\n- Disabling unused peripherals and clocks.\n- Using low-power sleep modes.\n- Reducing supply voltage where possible.\n\nOn microcontrollers, the CPU itself is often not the main power consumer; peripherals and clocks can dominate. Thus, intelligent clock management is critical.\n\nClarification: Power budgeting retained from the existing expansion: ideal battery hours = usable mAh / average mA. A hypothetical 220 mAh at 12 microamps gives about 18,333 hours (2.09 years), not five years; at 1 microamp the ideal 25-year figure ignores self-discharge and calendar aging. Include regulator quiescent current, LEDs, sensors, radio peaks, temperature and usable capacity. These are arithmetic examples, not battery-life guarantees."
       },
       {
-        id: 'sec-38-2',
-        title: '38.2 WFI and WFE Instructions',
-        content: `### WFI (Wait For Interrupt)
-WFI halts the CPU clock until an enabled interrupt occurs. The CPU resumes execution at the next instruction after WFI.
-
-Usage:
-    wfi         ; CPU sleeps until interrupt
-    nop         ; next instruction (first instruction after wake)
-
-### WFE (Wait For Event)
-WFE halts until an event occurs:
-• Interrupt (if enabled)
-• SEV (Send Event) instruction from another core
-• External event signal
-• Previous event (WFE maintains an event register)
-
-### WFI vs WFE
-| Feature | WFI | WFE |
-|---------|-----|-----|
-| Wake on interrupt | Yes | Yes |
-| Wake on SEV | No | Yes |
-| Event register | No | Yes |
-| Typical use | Low-power sleep | Multi-core synchronization |
-
-### Execution After Wake
-After WFI/WFE, the CPU executes the next instruction. Common patterns:
-1. Check if interrupt actually occurred
-2. Re-check condition in a loop
-3. Proceed to handle the event
-
-### Important Notes
-• WFI is interruptible by NMI and HardFault regardless of PRIMASK
-• WFI respects BASEPRI and PRIMASK settings
-• On Cortex-M4/M7, WFI also disables floating-point context save (if FPU is unused)`,
-        codeSnippets: [
+        "id": "sec-38-2",
+        "title": "38.2 Low-Power Modes on ARM Cortex-M",
+        "content": "ARM Cortex-M processors provide several low-power modes, typically controlled by the System Control Register (SCR) and the WFI/WFE instructions. The two main modes are:\n\n- Sleep mode: CPU stops, but peripherals and clocks continue. Wake-up is fast.\n- Deep Sleep mode: More aggressive; typically disables high-speed clocks and may power down flash, SRAM, or other domains. Wake-up takes longer but saves more power.\n\nSome MCUs add further modes like Stop or Standby (e.g., STM32F4), which are vendor-specific extensions of Deep Sleep."
+      },
+      {
+        "id": "sec-38-2-1",
+        "title": "38.2.1 Entering Sleep Mode",
+        "content": "The simplest way to enter sleep is to execute WFI (Wait For Interrupt). The CPU halts fetching instructions until an interrupt is pending and enabled. In assembly:\n\nClarification: WFI wake-up and exception service are separate. On Cortex-M4 a qualifying interrupt masked by PRIMASK can wake WFI while handler execution remains deferred. WFE consumes an already-set event register without sleeping; SEVONPEND signals a transition into pending, not an endlessly repeated event. Recheck the work condition after waking. Neither instruction itself disables floating-point context saving. Reference: https://arm-software.github.io/CMSIS_5/Core/html/group__intrinsic__CPU__gr.html",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'WFI Usage Patterns',
-            code: `; Pattern 1: Simple WFI loop
-loop:
-    wfi                     ; sleep until interrupt
-    ; handle interrupt or event
-    b loop
-
-; Pattern 2: WFI with condition check
-main_loop:
-    ldr r0, =flag
-    ldr r1, [r0]
-    cmp r1, #0
-    bne handle_event
-    wfi                     ; sleep if no event
-    b main_loop
-
-handle_event:
-    ; process event
-    mov r1, #0
-    str r1, [r0]           ; clear flag
-    b main_loop
-
-; Pattern 3: WFE for multi-core sync
-core0:
-    sev                     ; send event to core1
-    wfe                     ; wait for core1's event
-    ; continue after sync
-
-core1:
-    wfe                     ; wait for core0's event
-    sev                     ; send event to core0
-    ; continue after sync`
+            "language": "arm",
+            "title": "38.2.1 Entering Sleep Mode — listing 1",
+            "code": "WFI",
+            "explanation": "This is often placed in an idle loop:"
+          },
+          {
+            "language": "arm",
+            "title": "38.2.1 Entering Sleep Mode — listing 2",
+            "code": "idle_loop:\n    WFI\n    B idle_loop",
+            "explanation": "When an interrupt occurs, the CPU wakes, handles the interrupt, and then returns to the instruction after WFI (which branches back to WFI). If interrupts are disabled, WFI may still wake on events (depending on configuration).\n\nWFE (Wait For Event) is similar but can also wake on events like a peripheral setting an event flag or an SEV instruction from another core. It is useful for multiprocessor synchronization."
           }
         ]
       },
       {
-        id: 'sec-38-3',
-        title: '38.3 Sleep Modes on ARM Cortex-M',
-        content: `ARM Cortex-M provides multiple sleep modes with different power savings and wake-up times.
-
-### Sleep Modes Overview
-| Mode | CPU | Peripherals | Wake Time | Power |
-|------|-----|-------------|-----------|-------|
-| Sleep | Stopped | Running | Fastest (µs) | Medium |
-| Deep Sleep | Stopped | Partially stopped | Fast (µs) | Low |
-| Stop | Stopped | Most stopped | Slow (ms) | Very Low |
-| Standby | Stopped | All stopped | Slowest (ms) | Lowest |
-
-### System Control Register (SCR)
-Address: 0xE000ED10
-
-| Bit | Name | Description |
-|-----|------|-------------|
-| 1 | SLEEPDEEP | 1 = Deep sleep mode enabled |
-| 2 | SLEEPONEXIT | 1 = Return to sleep on ISR exit |
-| 4 | SEVONPEND | 1 = Send event on pending interrupt |
-
-### Sleep (Normal Sleep)
-• CPU clock halted
-• All peripheral clocks continue
-• Fastest wake-up (1-2 clock cycles)
-• Use: Short idle periods, interrupt-driven systems
-
-### Deep Sleep (Cortex-M specific)
-• CPU clock halted
-• Some peripheral clocks halted (varies by MCU)
-• Faster wake-up than Sleep on some implementations
-• Use: Medium idle periods
-
-### Stop Mode (STM32 specific)
-• CPU and most peripherals stopped
-• Only LSE (32 kHz) or RTC continues
-• Very low power (~2 µA)
-• Wake-up via RTC, external interrupt, or UART
-• Use: Long idle periods (seconds to minutes)
-
-### Standby Mode (STM32 specific)
-• Everything stopped except RTC and backup domain
-• SRAM contents lost (except backup SRAM)
-• Lowest power (~1-2 µA)
-• Wake-up via WKUP pin, RTC, or reset
-• Use: Very long idle periods, power-off scenarios`,
-        codeSnippets: [
+        "id": "sec-38-2-2",
+        "title": "38.2.2 Configuring Sleep Mode (SCR Register)",
+        "content": "The System Control Register (SCR) at address 0xE000ED10 controls sleep behavior. Key bits:\n\n- SLEEPONEXIT (bit 1): If set, the CPU automatically enters sleep when returning from an interrupt to thread mode if no other interrupt is pending. This is useful for interrupt-driven systems: the main loop can be empty, and the CPU sleeps between interrupts.\n- SLEEPDEEP (bit 2): If set, WFI/WFE enters Deep Sleep mode. Otherwise, normal Sleep mode.\n- SEVONPEND (bit 4): If set, an interrupt pending wakes the CPU even if interrupts are disabled (for WFE).\n\nExample: Set SLEEPONEXIT so the CPU sleeps after each interrupt:\n\nClarification: Correct bit positions are SLEEPONEXIT=1 and SLEEPDEEP=2; the earlier ebook mode table swapped them. SLEEPONEXIT fits ISR-only work, not the thread-mode UART consumer in Chapter 37. Wake latency and current require device/board measurements, not generic microsecond or microamp guarantees.",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'Sleep Mode Configuration',
-            code: `.equ SCR, 0xE000ED10
-.equ RCC_APB1ENR, 0x40023840
-.equ PWR_CR, 0x40007000
-
-; Enter Sleep mode
-    cpsie i             ; ensure interrupts enabled
-    wfi                 ; enter Sleep mode
-    ; CPU wakes on any enabled interrupt
-
-; Enter Deep Sleep mode
-    ldr r0, =SCR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<1)   ; SLEEPDEEP
-    str r1, [r0]
-    wfi
-
-; Enter Stop mode (STM32)
-    ldr r0, =PWR_CR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<0)   ; PDDS (Power Down Deep Sleep)
-    str r1, [r0]
-    ldr r0, =SCR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<1)   ; SLEEPDEEP
-    str r1, [r0]
-    wfi
-
-; Enter Standby mode (STM32)
-    ldr r0, =PWR_CR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<1)   ; PDDS
-    str r1, [r0]
-    ldr r0, =SCR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<1)   ; SLEEPDEEP
-    str r1, [r0]
-    wfi                     ; MCU resets after entering Standby`
+            "language": "arm",
+            "title": "38.2.2 Configuring Sleep Mode (SCR Register) — listing 1",
+            "code": "LDR R0, =0xE000ED10   ; SCR\nLDR R1, [R0]\nORR R1, R1, #(1<<1)   ; SLEEPONEXIT\nSTR R1, [R0]",
+            "explanation": "Then, after initialization, execute WFI once, and the CPU will sleep and only wake to handle interrupts."
           }
         ]
       },
       {
-        id: 'sec-38-4',
-        title: '38.4 Clock Gating and Peripheral Power Management',
-        content: `Clock gating is the most effective way to reduce dynamic power. If a peripheral's clock is disabled, it consumes no dynamic power.
-
-### STM32F4 Clock Domains
-| Domain | Control Register | Peripherals |
-|--------|------------------|-------------|
-| AHB1 | RCC_AHB1ENR | GPIO, DMA, CRC, FLASH, RCC |
-| AHB2 | RCC_AHB2ENR | USB, ADC |
-| APB1 | RCC_APB1ENR | TIM2-7, USART2-3, I2C1-3, PWR |
-| APB2 | RCC_APB2ENR | TIM1, USART1, ADC1-3, SPI1 |
-
-### Clock Gating Strategy
-1. Identify unused peripherals at startup
-2. Disable their clocks immediately
-3. Only enable clocks when needed
-4. Disable after use if not needed continuously
-
-### Example: Disable All Unused Peripherals
-At reset, many peripheral clocks are enabled by default. Disable unused ones:
-
-### I/O Pin Configuration for Low Power
-• Set unused pins to analog mode (high impedance)
-• Avoid floating inputs (causes leakage)
-• Configure pull-up/pull-down as needed
-• Don't leave pins toggling unnecessarily
-
-### Voltage Scaling
-Some MCUs support voltage scaling to trade performance for power:
-• Scale 1 (high performance): Full speed
-• Scale 2 (medium): Reduced max frequency
-• Scale 3 (low power): Minimum frequency
-
-Power savings from voltage scaling can be 30-50%.`,
-        codeSnippets: [
+        "id": "sec-38-2-3",
+        "title": "38.2.3 Deep Sleep Mode (Stop/Standby)",
+        "content": "To enter Deep Sleep, set SLEEPDEEP bit in SCR before WFI. Additionally, the power management registers (vendor-specific) must be configured to select the desired low-power state. For STM32F4, the PWR_CR register controls voltage scaling and low-power mode selection.\n\nExample to enter Stop mode (a deep sleep mode) on STM32F4:\n\nClarification: On STM32F407 Stop resumes after WFI with HSI selected as system clock; software must restore a former PLL clock tree, not rely on Reset_Handler running. Standby wake follows a reset path and main SRAM is lost. Configure PWREN, wake source and flags before SLEEPDEEP, issue DSB, and clear SLEEPDEEP after Stop. PWR_CR.PDDS=0 selects Stop, LPDS selects regulator behavior. Source: https://www.st.com/resource/zh/reference_manual/DM00031020.pdf",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'Clock Gating Example',
-            code: `.equ RCC_AHB1ENR, 0x40023830
-.equ RCC_APB1ENR, 0x40023840
-.equ RCC_APB2ENR, 0x40023844
-
-Reset_Handler:
-    ; Enable only GPIOD clock (bit 3)
-    ldr r0, =RCC_AHB1ENR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<3)    ; GPIOD only
-    str r1, [r0]
-
-    ; Disable GPIOA, GPIOB, GPIOC, GPIOE, GPIOF, GPIOG, GPIOH
-    ; (already cleared by default, but explicit for clarity)
-    ldr r1, [r0]
-    bic r1, r1, #((1<<0)|(1<<1)|(1<<2)|(1<<4)|(1<<5)|(1<<6)|(1<<7))
-    str r1, [r0]
-
-    ; Enable only TIM2 clock (bit 0 in APB1)
-    ldr r0, =RCC_APB1ENR
-    ldr r1, [r0]
-    orr r1, r1, #1         ; TIM2 only
-    str r1, [r0]
-
-    ; Disable USART2, USART3, I2C1, I2C2, I2C3, PWR
-    ldr r1, [r0]
-    bic r1, r1, #((1<<17)|(1<<18)|(1<<21)|(1<<22)|(1<<23)|(1<<28))
-    str r1, [r0]
-
-    ; Set unused GPIO pins to analog mode (11 in MODER)
-    ; This reduces leakage on floating pins`
+            "language": "arm",
+            "title": "Enable power clock and configure PWR",
+            "code": "; Enable power clock and configure PWR\n; (simplified, actual registers depend on chip)\n\n; Set SLEEPDEEP in SCR\nLDR R0, =0xE000ED10\nLDR R1, [R0]\nORR R1, R1, #(1<<2)\nSTR R1, [R0]\n\n; Select Stop mode in PWR_CR (bits 0-1 = 01)\nLDR R0, =PWR_CR\nLDR R1, [R0]\nBIC R1, R1, #3\nORR R1, R1, #1\nSTR R1, [R0]\n\n; Execute WFI to enter Stop mode\nWFI",
+            "explanation": "Upon wake-up (via interrupt or reset), the CPU resumes execution after WFI.\n\nNote: In deep sleep modes, many clocks stop, and some peripherals may be powered down. The wake-up source must be configured (e.g., an external interrupt on a GPIO, RTC alarm) and its clock must remain active."
           }
         ]
       },
       {
-        id: 'sec-38-5',
-        title: '38.5 SLEEPONEXIT and ISR-Only Systems',
-        content: `SLEEPONEXIT is a powerful feature for interrupt-driven systems where the main thread does nothing.
-
-### How SLEEPONEXIT Works
-When SLEEPONEXIT=1:
-1. CPU starts, configures peripherals, enables interrupts
-2. CPU executes WFI to sleep
-3. Interrupt occurs, CPU wakes and runs ISR
-4. ISR completes, CPU returns from exception
-5. Instead of returning to thread mode, CPU immediately sleeps again
-
-This means:
-• No main loop needed
-• CPU spends almost zero time executing instructions
-• Maximum power savings
-
-### Use Cases
-• Sensor nodes that only wake on interrupt
-• RTC-based wakeup systems
-• UART-activated devices
-• Button-press responders
-
-### Implementation
-1. Set SLEEPONEXIT in SCR
-2. Configure all interrupts
-3. Execute WFI once
-4. CPU will sleep-wake-sleep-wake automatically
-
-### Important: ISR Must Be Complete
-Since the CPU never returns to main thread, the ISR must:
-• Handle all system functions
-• Clear all interrupt flags
-• Not rely on main thread variables being updated
-
-### SLEEPONEXIT vs Normal Sleep
-| Feature | Normal Sleep | SLEEPONEXIT |
-|---------|--------------|-------------|
-| Main loop | Runs between ISRs | Never runs |
-| Wake-up | ISR returns to main | ISR returns to sleep |
-| Power | Higher (main loop active) | Lower (only ISRs run) |
-| Complexity | Simple | Requires ISR-only design |`,
-        codeSnippets: [
+        "id": "sec-38-3",
+        "title": "38.3 Clock Management and Power Reduction",
+        "content": "Clocks drive the CPU and peripherals. Reducing clock frequency or disabling unused clocks significantly lowers dynamic power."
+      },
+      {
+        "id": "sec-38-3-1",
+        "title": "38.3.1 Prescaling the System Clock",
+        "content": "Many MCUs allow the system clock to be divided. Lowering the clock frequency reduces power but also performance. Choose the minimum frequency that meets deadlines.\n\nOn STM32F4, the system clock is typically 168 MHz but can be divided using the prescaler in RCC_CFGR. For example, to divide by 2, set HPRE bits. The exact bits depend on the chip; refer to the reference manual.\n\nClarification: STM32F407 resets on 16 MHz HSI; 168 MHz is a configured operating point, not the reset clock. HPRE divides HCLK, affecting derived buses and timer rates. Respect voltage scale and flash wait-state limits when changing clocks."
+      },
+      {
+        "id": "sec-38-3-2",
+        "title": "38.3.2 Clock Gating Peripherals",
+        "content": "Each peripheral clock can be independently enabled/disabled via the RCC registers (e.g., RCC_AHB1ENR, RCC_APB1ENR, RCC_APB2ENR). Disabling the clock to an unused peripheral stops its switching activity.\n\nExample: Disable GPIOB clock (if not used) by clearing bit 1 in RCC_AHB1ENR.\n\nClarification: The shown bit1 is GPIOB; GPIOD is bit3. ADC1–3 are on APB2 for STM32F407, not AHB2. Many peripheral clocks reset disabled. Check RCC low-power enable registers as well as run-mode enables; do not indiscriminately clear all clock registers.",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'SLEEPONEXIT System',
-            code: `.equ SCR, 0xE000ED10
-
-Reset_Handler:
-    ; Initialize peripherals
-    bl init_gpio
-    bl init_timer
-    bl init_uart
-
-    ; Enable interrupts
-    cpsie i
-
-    ; Enter sleep with SLEEPONEXIT
-    ldr r0, =SCR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<1)    ; SLEEPDEEP (optional)
-    orr r1, r1, #(1<<2)    ; SLEEPONEXIT
-    str r1, [r0]
-
-    wfi                     ; CPU sleeps until interrupt
-                            ; After ISR, returns to sleep automatically
-
-; Main loop (never reached!)
-main_loop:
-    b main_loop
-
-; Example ISR
-TIM2_IRQHandler:
-    ldr r0, =GPIOD_ODR
-    ldr r1, [r0]
-    eor r1, r1, #(1<<12)   ; toggle LED
-    str r1, [r0]
-    ; Clear interrupt flag
-    ldr r0, =TIM2_SR
-    mov r1, #0
-    str r1, [r0]
-    bx lr                   ; Returns to sleep, not main_loop!`
+            "language": "arm",
+            "title": "38.3.2 Clock Gating Peripherals — listing 1",
+            "code": "LDR R0, =0x40023830   ; RCC_AHB1ENR\nLDR R1, [R0]\nBIC R1, R1, #(1<<1)   ; clear GPIOD? Actually GPIOD is bit 3; adjust.\nSTR R1, [R0]",
+            "explanation": "Ensure you don't disable a clock needed by your code or by wake-up logic."
           }
         ]
       },
       {
-        id: 'sec-38-6',
-        title: '38.6 Duty Cycling and Wake-Up Sources',
-        content: `Duty cycling alternates between active and sleep modes to minimize average power consumption.
-
-### Duty Cycle Calculation
-Duty Cycle = T_active / (T_active + T_sleep)
-
-Power_saver = 1 - Duty_Cycle
-
-Example: Active 1ms every 1000ms = 0.1% duty cycle
-Power savings: 99.9% reduction in dynamic power
-
-### Wake-Up Sources
-| Source | Speed | Use Case |
-|--------|-------|----------|
-| External Interrupt (EXTI) | Fastest (µs) | Button, sensor |
-| RTC Alarm | Slow (ms) | Scheduled tasks |
-| UART Activity | Fast (µs) | Communication |
-| Timer Overflow | Fast (µs) | Periodic tasks |
-| Watchdog | Slow (ms) | Safety recovery |
-
-### EXTI Configuration for Wake-Up
-External interrupts can wake from any sleep mode:
-1. Configure GPIO pin as input with interrupt
-2. Select edge (rising/falling/both) in EXTI
-3. Enable EXTI interrupt in NVIC
-4. Enable wakeup in PWR (for Stop/Standby modes)
-
-### RTC Wake-Up
-RTC can generate periodic wakeup:
-1. Configure RTC prescaler for 1 Hz or slower
-2. Set alarm or wake-up timer
-3. Enable RTC wake-up interrupt
-4. MCU wakes at configured interval
-
-### Multi-Period Wake-Up
-For different wakeup intervals:
-• Use RTC for long periods (hours, days)
-• Use TIM for medium periods (seconds, minutes)
-• Use SysTick for short periods (milliseconds)
-
-### Example: Battery-Powered Sensor
-A soil moisture sensor that:
-1. Sleeps 99.9% of the time
-2. Wakes every 5 minutes via RTC
-3. Takes 10 measurements (10 ms each)
-4. Averages and stores result
-5. Transmits via LoRa (if needed)
-6. Returns to sleep
-
-Battery life with CR2032: >5 years!`,
-        codeSnippets: [
+        "id": "sec-38-3-3",
+        "title": "38.3.3 Voltage Scaling",
+        "content": "Some MCUs support multiple voltage ranges (e.g., high-performance, low-power). Lowering voltage reduces power but limits maximum frequency. On STM32F4, the PWR_CR register has a VOS field to select voltage scale. Always check the datasheet for allowed frequency ranges.\n\nClarification: Voltage-scale options differ among STM32F4 parts; do not assume the three scales of another family apply to F407. Lower voltage only after lowering frequency as required, and raise voltage/flash latency before increasing frequency. Fixed percentage power savings are not portable."
+      },
+      {
+        "id": "sec-38-4",
+        "title": "38.4 GPIO and Peripheral Power Optimization",
+        "content": "Even when not used, GPIO pins can consume power if left floating (inputs with no defined level). To minimize leakage:\n\n- Set unused pins as analog (mode 11) or as inputs with pull-up/pull-down.\n- Disable Schmitt trigger for analog pins.\n- Configure as output low if external circuit allows.\n\nFor peripherals, disable them in their control registers and gate their clocks.\n\nClarification: On the Discovery board PA13/PA14 are SWD pins: preserve them for debugging. Do not drive connected pins low without checking the schematic, or configure an oscillator/wake pin as an unused analog input. Turn off external loads and peripheral functions before gating clocks."
+      },
+      {
+        "id": "sec-38-5",
+        "title": "38.5 Low-Power Programming Techniques",
+        "content": ""
+      },
+      {
+        "id": "sec-38-5-1",
+        "title": "38.5.1 Duty Cycling",
+        "content": "Duty cycling involves waking up periodically, doing work quickly, then going back to sleep. The average power consumption is low if the active time is small relative to sleep time. For example, a sensor node might wake every 10 seconds, read a sensor, transmit data, and sleep.\n\nInterrupt-driven design is natural for duty cycling: use a timer to wake the CPU periodically.\n\nClarification: Measurement and optimization retained: use a calibrated shunt/current profiler with adequate bandwidth to integrate active pulses and sleep current over a complete cycle. Ammeter burden voltage and debugger/USB/LED current can distort results. Batching work and DMA may save wake-ups, but DMA and its buses must remain clocked in the chosen mode. Compare energy per completed task before choosing lookup tables, integer arithmetic or loop unrolling; fixed savings percentages are not justified without measurements."
+      },
+      {
+        "id": "sec-38-5-2",
+        "title": "38.5.2 Interrupt-Driven Idle Loop with SLEEPONEXIT",
+        "content": "By setting SLEEPONEXIT, the CPU automatically sleeps after each interrupt. The main loop can be minimal:",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'RTC Wake-Up Configuration',
-            code: `.equ RTC_BASE, 0x40028000
-.equ RTC_CR, RTC_BASE + 0x04
-.equ RTC_ISR, RTC_BASE + 0x0C
-.equ RTC_WUTR, RTC_BASE + 0x2C
-.equ PWR_CR, 0x40007000
-
-configure_rtc_wakeup:
-    ; Enable RTC clock
-    ldr r0, =RCC_APB1ENR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<28)   ; RTCEN
-    str r1, [r0]
-
-    ; Enable RTC wakeup timer interrupt
-    ldr r0, =RTC_CR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<10)   ; WUTE (wake-up timer enable)
-    str r1, [r0]
-
-    ; Set wake-up reload value (e.g., 30000 = 30 seconds at 1 Hz)
-    ldr r0, =RTC_WUTR
-    ldr r1, =30000
-    str r1, [r0]
-
-    ; Enable PWR clock and wakeup pin
-    ldr r0, =PWR_CR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<8)    ; UWUF (wake-up flag)
-    str r1, [r0]
-
-    ; Enter Stop mode with RTC wake-up
-    ldr r0, =SCR
-    ldr r1, [r0]
-    orr r1, r1, #(1<<1)    ; SLEEPDEEP
-    str r1, [r0]
-
-    cpsie i
-    wfi                     ; sleep until RTC wake-up`
+            "language": "arm",
+            "title": "38.5.2 Interrupt-Driven Idle Loop with SLEEPONEXIT — listing 1",
+            "code": "main_loop:\n    WFI\n    B main_loop",
+            "explanation": "Initialization enables interrupts, and after the first WFI, the CPU sleeps. Each interrupt wakes it, the ISR runs, and on return, it sleeps again without executing WFI again. This is energy-efficient and simple."
           }
         ]
       },
       {
-        id: 'sec-38-7',
-        title: '38.7 Measuring and Optimizing Power',
-        content: `### Power Measurement Techniques
-1. Inline Ammeter: Measure current directly (most accurate)
-2. Power Monitor: Specialized tools (e.g., Nordic Power Profiler)
-3. MCU Internal ADC: Measure voltage across sense resistor
-4. Energy Harvesting: Measure charge/discharge cycles
-
-### Common Power Optimization Techniques
-| Technique | Power Savings | Complexity |
-|-----------|---------------|------------|
-| Clock gating | 20-50% | Low |
-| Sleep modes | 50-99% | Medium |
-| Voltage scaling | 30-50% | Medium |
-| Peripheral batching | 10-30% | Medium |
-| DMA transfers | 20-40% | High |
-| Optimized algorithms | 10-50% | High |
-
-### Peripheral Batching
-Instead of handling each peripheral immediately:
-1. Collect multiple events/tasks
-2. Wake up and process all at once
-3. Return to sleep immediately
-
-Reduces wake-up overhead and active time.
-
-### DMA for Power Efficiency
-DMA transfers data without CPU involvement:
-• CPU can sleep during DMA transfers
-• Useful for ADC, UART, SPI, I2C
-• Reduces CPU active time significantly
-
-### Software Optimization Tips
-1. Use lookup tables instead of computation
-2. Optimize algorithms for fewer operations
-3. Avoid floating-point (use fixed-point)
-4. Use appropriate data types (uint8_t vs uint32_t)
-5. Minimize function call overhead
-6. Unroll small loops
-
-### Power Budgeting
-Create a power budget during design:
-1. Estimate active time per cycle
-2. Calculate current for each mode
-3. Sum weighted by duty cycle
-4. Verify against battery capacity
-5. Add safety margin (20-30%)
-
-Example Budget:
-• Active (10 mA × 1 ms): 10 µAs
-• Sleep (2 µA × 999 ms): 1.998 µAs
-• Total per second: ~12 µAs
-• Average current: ~12 µA
-• CR2032 life: 220 mAh / 12 µA ≈ 5 years`,
-        codeSnippets: [
+        "id": "sec-38-5-3",
+        "title": "38.5.3 Using Low-Power Timers",
+        "content": "Some MCUs have low-power timers that run even in deep sleep (e.g., LPTIM on STM32). These can wake the CPU after a programmable delay, enabling very low average power.\n\nClarification: STM32F407 has no LPTIM peripheral. TIM2 and SysTick can wake ordinary Sleep with the needed clocks enabled, but do not run through F407 Stop. Use RTC alarm/wakeup or an eligible EXTI source for Stop. USART wake features from other STM32 families are not automatically available here; arbitrary EXTI lines are not universal Standby wake sources."
+      },
+      {
+        "id": "sec-38-6",
+        "title": "38.6 Bare-Metal Programming Considerations",
+        "content": "Bare-metal programming gives you full control over hardware, which is essential for low-power design. Key aspects:\n\n- Startup code: Initializes stack pointer, copies data, clears BSS, and calls main. It also configures the system clock and power modes before entering main.\n- Linker script: Places code in flash and data in SRAM; ensures interrupt vector table is at the correct location.\n- No OS overhead: No context switching, no system calls, no background tasks; the application is entirely under your control.\n- Direct register access: You write to hardware registers to configure clocks, peripherals, and power modes."
+      },
+      {
+        "id": "sec-38-6-1",
+        "title": "38.6.1 Example Startup Code with Clock Configuration",
+        "content": "A typical startup file for STM32F4 might:\n\n1. Set the vector table.\n2. Initialize the system clock (e.g., using PLL to 168 MHz or lower for power).\n3. Enable power interface clock (PWR).\n4. Configure voltage scaling.\n5. Enable clocks for used peripherals.\n6. Copy .data, zero .bss.\n7. Call main or enter an infinite loop.\n\nIn assembly, the clock configuration is done by writing to RCC registers. This can be complex; often a C library is used, but for pure assembly, it's doable."
+      },
+      {
+        "id": "sec-38-7",
+        "title": "38.7 Practical Example: Low-Power Blinking LED",
+        "content": "We'll implement a program that blinks an LED every 500 ms using a timer interrupt and sleep mode. The MCU sleeps between interrupts, waking only to toggle the LED and then return to sleep.\n\nSteps:\n\n1. Configure GPIO PD12 as output for LED.\n2. Configure TIM2 to generate an update interrupt every 500 ms.\n3. Enable TIM2 interrupt in NVIC.\n4. Enable global interrupts.\n5. Set SLEEPONEXIT in SCR so CPU sleeps after each interrupt.\n6. Execute WFI and then an infinite loop.\n\nAssembly code (simplified):\n\nClarification: The original omits CR1.CEN, prescaler update generation and valid vector/stack layout. At 16 MHz, PSC=15999 and ARR=500 gives 501 ms after loading PSC; use ARR=499 for 500 ms. The completed program starts TIM2, clears initialization UIF and uses the full Chapter 35 startup/linker contract. A WFI can return for reasons besides the expected timer, so retain a WFI loop instead of a busy branch fallback.",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'Power Optimization Examples',
-            code: `; Example 1: Batch ADC readings
-; Instead of reading ADC one at a time, use DMA to read all channels
-
-; Configure DMA for ADC
-ldr r0, =DMA2_S0CR
-ldr r1, [r0]
-orr r1, r1, #(1<<0)       ; EN
-str r1, [r0]
-
-; CPU can sleep while DMA transfers
-wfi
-; DMA completion interrupt wakes CPU
-
-; Example 2: Optimize loop for power
-; Bad: Check every iteration
-loop_bad:
-    ldr r0, =flag
-    ldr r1, [r0]
-    cmp r1, #0
-    beq loop_bad
-
-; Better: Sleep between checks
-loop_better:
-    wfi
-    ldr r0, =flag
-    ldr r1, [r0]
-    cmp r1, #0
-    beq loop_better
-
-; Example 3: Use smaller data types
-; Bad: Use 32-bit for small values
-mov r0, #0           ; wastes 32 bits
-ldr r1, [r0]
-
-; Better: Use 8-bit when possible
-ldrb r0, [r1]        ; load only 8 bits`
+            "language": "arm",
+            "title": "Original low-power blink specimen — incomplete startup and timer setup",
+            "code": "; low_power_blink.s\n.syntax unified\n.cpu cortex-m4\n.thumb\n\n.equ RCC_AHB1ENR,   0x40023830\n.equ RCC_APB1ENR,   0x40023840\n.equ GPIO_D_BASE,   0x40020C00\n.equ GPIOD_MODER,   0x40020C00\n.equ GPIOD_ODR,     0x40020C14\n.equ TIM2_BASE,     0x40000000\n.equ TIM2_PSC,      0x40000028\n.equ TIM2_ARR,      0x4000002C\n.equ TIM2_CR1,      0x40000000\n.equ TIM2_DIER,     0x4000000C\n.equ TIM2_SR,       0x40000010\n.equ NVIC_ISER0,    0xE000E100\n.equ SCR,           0xE000ED10\n.equ TIM2_IRQ_NUM,  28\n\n.section .isr_vector, \"a\"\n.word _estack\n.word Reset_Handler\n; ... (other vectors omitted)\n.word TIM2_IRQHandler   ; at appropriate position (16+28 = 44)\n\n.section .text\n.thumb_func\n.global Reset_Handler\nReset_Handler:\n    ; Enable GPIOD and TIM2 clocks\n    LDR R0, =RCC_AHB1ENR\n    LDR R1, [R0]\n    ORR R1, R1, #(1<<3)   ; GPIOD\n    STR R1, [R0]\n    LDR R0, =RCC_APB1ENR\n    LDR R1, [R0]\n    ORR R1, R1, #(1<<0)   ; TIM2\n    STR R1, [R0]\n\n    ; Configure PD12 as output\n    LDR R0, =GPIOD_MODER\n    LDR R1, [R0]\n    BIC R1, R1, #(3<<24)\n    ORR R1, R1, #(1<<24)\n    STR R1, [R0]\n\n    ; Configure TIM2: prescaler 16000, ARR 500 for 500 ms (assuming 16 MHz)\n    LDR R0, =TIM2_PSC\n    MOV R1, #16000-1\n    STR R1, [R0]\n    LDR R0, =TIM2_ARR\n    MOV R1, #500\n    STR R1, [R0]\n\n    ; Enable update interrupt in TIM2\n    LDR R0, =TIM2_DIER\n    LDR R1, [R0]\n    ORR R1, R1, #1        ; UIE\n    STR R1, [R0]\n\n    ; Enable TIM2 interrupt in NVIC\n    LDR R0, =NVIC_ISER0\n    MOV R1, #(1 << TIM2_IRQ_NUM)  ; IRQ28 is bit 28\n    STR R1, [R0]\n\n    ; Set SLEEPONEXIT in SCR\n    LDR R0, =SCR\n    LDR R1, [R0]\n    ORR R1, R1, #(1<<1)\n    STR R1, [R0]\n\n    ; Enable global interrupts\n    CPSIE I\n\n    ; Enter sleep and then loop\n    WFI\nmain_loop:\n    B main_loop\n\n.thumb_func\n.global TIM2_IRQHandler\nTIM2_IRQHandler:\n    ; Toggle PD12\n    LDR R0, =GPIOD_ODR\n    LDR R1, [R0]\n    EOR R1, R1, #(1<<12)\n    STR R1, [R0]\n\n    ; Clear update interrupt flag\n    LDR R0, =TIM2_SR\n    LDR R1, [R0]\n    BIC R1, R1, #1\n    STR R1, [R0]\n\n    BX LR\n\n.section .bss\n.align 3\n_estack: .space 0x400",
+            "explanation": "In this code, after WFI, the CPU sleeps. When the timer interrupt fires, it wakes, toggles LED, clears flag, and because SLEEPONEXIT is set, it automatically re-enters sleep after returning from the ISR. The main loop is never reached; the B main_loop is just a safety."
+          },
+          {
+            "language": "arm",
+            "title": "Complete low-power blink: sleep_blink.s",
+            "code": "/* blink.s: STM32F407VG Discovery, PD12 LED, Cortex-M4 Thumb. */\n.syntax unified\n.cpu cortex-m4\n.thumb\n.ifndef LED_PIN\n.equ LED_PIN,12\n.endif\n.equ RCC_AHB1ENR,0x40023830\n.equ GPIOD_MODER,0x40020c00\n.equ GPIOD_OTYPER,0x40020c04\n.equ GPIOD_OSPEEDR,0x40020c08\n.equ GPIOD_PUPDR,0x40020c0c\n.equ GPIOD_BSRR,0x40020c18\n.section .isr_vector,\"a\",%progbits\n.global vectors\nvectors:\n    .word _estack,Reset_Handler\n    .word Default_Handler,Default_Handler,Default_Handler\n    .word Default_Handler,Default_Handler\n    .word 0,0,0,0\n    .word Default_Handler,Default_Handler,0\n    .word Default_Handler,Default_Handler\n    .rept 28\n    .word Default_Handler\n    .endr\n    .word TIM2_IRQHandler\n    .rept 9\n    .word Default_Handler\n    .endr\n    .word Default_Handler\n    .rept 43\n    .word Default_Handler\n    .endr\n.section .text.Reset_Handler,\"ax\",%progbits\n.global Reset_Handler\n.type Reset_Handler,%function\n.thumb_func\nReset_Handler:\n    ldr r0,=0xe000ed08      @ VTOR: use the linked vector-table address\n    ldr r1,=vectors\n    str r1,[r0]\n    dsb\n    isb\n    ldr r0,=_sdata\n    ldr r1,=_edata\n    ldr r2,=_sidata\n1:\n    cmp r0,r1\n    bhs 2f\n    ldr r3,[r2],#4\n    str r3,[r0],#4\n    b 1b\n2:\n    ldr r0,=_sbss\n    ldr r1,=_ebss\n    movs r2,#0\n3:\n    cmp r0,r1\n    bhs 4f\n    str r2,[r0],#4\n    b 3b\n4:\n    bl main\n    b .\n.size Reset_Handler,.-Reset_Handler\n\n.section .text,\"ax\",%progbits\n.thumb_func\nDefault_Handler:\n    b .\n.global main\n.thumb_func\nmain:\n    cpsid i\n    @ GPIOD clock; PD12 push-pull output, initially low.\n    ldr r0,=0x40023830\n    ldr r1,[r0]\n    orr r1,r1,#8\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40020c00\n    ldr r1,[r0]\n    bic r1,r1,#(3<<24)\n    orr r1,r1,#(1<<24)\n    str r1,[r0]\n    ldr r1,[r0,#4]\n    bic r1,r1,#(1<<12)\n    str r1,[r0,#4]\n    ldr r1,[r0,#8]\n    bic r1,r1,#(3<<24)\n    str r1,[r0,#8]\n    ldr r1,[r0,#12]\n    bic r1,r1,#(3<<24)\n    str r1,[r0,#12]\n    mov r1,#(1<<28)\n    str r1,[r0,#24]\n    @ Exclusive TIM2 ownership, 16 MHz timer input, update every 500 ms.\n    ldr r0,=0x40023840\n    ldr r1,[r0]\n    orr r1,r1,#1\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40000000\n    movs r1,#0\n    str r1,[r0]\n    str r1,[r0,#4]\n    str r1,[r0,#8]\n    str r1,[r0,#12]\n    movw r1,#15999\n    str r1,[r0,#40]\n    movw r1,#499\n    str r1,[r0,#44]\n    movs r1,#1\n    str r1,[r0,#20]       @ EGR.UG loads the prescaler\n    movs r1,#0\n    str r1,[r0,#16]       @ Clear initialization flags\n    movs r1,#1\n    str r1,[r0,#12]       @ DIER.UIE\n    str r1,[r0]           @ CR1.CEN\n    ldr r0,=0xe000e41c\n    movs r1,#0x80\n    strb r1,[r0]\n    ldr r0,=0xe000e280\n    mov r1,#(1<<28)\n    str r1,[r0]\n    ldr r0,=0xe000e100\n    str r1,[r0]\n    ldr r0,=0xe000ed10\n    ldr r1,[r0]\n    bic r1,r1,#4         @ Normal Sleep, not Stop: TIM2 must keep running\n    orr r1,r1,#2         @ SLEEPONEXIT; all work handled by TIM2 ISR\n    str r1,[r0]\n    dsb\n    isb\n    cpsie i\n1:\n    dsb\n    wfi\n    b 1b\n\n.global TIM2_IRQHandler\n.thumb_func\nTIM2_IRQHandler:\n    ldr r0,=0x40000010\n    ldr r1,[r0]\n    tst r1,#1\n    beq 1f\n    movs r1,#0\n    str r1,[r0]          @ This driver owns all TIM2 flags\n    ldr r0,=led_state\n    ldr r1,[r0]\n    eor r1,r1,#1\n    str r1,[r0]\n    cmp r1,#0\n    ite ne\n    movne r1,#(1<<12)\n    moveq r1,#(1<<28)\n    ldr r0,=0x40020c18\n    str r1,[r0]          @ Only PD12 changed via BSRR\n1:\n    bx lr\n.ltorg\n.section .bss,\"aw\",%nobits\n.balign 4\nled_state: .space 4",
+            "explanation": "STM32F407 reset clocks, ordinary Sleep, timer period 500 ms and one-second full LED cycle. Link using stm32f4.ld from Chapter 35. TIM2 owns PD12 and all its status flags. Board current and wake latency have not been measured."
+          },
+          {
+            "language": "bash",
+            "title": "Build the complete sleeping blinker",
+            "code": "arm-none-eabi-as -mcpu=cortex-m4 -mthumb sleep_blink.s -o sleep_blink.o\narm-none-eabi-ld -T stm32f4.ld sleep_blink.o -o sleep_blink.elf\narm-none-eabi-objdump -d sleep_blink.elf",
+            "explanation": "Inspect CEN, UG and SCR setup and vector44 before testing on the target."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-38-1',
-        title: 'Exercise 38.1: Duty Cycling Power Calculation',
-        description: 'An MCU draws 10mA for 6ms every 10 seconds, and 2uA when asleep. Calculate average current draw and battery life with CR2032 (220 mAh).',
-        solution: 'Active charge = 10mA × 6ms = 60 µAs. Sleep charge = 2µA × 9994ms = 19.99 µAs. Total per 10s = 79.99 µAs. Average current = 79.99 µAs / 10s = 8 µA. Battery life = 220 mAh / 8 µA ≈ 3.1 years.',
-        solutionLanguage: 'c'
+        "id": "ex-38-1",
+        "title": "Exercise 38.1: Enter Sleep Mode",
+        "description": "Write a simple program that enters Sleep mode using WFI and wakes on an external interrupt (e.g., button press). Explain the role of the SCR and NVIC in this process.",
+        "solution": "To enter Sleep mode, just execute WFI with global interrupts enabled. Configure the external interrupt by enabling the GPIO interrupt in the peripheral, enabling the corresponding IRQ in NVIC, and setting the priority. Before WFI, clear any pending interrupts. The CPU halts until the interrupt occurs, then wakes and executes the ISR. No special SCR bit needed for normal Sleep; SLEEPDEEP must be 0 (default).\n\nFor STM32F407 PA0 button input: enable GPIOA and SYSCFG clocks; set PA0 input/pull according to the schematic; map SYSCFG_EXTICR1 EXTI0 to port A, select rising edge in EXTI_RTSR, clear EXTI_PR bit0 with a write-one, unmask EXTI_IMR bit0, install EXTI0_IRQHandler at vector22, set priority and ISER0 bit6. In the handler acknowledge PR bit0. Clear SLEEPDEEP; DSB/WFI in a loop. Clear stale flags during initialization, never discard newly arrived work immediately before every sleep. Mechanical switches may need debounce.",
+        "solutionLanguage": "text"
       },
       {
-        id: 'ex-38-2',
-        title: 'Exercise 38.2: SLEEPONEXIT Implementation',
-        description: 'Design an interrupt-only system that toggles an LED every 500ms using SLEEPONEXIT. No main loop allowed.',
-        solution: 'Set SLEEPONEXIT in SCR, configure TIM2 for 500ms interrupt, enable TIM2 interrupt in NVIC, execute WFI. TIM2_IRQHandler toggles LED and clears UIF.',
-        solutionLanguage: 'arm'
+        "id": "ex-38-2",
+        "title": "Exercise 38.2: Clock Gating",
+        "description": "Given an STM32F4, write assembly code to disable the clock for GPIOA and USART2 if they are unused. Identify the registers and bits.",
+        "solution": "LDR R0, =0x40023830   ; AHB1ENR\nLDR R1, [R0]\nBIC R1, R1, #1        ; clear GPIOA clock\nSTR R1, [R0]\n\nLDR R0, =0x40023840   ; APB1ENR\nLDR R1, [R0]\nBIC R1, R1, #(1<<17)  ; clear USART2 clock\nSTR R1, [R0]",
+        "solutionLanguage": "arm",
+        "solutionExplanation": "GPIOA is on AHB1, bit 0. USART2 is on APB1, bit 17. Clear those bits in RCC_AHB1ENR (0x40023830) and RCC_APB1ENR (0x40023840) respectively. First finish transfers (wait USART TC if needed), disable USART2 in CR1, and ensure PA13/PA14 debug and all other GPIOA users tolerate gating. This is a conditional fragment, not a safe universal board initialization."
       },
       {
-        id: 'ex-38-3',
-        title: 'Exercise 38.3: Clock Gating Strategy',
-        description: 'Write code to disable all peripheral clocks except GPIOD and TIM2 on STM32F4.',
-        solution: 'Write to RCC_AHB1ENR to enable only GPIOD (bit 3). Write to RCC_APB1ENR to enable only TIM2 (bit 0). Write to RCC_APB2ENR to disable all.',
-        solutionLanguage: 'arm'
+        "id": "ex-38-3",
+        "title": "Exercise 38.3: Duty Cycling Calculation",
+        "description": "A sensor node wakes every 10 seconds, takes 5 ms to read a sensor and transmit data using 10 mA, then sleeps with 2 µA current. Calculate the average current consumption. Assume the active period includes wake-up overhead of 1 ms at 10 mA.",
+        "solution": "Active current: 10 mA for (5 ms + 1 ms) = 6 ms per cycle. Sleep current: 2 µA for (10 s - 6 ms) ≈ 10 s. Average = (10 mA * 6 ms + 2 µA * 10000 ms) / 10000 ms = (0.06 mA·s + 0.02 µA·s) / 10 s? Let's compute: Active charge = 10 mA * 6 ms = 60 µC. Sleep charge = 2 µA * 9994 ms = 19.988 µC. Total charge per 10 s ≈ 79.988 µC. Average current = 79.988 µC / 10 s = 7.9988 µA ≈ 8 µA.\n\nThe wording says active time includes overhead: if the total active period is 5 ms, exact average is (10000 microamps*0.005 s + 2 microamps*9.995 s)/10 s = 6.999 microamps. If 5 ms work PLUS 1 ms overhead was intended, it is 7.9988 microamps. State which interpretation is used; the source solution uses the latter.",
+        "solutionLanguage": "text"
       },
       {
-        id: 'ex-38-4',
-        title: 'Exercise 38.4: Wake-Up Source Configuration',
-        description: 'Configure an external interrupt on PA0 to wake from Stop mode on rising edge.',
-        solution: 'Configure PA0 as input with pull-down, configure EXTI0 for rising edge, enable EXTI0 in NVIC, enable wakeup in PWR, set SLEEPDEEP, enter Stop mode with WFI.',
-        solutionLanguage: 'arm'
+        "id": "ex-38-4",
+        "title": "Exercise 38.4: SLEEPONEXIT Optimization",
+        "description": "Modify the low-power blink example to use SLEEPONEXIT. Explain why this saves power compared to a loop with WFI and branch.",
+        "solution": "With WFI in a loop, after each interrupt the CPU executes the branch back to WFI, which takes a few cycles. With SLEEPONEXIT, the CPU automatically re-enters sleep on return from the interrupt, eliminating those extra instructions and reducing wake-up overhead, thus saving power.\n\nThe source example already sets SLEEPONEXIT. The complete companion supplies missing initialization; clear SCR bit1 to compare the ordinary DSB/WFI loop. Measure the difference, since peripheral and LED current can dominate.",
+        "solutionLanguage": "text"
       },
       {
-        id: 'ex-38-5',
-        title: 'Exercise 38-5: Power Budget Analysis',
-        description: 'Create a power budget for a weather station that: wakes every 5 minutes, reads sensors for 50ms at 15mA, transmits data for 100ms at 40mA, then sleeps. Calculate battery life with 1000mAh battery.',
-        solution: 'Active time per cycle: 50ms + 100ms = 150ms. Energy per cycle: (15mA×50ms) + (40mA×100ms) = 4.75 mAs. Sleep time: 299850ms. Sleep energy: 10µA×299.85s = 3 mAs. Total: 7.75 mAs per 5min. Average current: 7.75/300 = 25.8 µA. Battery life: 1000mAh / 25.8µA ≈ 4.4 years.',
-        solutionLanguage: 'c'
+        "id": "ex-38-5",
+        "title": "Exercise 38.5: Deep Sleep Wake-Up",
+        "description": "Describe the steps to enter Stop mode on STM32F4 and wake up using an RTC alarm. What registers are involved? What happens to the system clock upon wake-up?",
+        "solution": "To enter Stop mode:\n- Set SLEEPDEEP bit in SCR.\n- Configure PWR_CR to select Stop mode (bits 0-1 = 01) and enable power interface clock.\n- Configure the RTC alarm as wake-up source.\n- Execute WFI.\nUpon RTC alarm, the CPU wakes from Stop, resumes after WFI. The system clock may need to be reconfigured if it was switched to a low-power source (e.g., HSI) during Stop. Typically, the clock is restored by hardware or startup code.\n\nCorrection: F407 Stop selects HSI on wake; firmware explicitly re-enables/waits for oscillators and PLL and switches SYSCLK when ready. Enable PWR clock and backup-domain writes, configure an available LSE/LSI RTC source without destructively resetting an in-use backup domain, unlock RTC write protection, disable alarm and wait ALRAWF before setting it, clear ALRAF, enable ALRAIE/ALRAE and relock. Route EXTI17 rising edge and NVIC RTC_Alarm IRQ41, acknowledge both RTC and EXTI flags in the handler. Retain the RTC clock in Stop and use timeouts for oscillator readiness. Stop does not rerun startup.",
+        "solutionLanguage": "text"
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'What is the benefit of the SLEEPONEXIT bit in low-power systems?',
-        answer: 'It avoids having the CPU return to thread mode and execute instructions in an idle loop between interrupts. The CPU returns directly from the ISR back into sleep mode, minimizing energy consumption and simplifying interrupt-only designs.'
+        "question": "What are the main sources of power consumption in a CMOS microcontroller? How can you reduce each?",
+        "answer": "Dynamic switching power depends on activity, capacitance, voltage squared and frequency; leakage remains while idle and varies with voltage and temperature. Gate unused clocks, reduce unnecessary switching and use appropriate sleep/power domains; measure the whole board."
       },
       {
-        question: 'What is the difference between WFI and WFE?',
-        answer: 'WFI halts the CPU until an enabled interrupt occurs. WFE halts until an event (interrupt, SEV instruction, or external event) occurs. WFE is useful for multi-core synchronization, while WFI is simpler for single-core low-power sleep.'
+        "question": "Explain the difference between Sleep and Deep Sleep modes on Cortex-M. Which instructions are used to enter them?",
+        "answer": "SCR.SLEEPDEEP=0 selects ordinary Sleep; setting it requests the MCU’s configured deep-sleep state. WFI or WFE enters the selected state. On STM32F407, Stop retains main SRAM and resumes; Standby normally loses main SRAM and restarts through reset."
       },
       {
-        question: 'How does clock gating reduce power consumption?',
-        answer: 'Clock gating disables the clock signal to unused peripherals. Without a clock, the peripheral logic cannot switch states, eliminating dynamic power consumption (P = C × V² × f). This can reduce power by 20-50% depending on which peripherals are disabled.'
+        "question": "What is the purpose of the SLEEPONEXIT bit? How does it help in low-power designs?",
+        "answer": "SLEEPONEXIT is SCR bit1 and sleeps when exception return would reach thread mode. It removes idle-loop instructions for ISR-only systems but prevents a thread-mode queue consumer from running until cleared."
       },
       {
-        question: 'What is the difference between Sleep, Stop, and Standby modes?',
-        answer: 'Sleep stops only the CPU (peripherals continue). Stop stops CPU and most peripherals (only RTC continues, ~2µA). Standby stops everything except RTC and backup domain (~1µA), but SRAM contents are lost. Deeper modes have lower power but slower wake-up.'
+        "question": "How does clock gating reduce power consumption? Provide an example.",
+        "answer": "Gating a peripheral clock suppresses clock-driven switching. Clear GPIOB bit1 in RCC_AHB1ENR only after confirming it is unused. It does not remove every leakage or external-load current, and wake-up dependencies must remain powered."
       },
       {
-        question: 'How do you calculate battery life for an embedded system?',
-        answer: 'Calculate average current: I_avg = (I_active × T_active + I_sleep × T_sleep) / (T_active + T_sleep). Battery life = Battery capacity (mAh) / I_avg (mA). Add 20-30% safety margin for self-discharge and environmental factors.'
+        "question": "Why should unused GPIO pins be configured as analog or with pull-up/down? What problems can floating pins cause?",
+        "answer": "Floating digital inputs can switch near thresholds and consume extra current. Analog mode disables the digital input path where documented; a suitable pull defines a level. Check external connections and preserve debugger, oscillator and wake pins."
       },
       {
-        question: 'What is duty cycling and why is it important?',
-        answer: 'Duty cycling alternates between active and sleep modes to minimize average power consumption. A 1% duty cycle means the MCU is active 1% of the time and sleeping 99%, reducing average power by ~99%. This is essential for battery-powered devices to achieve years of operation.'
+        "question": "What is duty cycling? How does it affect average power consumption?",
+        "answer": "Duty cycling alternates active work with sleep. Average current is (Iactive*tactive + Isleep*tsleep)/period, including startup, radio and regulator costs. The active duty fraction alone is not the percentage of total energy saved."
+      },
+      {
+        "question": "Describe the WFI instruction. What happens when an interrupt is pending?",
+        "answer": "WFI waits for an architecturally qualifying wake condition. A qualifying pending interrupt can make it return immediately; waking and servicing the handler are distinct when masked. Use DSB before sleep and recheck software work rather than assuming every wake implies useful work."
+      },
+      {
+        "question": "What are the trade-offs between lowering the clock frequency and reducing voltage for power savings?",
+        "answer": "Lower frequency reduces instantaneous switching power but lengthens execution and changes peripheral timing; total energy may rise if sleep is delayed. Voltage has a quadratic switching effect but must satisfy device frequency/flash/voltage limits and sequencing."
+      },
+      {
+        "question": "How can an RTC alarm be used as a wake-up source in deep sleep? What are the advantages?",
+        "answer": "Run RTC from a clock available in the selected low-power mode, configure and acknowledge its alarm, route EXTI17 and enable RTC_Alarm IRQ41 for STM32F407 Stop. RTC supports long idle periods while high-speed clocks stop. Restore the desired clock tree after wake."
+      },
+      {
+        "question": "In bare-metal programming, what is the role of the startup code and linker script in low-power applications?",
+        "answer": "Startup supplies vectors, stack and initialized data, and establishes a valid clock/power state. The linker places flash, SRAM, retained regions and stack. Stop resumes existing code; Standby reset requires a deliberate retained-state recovery design."
       }
     ],
-    summary: [
-      'Power consumption is critical in battery-operated embedded systems.',
-      'WFI and WFE halt the CPU until an interrupt or event occurs.',
-      'Multiple sleep modes provide trade-offs between power savings and wake-up time.',
-      'Clock gating eliminates dynamic power for unused peripherals.',
-      'SLEEPONEXIT enables efficient interrupt-only systems without a main loop.',
-      'Duty cycling keeps the processor asleep >99% of the time for maximum battery life.',
-      'Voltage scaling reduces power by lowering supply voltage.',
-      'Power budgeting is essential for predicting battery life during design.',
-      'DMA and peripheral batching reduce CPU active time.',
-      'Always configure unused pins to analog mode to prevent leakage.'
+    "summary": [
+      "Low-power design is critical for battery-operated embedded devices.",
+      "Dynamic power depends on voltage and frequency; static power is due to leakage.",
+      "Sleep modes (WFI/WFE) halt the CPU, reducing power.",
+      "SLEEPONEXIT simplifies interrupt-driven idle loops.",
+      "Clock gating disables unused peripherals, saving power.",
+      "GPIO pins should be configured to avoid floating inputs.",
+      "Duty cycling dramatically reduces average power.",
+      "Bare-metal programming gives complete control over power management.",
+      "Combining sleep modes with interrupts yields responsive yet energy-efficient systems."
     ]
   },
   {
