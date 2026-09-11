@@ -1712,407 +1712,691 @@ export const CHAPTERS_LEVEL_9: Chapter[] = [
     ]
   },
   {
-    id: 48,
-    slug: 'chapter-48-comparing-architectures-isa-tradeoffs',
-    level: 9,
-    levelTitle: 'Cross-Platform and Alternative Architectures',
-    title: 'Chapter 48: Comparing Architectures: ISA Design and Trade-offs',
-    subtitle: 'Side-by-Side Comparison: x86-64 vs ARM64 vs RISC-V vs MIPS',
-    learningObjectives: [
-      'Compare and contrast the 4 major ISAs across instruction encoding, registers, addressing, and control flow.',
-      'Analyze code density, decoder complexity, and energy efficiency.',
-      'Map equivalent operations across all 4 architectures.',
-      'Make informed hardware and ISA architectural selections for technical projects.',
-      'Understand historical evolution of processor architectures.',
-      'Analyze performance vs power vs code density trade-offs.',
-      'Evaluate architecture choice for specific applications.',
-      'Study future trends in processor architecture design.'
+    "id": 48,
+    "slug": "chapter-48-comparing-architectures-isa-tradeoffs",
+    "level": 9,
+    "levelTitle": "Cross-Platform and Alternative Architectures",
+    "title": "Chapter 48: Comparing Architectures: ISA Design and Trade-offs",
+    "subtitle": "Side-by-Side Comparison: x86-64 vs ARM64 vs RISC-V vs MIPS",
+    "learningObjectives": [
+      "Compare and contrast the 4 major ISAs across instruction encoding, registers, addressing, and control flow.",
+      "Analyze code density, decoder complexity, and energy efficiency.",
+      "Map equivalent operations across all 4 architectures.",
+      "Make informed hardware and ISA architectural selections for technical projects.",
+      "Understand historical evolution of processor architectures.",
+      "Analyze performance vs power vs code density trade-offs.",
+      "Evaluate architecture choice for specific applications.",
+      "Study future trends in processor architecture design."
     ],
-    prerequisites: ['Chapters 1–47'],
-    keyConcepts: [
-      'CISC vs RISC: Variable vs fixed-length instructions.',
-      'x86-64 maximizes code density with variable-length CISC instructions.',
-      'ARM64 and RISC-V maximize power efficiency and decoder throughput with clean 32-bit RISC words.',
-      'Register counts dictate memory traffic and instruction field encoding.',
-      'Trade-offs: code density vs decoder complexity vs power vs performance.',
-      'Architecture choice depends on application requirements.',
-      'Legacy compatibility vs modern design trade-offs.',
-      'Future trends: chiplets, domain-specific architectures.'
+    "prerequisites": [
+      "Chapters 1–47"
     ],
-    diagramType: 'isa_comparison',
-    sections: [
+    "keyConcepts": [
+      "CISC vs RISC: Variable vs fixed-length instructions.",
+      "x86-64 maximizes code density with variable-length CISC instructions.",
+      "ARM64 and RISC-V maximize power efficiency and decoder throughput with clean 32-bit RISC words.",
+      "Register counts dictate memory traffic and instruction field encoding.",
+      "Trade-offs: code density vs decoder complexity vs power vs performance.",
+      "Architecture choice depends on application requirements.",
+      "Legacy compatibility vs modern design trade-offs.",
+      "Future trends: chiplets, domain-specific architectures."
+    ],
+    "diagramType": "isa_comparison",
+    "sections": [
       {
-        id: 'sec-48-1',
-        title: '48.1 The Grand Architectural Matrix',
-        content: `Comprehensive side-by-side comparison of the 4 major architectures:
-
-### Instruction Set Philosophy
-| Aspect | x86-64 | ARM64 | RISC-V | MIPS |
-|--------|--------|-------|--------|------|
-| Design | CISC | RISC | RISC | RISC |
-| Instruction size | Variable (1-15 bytes) | Fixed (4 bytes) | Fixed (4 bytes) | Fixed (4 bytes) |
-| Instruction count | 1000+ | ~200 | ~50 base | ~100 |
-| Decoder complexity | High | Low | Very Low | Low |
-| Code density | Excellent | Good | Good | Good |
-| Power efficiency | Lower | High | High | High |
-
-### Register Comparison
-| Feature | x86-64 | ARM64 | RISC-V | MIPS |
-|---------|--------|-------|--------|------|
-| General registers | 16 | 31 | 31 | 32 |
-| Zero register | None (XOR) | XZR | x0 | $zero |
-| Argument registers | RDI,RSI,RDX,RCX,R8,R9 | X0-X7 | a0-a7 | $a0-$a3 |
-| Callee-saved | RBX,RBP,R12-R15 | X19-X28 | s0-s11 | $s0-$s7 |
-| Return address | Stack (push/pop) | X30 (LR) | ra | $ra |
-| Condition codes | RFLAGS | PSTATE | None | None |
-
-### Memory Access Patterns
-| Feature | x86-64 | ARM64 | RISC-V | MIPS |
-|---------|--------|-------|--------|------|
-| Addressing modes | Many (base+idx*scale+disp) | Few (base+offset) | Very Few (base+offset) | Few (base+offset) |
-| Memory operands | In any instruction | Load/Store only | Load/Store only | Load/Store only |
-| Alignment | Not required | Recommended | Recommended | Required |
-| Atomic operations | LOCK prefix | LDXR/STXR | LR/SC | LL/SC |
-
-### Control Flow
-| Feature | x86-64 | ARM64 | RISC-V | MIPS |
-|---------|--------|-------|--------|------|
-| Condition handling | RFLAGS (all instructions) | PSTATE (compare only) | Direct compare branches | Direct compare branches |
-| Conditional move | CMOV | CSEL | None (use branches) | None (use branches) |
-| Indirect jump | JMP [addr] | BR x0 | jr | jr |
-| Function call | CALL (pushes RIP) | BL (stores in LR) | jal (stores in ra) | jal (stores in $ra) |
-| Return | RET (pops RIP) | RET (branches to LR) | ret (jr ra) | jr $ra |
-| Delay slots | No | No | No | Yes (1 instruction) |
-
-### System Calls
-| Feature | x86-64 | ARM64 | RISC-V | MIPS |
-|---------|--------|-------|--------|------|
-| Instruction | syscall | svc #0 | ecall | syscall |
-| Number register | RAX | X8 | a7 | $v0 |
-| Arguments | RDI,RSI,RDX,R10,R8,R9 | X0-X5 | a0-a5 | $a0-$a3 |
-| Return | RAX | X0 | a0 | $v0 |
-| Linux numbers | 1,2,3... | 64,63,93... | 64,63,93... | 4004,4003,4001... |
-
-### Power Efficiency Ranking (Best to Worst)
-1. **RISC-V**: Minimalist design, open-source
-2. **ARM64**: Optimized for mobile, good performance/watt
-3. **MIPS**: Simple RISC, efficient
-4. **x86-64**: Complex decoder, higher power
-
-### Code Density Ranking (Best to Worst)
-1. **x86-64**: Variable-length instructions (1-15 bytes)
-2. **ARM64**: Fixed 4-byte instructions
-3. **RISC-V**: Fixed 4-byte (or 2-byte with C extension)
-4. **MIPS**: Fixed 4-byte instructions
-
-### When to Use Each Architecture
-| Use Case | Recommended | Reason |
-|----------|-------------|--------|
-| Desktop/Server | x86-64 | Compatibility, software ecosystem |
-| Mobile/Embedded | ARM64 | Power efficiency, ecosystem |
-| IoT/Microcontrollers | RISC-V | Open, customizable, low power |
-| Legacy embedded | MIPS | Simple, low cost |
-| Cloud servers | ARM64/RISC-V | Power/cost efficiency |
-| High-performance | x86-64 | Maximum performance |
-| Custom hardware | RISC-V | Open, extensible |`,
-        codeSnippets: []
+        "id": "sec-48-1",
+        "title": "48.1 The Grand Architectural Matrix",
+        "content": "Comprehensive side-by-side comparison of the 4 major architectures:"
       },
       {
-        id: 'sec-48-2',
-        title: '48.2 Code Comparison Across Architectures',
-        content: `Same operations implemented in all 4 architectures.
-
-### Hello World Comparison
-All architectures implement write(1, msg, len) and exit(0):
-
-**x86-64:**
-asm
-mov rax, 1      ; sys_write
-mov rdi, 1      ; fd
-mov rsi, msg    ; buf
-mov rdx, len    ; count
-syscall
-
-mov rax, 60     ; sys_exit
-xor rdi, rdi    ; status
-syscall
-
-
-**ARM64:**
-
-mov x0, #1      ; fd
-adr x1, msg     ; buf
-mov x2, #len    ; count
-mov x8, #64     ; sys_write
-svc #0
-
-mov x0, #0      ; status
-mov x8, #93     ; sys_exit
-svc #0
-
-
-**RISC-V:**
-riscv
-li a0, 1        # fd
-la a1, msg      # buf
-li a2, len      # count
-li a7, 64       # sys_write
-ecall
-
-li a0, 0        # status
-li a7, 93       # sys_exit
-ecall
-
-
-**MIPS:**
-mips
-li $v0, 4004    # sys_write
-li $a0, 1       # fd
-la $a1, msg     # buf
-li $a2, len     # count
-syscall
-
-li $v0, 4001    # sys_exit
-li $a0, 0       # status
-syscall
-
-
-### Fibonacci Comparison
-All architectures compute Fibonacci(10):
-
-**x86-64:**
-asm
-fib:
-    xor eax, eax
-    mov ecx, 10
-.loop:
-    add eax, 1
-    loop .loop
-    ret
-
-
-**ARM64:**
-
-fib:
-    mov w0, #0
-    mov w1, #1
-    mov w2, #10
-.loop:
-    add w0, w0, w1
-    subs w2, w2, #1
-    b.ne .loop
-    ret
-
-
-**RISC-V:**
-riscv
-fib:
-    li a0, 0
-    li a1, 1
-    li a2, 10
-.loop:
-    add a0, a0, a1
-    addi a2, a2, -1
-    bnez a2, .loop
-    ret
-
-
-**MIPS:**
-mips
-fib:
-    li $v0, 0
-    li $v1, 1
-    li $t0, 10
-loop:
-    add $v0, $v0, $v1
-    addi $t0, $t0, -1
-    bnez $t0, loop
-    jr $ra
-
-
-### String Length Comparison
-All architectures compute strlen:
-
-**x86-64:**
-asm
-strlen:
-    xor eax, eax
-.loop:
-    cmp byte [rdi+rax], 0
-    je .done
-    inc eax
-    jmp .loop
-.done:
-    ret
-
-
-**ARM64:**
-
-strlen:
-    mov x2, x0
-.loop:
-    ldrb w1, [x2], #1
-    cbnz w1, .loop
-    sub x0, x2, x0
-    ret
-
-
-**RISC-V:**
-riscv
-strlen:
-    li a1, 0
-.loop:
-    lb a2, 0(a0)
-    addi a0, a0, 1
-    addi a1, a1, 1
-    bnez a2, .loop
-    addi a0, a1, -1
-    ret
-
-
-**MIPS:**
-mips
-strlen:
-    li $v0, 0
-loop:
-    lb $t0, 0($a0)
-    addi $a0, $a0, 1
-    addi $v0, $v0, 1
-    bnez $t0, loop
-    addi $v0, $v0, -1
-    jr $ra
-`,
-        codeSnippets: []
+        "id": "sec-48-1-1",
+        "title": "48.1.1 Instruction Set Philosophy",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Aspect",
+            "x86-64",
+            "ARM64",
+            "RISC-V",
+            "MIPS"
+          ],
+          "rows": [
+            [
+              "Design",
+              "CISC",
+              "RISC",
+              "RISC",
+              "RISC"
+            ],
+            [
+              "Instruction size",
+              "Variable (1-15 bytes)",
+              "Fixed (4 bytes)",
+              "Fixed (4 bytes)",
+              "Fixed (4 bytes)"
+            ],
+            [
+              "Instruction count",
+              "1000+",
+              "~200",
+              "~50 base",
+              "~100"
+            ],
+            [
+              "Decoder complexity",
+              "High",
+              "Low",
+              "Very Low",
+              "Low"
+            ],
+            [
+              "Code density",
+              "Excellent",
+              "Good",
+              "Good",
+              "Good"
+            ],
+            [
+              "Power efficiency",
+              "Lower",
+              "High",
+              "High",
+              "High"
+            ]
+          ]
+        }
       },
       {
-        id: 'sec-48-3',
-        title: '48.3 Architecture Selection Guide',
-        content: `How to choose the right architecture for your project.
-
-### Decision Factors
-1. **Power budget**: Battery-powered vs wall-powered
-2. **Performance needs**: Real-time vs throughput
-3. **Code size**: Flash memory constraints
-4. **Software ecosystem**: OS support, toolchains
-5. **Cost**: Licensing, development tools
-6. **Legacy support**: Existing codebase compatibility
-7. **Team expertise**: Developer knowledge
-8. **Time-to-market**: Available tools/libraries
-
-### Application-Specific Recommendations
-
-**Mobile Devices:**
-• **ARM64**: Dominant, excellent power efficiency
-• **RISC-V**: Emerging, customizable for specific needs
-• Avoid x86-64 (power too high)
-
-**Embedded/IoT:**
-• **ARM Cortex-M**: Excellent ecosystem, low power
-• **RISC-V**: Open, no licensing fees, customizable
-• **AVR/8-bit**: Very low cost, simple
-
-**Desktop/Server:**
-• **x86-64**: Maximum compatibility, performance
-• **ARM64**: Growing (AWS Graviton, Apple M-series)
-• **RISC-V**: Future potential
-
-**Cloud/Data Center:**
-• **ARM64**: Power/cost efficiency (Graviton)
-• **x86-64**: Legacy, maximum performance
-• **RISC-V**: Emerging for specific workloads
-
-**High-Performance Computing:**
-• **x86-64**: Maximum single-thread performance
-• **ARM64**: Power efficiency for scale-out
-• **GPU/TPU**: Parallel workloads
-
-**Custom Hardware:**
-• **RISC-V**: Open, extensible, no royalties
-• **MIPS**: Simple, low licensing cost
-• Avoid x86-64 (complex, expensive licensing)
-
-### Migration Considerations
-| From | To | Difficulty | Reason |
-|------|----|------------|--------|
-| x86-64 | ARM64 | Medium | Different ISA, but mature toolchain |
-| x86-64 | RISC-V | Hard | Less mature ecosystem |
-| ARM64 | RISC-V | Easy | Similar RISC philosophy |
-| MIPS | RISC-V | Easy | Similar design principles |
-| 8-bit AVR | ARM Cortex-M | Medium | 32-bit vs 8-bit differences |
-
-### Future Trends
-1. **Chiplets**: Mix different architectures in one package
-2. **Domain-specific**: Custom accelerators (AI, crypto)
-3. **Heterogeneous**: Big.LITTLE style (ARM)
-4. **Open-source**: RISC-V adoption growing
-5. **Security**: Hardware security features (MTE, CHERI)
-6. **Power efficiency**: Always improving
-
-### Key Takeaways
-• No single architecture wins everywhere
-• Match architecture to application requirements
-• Consider total cost (licensing, development, maintenance)
-• Ecosystem maturity matters as much as technical merit
-• RISC-V is disrupting traditional proprietary architectures`,
-        codeSnippets: []
+        "id": "sec-48-1-2",
+        "title": "48.1.2 Register Comparison",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Feature",
+            "x86-64",
+            "ARM64",
+            "RISC-V",
+            "MIPS"
+          ],
+          "rows": [
+            [
+              "General registers",
+              "16",
+              "31",
+              "31",
+              "32"
+            ],
+            [
+              "Zero register",
+              "None (XOR)",
+              "XZR",
+              "x0",
+              "$zero"
+            ],
+            [
+              "Argument registers",
+              "RDI,RSI,RDX,RCX,R8,R9",
+              "X0-X7",
+              "a0-a7",
+              "$a0-$a3"
+            ],
+            [
+              "Callee-saved",
+              "RBX,RBP,R12-R15",
+              "X19-X28",
+              "s0-s11",
+              "$s0-$s7"
+            ],
+            [
+              "Return address",
+              "Stack (push/pop)",
+              "X30 (LR)",
+              "ra",
+              "$ra"
+            ],
+            [
+              "Condition codes",
+              "RFLAGS",
+              "PSTATE",
+              "None",
+              "None"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-48-1-3",
+        "title": "48.1.3 Memory Access Patterns",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Feature",
+            "x86-64",
+            "ARM64",
+            "RISC-V",
+            "MIPS"
+          ],
+          "rows": [
+            [
+              "Addressing modes",
+              "Many (base+idx*scale+disp)",
+              "Few (base+offset)",
+              "Very Few (base+offset)",
+              "Few (base+offset)"
+            ],
+            [
+              "Memory operands",
+              "In any instruction",
+              "Load/Store only",
+              "Load/Store only",
+              "Load/Store only"
+            ],
+            [
+              "Alignment",
+              "Not required",
+              "Recommended",
+              "Recommended",
+              "Required"
+            ],
+            [
+              "Atomic operations",
+              "LOCK prefix",
+              "LDXR/STXR",
+              "LR/SC",
+              "LL/SC"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-48-1-4",
+        "title": "48.1.4 Control Flow",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Feature",
+            "x86-64",
+            "ARM64",
+            "RISC-V",
+            "MIPS"
+          ],
+          "rows": [
+            [
+              "Condition handling",
+              "RFLAGS (all instructions)",
+              "PSTATE (compare only)",
+              "Direct compare branches",
+              "Direct compare branches"
+            ],
+            [
+              "Conditional move",
+              "CMOV",
+              "CSEL",
+              "None (use branches)",
+              "None (use branches)"
+            ],
+            [
+              "Indirect jump",
+              "JMP [addr]",
+              "BR x0",
+              "jr",
+              "jr"
+            ],
+            [
+              "Function call",
+              "CALL (pushes RIP)",
+              "BL (stores in LR)",
+              "jal (stores in ra)",
+              "jal (stores in $ra)"
+            ],
+            [
+              "Return",
+              "RET (pops RIP)",
+              "RET (branches to LR)",
+              "ret (jr ra)",
+              "jr $ra"
+            ],
+            [
+              "Delay slots",
+              "No",
+              "No",
+              "No",
+              "Yes (1 instruction)"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-48-1-5",
+        "title": "48.1.5 System Calls",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Feature",
+            "x86-64",
+            "ARM64",
+            "RISC-V",
+            "MIPS"
+          ],
+          "rows": [
+            [
+              "Instruction",
+              "syscall",
+              "svc #0",
+              "ecall",
+              "syscall"
+            ],
+            [
+              "Number register",
+              "RAX",
+              "X8",
+              "a7",
+              "$v0"
+            ],
+            [
+              "Arguments",
+              "RDI,RSI,RDX,R10,R8,R9",
+              "X0-X5",
+              "a0-a5",
+              "$a0-$a3"
+            ],
+            [
+              "Return",
+              "RAX",
+              "X0",
+              "a0",
+              "$v0"
+            ],
+            [
+              "Linux numbers",
+              "1,2,3...",
+              "64,63,93...",
+              "64,63,93...",
+              "4004,4003,4001..."
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-48-1-6",
+        "title": "48.1.6 Power Efficiency Ranking (Best to Worst)",
+        "content": "1. RISC-V: Minimalist design, open-source\n2. ARM64: Optimized for mobile, good performance/watt\n3. MIPS: Simple RISC, efficient\n4. x86-64: Complex decoder, higher power"
+      },
+      {
+        "id": "sec-48-1-7",
+        "title": "48.1.7 Code Density Ranking (Best to Worst)",
+        "content": "1. x86-64: Variable-length instructions (1-15 bytes)\n2. ARM64: Fixed 4-byte instructions\n3. RISC-V: Fixed 4-byte (or 2-byte with C extension)\n4. MIPS: Fixed 4-byte instructions"
+      },
+      {
+        "id": "sec-48-1-8",
+        "title": "48.1.8 When to Use Each Architecture",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Use Case",
+            "Recommended",
+            "Reason"
+          ],
+          "rows": [
+            [
+              "Desktop/Server",
+              "x86-64",
+              "Compatibility, software ecosystem"
+            ],
+            [
+              "Mobile/Embedded",
+              "ARM64",
+              "Power efficiency, ecosystem"
+            ],
+            [
+              "IoT/Microcontrollers",
+              "RISC-V",
+              "Open, customizable, low power"
+            ],
+            [
+              "Legacy embedded",
+              "MIPS",
+              "Simple, low cost"
+            ],
+            [
+              "Cloud servers",
+              "ARM64/RISC-V",
+              "Power/cost efficiency"
+            ],
+            [
+              "High-performance",
+              "x86-64",
+              "Maximum performance"
+            ],
+            [
+              "Custom hardware",
+              "RISC-V",
+              "Open, extensible"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-48-2",
+        "title": "48.2 Code Comparison Across Architectures",
+        "content": "Same operations implemented in all 4 architectures."
+      },
+      {
+        "id": "sec-48-2-1",
+        "title": "48.2.1 Hello World Comparison",
+        "content": "All architectures implement write(1, msg, len) and exit(0):"
+      },
+      {
+        "id": "sec-48-2-2",
+        "title": "48.2.2 x86-64:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "x86-64: — example",
+            "language": "nasm",
+            "code": "mov rax, 1      ; sys_write\nmov rdi, 1      ; fd\nmov rsi, msg    ; buf\nmov rdx, len    ; count\nsyscall\n\nmov rax, 60     ; sys_exit\nxor rdi, rdi    ; status\nsyscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-3",
+        "title": "48.2.3 ARM64:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "ARM64: — example",
+            "language": "arm",
+            "code": "mov x0, #1      ; fd\nadr x1, msg     ; buf\nmov x2, #len    ; count\nmov x8, #64     ; sys_write\nsvc #0\n\nmov x0, #0      ; status\nmov x8, #93     ; sys_exit\nsvc #0"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-4",
+        "title": "48.2.4 RISC-V:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "RISC-V: — example",
+            "language": "riscv",
+            "code": "li a0, 1        # fd\nla a1, msg      # buf\nli a2, len      # count\nli a7, 64       # sys_write\necall\n\nli a0, 0        # status\nli a7, 93       # sys_exit\necall"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-5",
+        "title": "48.2.5 MIPS:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "MIPS: — example",
+            "language": "mips",
+            "code": "li $v0, 4004    # sys_write\nli $a0, 1       # fd\nla $a1, msg     # buf\nli $a2, len     # count\nsyscall\n\nli $v0, 4001    # sys_exit\nli $a0, 0       # status\nsyscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-6",
+        "title": "48.2.6 Fibonacci Comparison",
+        "content": "All architectures compute Fibonacci(10):"
+      },
+      {
+        "id": "sec-48-2-7",
+        "title": "48.2.7 x86-64:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "x86-64: — example",
+            "language": "nasm",
+            "code": "fib:\n    xor eax, eax\n    mov ecx, 10\n.loop:\n    add eax, 1\n    loop .loop\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-8",
+        "title": "48.2.8 ARM64:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "ARM64: — example",
+            "language": "arm",
+            "code": "fib:\n    mov w0, #0\n    mov w1, #1\n    mov w2, #10\n.loop:\n    add w0, w0, w1\n    subs w2, w2, #1\n    b.ne .loop\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-9",
+        "title": "48.2.9 RISC-V:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "RISC-V: — example",
+            "language": "riscv",
+            "code": "fib:\n    li a0, 0\n    li a1, 1\n    li a2, 10\n.loop:\n    add a0, a0, a1\n    addi a2, a2, -1\n    bnez a2, .loop\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-10",
+        "title": "48.2.10 MIPS:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "MIPS: — example",
+            "language": "mips",
+            "code": "fib:\n    li $v0, 0\n    li $v1, 1\n    li $t0, 10\nloop:\n    add $v0, $v0, $v1\n    addi $t0, $t0, -1\n    bnez $t0, loop\n    jr $ra"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-11",
+        "title": "48.2.11 String Length Comparison",
+        "content": "All architectures compute strlen:"
+      },
+      {
+        "id": "sec-48-2-12",
+        "title": "48.2.12 x86-64:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "x86-64: — example",
+            "language": "nasm",
+            "code": "strlen:\n    xor eax, eax\n.loop:\n    cmp byte [rdi+rax], 0\n    je .done\n    inc eax\n    jmp .loop\n.done:\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-13",
+        "title": "48.2.13 ARM64:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "ARM64: — example",
+            "language": "arm",
+            "code": "strlen:\n    mov x2, x0\n.loop:\n    ldrb w1, [x2], #1\n    cbnz w1, .loop\n    sub x0, x2, x0\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-14",
+        "title": "48.2.14 RISC-V:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "RISC-V: — example",
+            "language": "riscv",
+            "code": "strlen:\n    li a1, 0\n.loop:\n    lb a2, 0(a0)\n    addi a0, a0, 1\n    addi a1, a1, 1\n    bnez a2, .loop\n    addi a0, a1, -1\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-2-15",
+        "title": "48.2.15 MIPS:",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "MIPS: — example",
+            "language": "mips",
+            "code": "strlen:\n    li $v0, 0\nloop:\n    lb $t0, 0($a0)\n    addi $a0, $a0, 1\n    addi $v0, $v0, 1\n    bnez $t0, loop\n    addi $v0, $v0, -1\n    jr $ra"
+          }
+        ]
+      },
+      {
+        "id": "sec-48-3",
+        "title": "48.3 Architecture Selection Guide",
+        "content": "How to choose the right architecture for your project."
+      },
+      {
+        "id": "sec-48-3-1",
+        "title": "48.3.1 Decision Factors",
+        "content": "1. Power budget: Battery-powered vs wall-powered\n2. Performance needs: Real-time vs throughput\n3. Code size: Flash memory constraints\n4. Software ecosystem: OS support, toolchains\n5. Cost: Licensing, development tools\n6. Legacy support: Existing codebase compatibility\n7. Team expertise: Developer knowledge\n8. Time-to-market: Available tools/libraries"
+      },
+      {
+        "id": "sec-48-3-2",
+        "title": "48.3.2 Application-Specific Recommendations",
+        "content": ""
+      },
+      {
+        "id": "sec-48-3-3",
+        "title": "48.3.3 Mobile Devices:",
+        "content": "• ARM64: Dominant, excellent power efficiency\n• RISC-V: Emerging, customizable for specific needs\n• Avoid x86-64 (power too high)"
+      },
+      {
+        "id": "sec-48-3-4",
+        "title": "48.3.4 Embedded/IoT:",
+        "content": "• ARM Cortex-M: Excellent ecosystem, low power\n• RISC-V: Open, no licensing fees, customizable\n• AVR/8-bit: Very low cost, simple"
+      },
+      {
+        "id": "sec-48-3-5",
+        "title": "48.3.5 Desktop/Server:",
+        "content": "• x86-64: Maximum compatibility, performance\n• ARM64: Growing (AWS Graviton, Apple M-series)\n• RISC-V: Future potential"
+      },
+      {
+        "id": "sec-48-3-6",
+        "title": "48.3.6 Cloud/Data Center:",
+        "content": "• ARM64: Power/cost efficiency (Graviton)\n• x86-64: Legacy, maximum performance\n• RISC-V: Emerging for specific workloads"
+      },
+      {
+        "id": "sec-48-3-7",
+        "title": "48.3.7 High-Performance Computing:",
+        "content": "• x86-64: Maximum single-thread performance\n• ARM64: Power efficiency for scale-out\n• GPU/TPU: Parallel workloads"
+      },
+      {
+        "id": "sec-48-3-8",
+        "title": "48.3.8 Custom Hardware:",
+        "content": "• RISC-V: Open, extensible, no royalties\n• MIPS: Simple, low licensing cost\n• Avoid x86-64 (complex, expensive licensing)"
+      },
+      {
+        "id": "sec-48-3-9",
+        "title": "48.3.9 Migration Considerations",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "From",
+            "To",
+            "Difficulty",
+            "Reason"
+          ],
+          "rows": [
+            [
+              "x86-64",
+              "ARM64",
+              "Medium",
+              "Different ISA, but mature toolchain"
+            ],
+            [
+              "x86-64",
+              "RISC-V",
+              "Hard",
+              "Less mature ecosystem"
+            ],
+            [
+              "ARM64",
+              "RISC-V",
+              "Easy",
+              "Similar RISC philosophy"
+            ],
+            [
+              "MIPS",
+              "RISC-V",
+              "Easy",
+              "Similar design principles"
+            ],
+            [
+              "8-bit AVR",
+              "ARM Cortex-M",
+              "Medium",
+              "32-bit vs 8-bit differences"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-48-3-10",
+        "title": "48.3.10 Future Trends",
+        "content": "1. Chiplets: Mix different architectures in one package\n2. Domain-specific: Custom accelerators (AI, crypto)\n3. Heterogeneous: Big.LITTLE style (ARM)\n4. Open-source: RISC-V adoption growing\n5. Security: Hardware security features (MTE, CHERI)\n6. Power efficiency: Always improving"
+      },
+      {
+        "id": "sec-48-3-11",
+        "title": "48.3.11 Key Takeaways",
+        "content": "• No single architecture wins everywhere\n• Match architecture to application requirements\n• Consider total cost (licensing, development, maintenance)\n• Ecosystem maturity matters as much as technical merit\n• RISC-V is disrupting traditional proprietary architectures"
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-48-1',
-        title: 'Exercise 48.1: Write a = b + c in all 4 architectures',
-        description: 'Provide the single instruction expression in x86-64, ARM64, RISC-V, and MIPS.',
-        solution: 'x86-64: add rax, rbx (if rax holds b)\nARM64: add x0, x1, x2\nRISC-V: add a0, a1, a2\nMIPS: addu $v0, $a0, $a1',
-        solutionLanguage: 'nasm'
+        "id": "ex-48-1",
+        "title": "Exercise 48.1: Write a = b + c in all 4 architectures",
+        "description": "Provide the single instruction expression in x86-64, ARM64, RISC-V, and MIPS.",
+        "solution": "x86-64: add rax, rbx (if rax holds b)\nARM64: add x0, x1, x2\nRISC-V: add a0, a1, a2\nMIPS: addu $v0, $a0, $a1",
+        "solutionLanguage": "nasm"
       },
       {
-        id: 'ex-48-2',
-        title: 'Exercise 48.2: Architecture Selection',
-        description: 'You need to design a battery-powered IoT sensor. Which architecture do you choose and why?',
-        solution: 'ARM Cortex-M4/M33 or RISC-V (e.g., SiFive FE310). Reasons: (1) Ultra-low power, (2) Small code size, (3) Adequate performance for sensors, (4) Mature toolchains, (5) Low cost. ARM has better ecosystem; RISC-V has no licensing fees.'
+        "id": "ex-48-2",
+        "title": "Exercise 48.2: Architecture Selection",
+        "description": "You need to design a battery-powered IoT sensor. Which architecture do you choose and why?",
+        "solution": "ARM Cortex-M4/M33 or RISC-V (e.g., SiFive FE310). Reasons: (1) Ultra-low power, (2) Small code size, (3) Adequate performance for sensors, (4) Mature toolchains, (5) Low cost. ARM has better ecosystem; RISC-V has no licensing fees."
       },
       {
-        id: 'ex-48-3',
-        title: 'Exercise 48.4: Code Density Analysis',
-        description: 'Compare the code size of a simple loop across all 4 architectures.',
-        solution: 'x86-64: ~15 bytes (variable length)\nARM64: ~16 bytes (4 instructions × 4 bytes)\nRISC-V: ~16 bytes (4 instructions × 4 bytes)\nMIPS: ~16 bytes (4 instructions × 4 bytes)\nx86-64 wins on code density due to variable-length instructions.'
+        "id": "ex-48-3",
+        "title": "Exercise 48.4: Code Density Analysis",
+        "description": "Compare the code size of a simple loop across all 4 architectures.",
+        "solution": "x86-64: ~15 bytes (variable length)\nARM64: ~16 bytes (4 instructions × 4 bytes)\nRISC-V: ~16 bytes (4 instructions × 4 bytes)\nMIPS: ~16 bytes (4 instructions × 4 bytes)\nx86-64 wins on code density due to variable-length instructions."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why does x86-64 have higher code density than RISC-V or ARM64?',
-        answer: 'x86 instructions are variable-length (1 to 15 bytes) and allow memory operands directly in arithmetic instructions (like add rax, [rbx]), doing in 1 instruction what requires 2 or 3 instructions in RISC load/store architectures. This makes x86 code more compact, which matters for instruction cache efficiency.'
+        "question": "Why does x86-64 have higher code density than RISC-V or ARM64?",
+        "answer": "x86 instructions are variable-length (1 to 15 bytes) and allow memory operands directly in arithmetic instructions (like add rax, [rbx]), doing in 1 instruction what requires 2 or 3 instructions in RISC load/store architectures. This makes x86 code more compact, which matters for instruction cache efficiency."
       },
       {
-        question: 'What are the trade-offs between CISC and RISC?',
-        answer: 'CISC (x86): Higher code density, complex decoder, more power. RISC (ARM/RISC-V): Simpler decoder, lower power, more instructions needed. Modern x86 internally translates to micro-ops (RISC-like). RISC wins on power efficiency; CISC wins on code density and legacy support.'
+        "question": "What are the trade-offs between CISC and RISC?",
+        "answer": "CISC (x86): Higher code density, complex decoder, more power. RISC (ARM/RISC-V): Simpler decoder, lower power, more instructions needed. Modern x86 internally translates to micro-ops (RISC-like). RISC wins on power efficiency; CISC wins on code density and legacy support."
       },
       {
-        question: 'How does register count affect architecture design?',
-        answer: 'More registers reduce memory traffic (fewer spills/fills) but increase instruction encoding bits (more register specifiers). ARM64/RISC-V (31 regs) reduce memory access vs x86-64 (16 regs) but need more bits per instruction. Trade-off between code density and performance.'
+        "question": "How does register count affect architecture design?",
+        "answer": "More registers reduce memory traffic (fewer spills/fills) but increase instruction encoding bits (more register specifiers). ARM64/RISC-V (31 regs) reduce memory access vs x86-64 (16 regs) but need more bits per instruction. Trade-off between code density and performance."
       },
       {
-        question: 'Why is RISC-V gaining popularity?',
-        answer: 'RISC-V benefits: (1) No licensing fees, (2) Open standard, (3) Modular/extensible, (4) Clean design without legacy baggage, (5) Growing ecosystem (Linux, GCC), (6) Industry adoption (SiFive, Espressif), (7) Customizable for domain-specific applications.'
+        "question": "Why is RISC-V gaining popularity?",
+        "answer": "RISC-V benefits: (1) No licensing fees, (2) Open standard, (3) Modular/extensible, (4) Clean design without legacy baggage, (5) Growing ecosystem (Linux, GCC), (6) Industry adoption (SiFive, Espressif), (7) Customizable for domain-specific applications."
       },
       {
-        question: 'How do you choose between ARM64 and RISC-V for a new project?',
-        answer: 'Choose ARM64 for: mature ecosystem, proven in mobile/server, extensive toolchain/libraries. Choose RISC-V for: no licensing fees, customizable ISA, emerging ecosystem, long-term flexibility, custom accelerators. ARM64 is safer now; RISC-V may be better for custom/embedded long-term.'
+        "question": "How do you choose between ARM64 and RISC-V for a new project?",
+        "answer": "Choose ARM64 for: mature ecosystem, proven in mobile/server, extensive toolchain/libraries. Choose RISC-V for: no licensing fees, customizable ISA, emerging ecosystem, long-term flexibility, custom accelerators. ARM64 is safer now; RISC-V may be better for custom/embedded long-term."
       },
       {
-        question: 'What role does software ecosystem play in architecture choice?',
-        answer: 'Software ecosystem is critical: (1) Compiler support (GCC, LLVM), (2) OS support (Linux, RTOS), (3) Libraries and frameworks, (4) Developer tools (debuggers, profilers), (5) Community support, (6) Available developers. A technically superior architecture can fail without ecosystem support.'
+        "question": "What role does software ecosystem play in architecture choice?",
+        "answer": "Software ecosystem is critical: (1) Compiler support (GCC, LLVM), (2) OS support (Linux, RTOS), (3) Libraries and frameworks, (4) Developer tools (debuggers, profilers), (5) Community support, (6) Available developers. A technically superior architecture can fail without ecosystem support."
       }
     ],
-    summary: [
-      'Each ISA embodies deliberate engineering trade-offs.',
-      'Universal concepts—registers, stacks, control flow—unify all computer architectures.',
-      'x86-64 excels in code density and compatibility.',
-      'ARM64 excels in power efficiency and mobile ecosystems.',
-      'RISC-V excels in openness and customizability.',
-      'Architecture choice depends on application requirements.',
-      'Software ecosystem matters as much as hardware merit.',
-      'Understanding trade-offs enables informed architectural decisions.'
+    "summary": [
+      "Each ISA embodies deliberate engineering trade-offs.",
+      "Universal concepts—registers, stacks, control flow—unify all computer architectures.",
+      "x86-64 excels in code density and compatibility.",
+      "ARM64 excels in power efficiency and mobile ecosystems.",
+      "RISC-V excels in openness and customizability.",
+      "Architecture choice depends on application requirements.",
+      "Software ecosystem matters as much as hardware merit.",
+      "Understanding trade-offs enables informed architectural decisions."
     ]
   },
   {
