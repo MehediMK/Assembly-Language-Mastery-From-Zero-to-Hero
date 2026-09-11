@@ -314,599 +314,378 @@ export const CHAPTERS_LEVEL_7: Chapter[] = [
     ]
   },
   {
-    id: 36,
-    slug: 'chapter-36-memory-mapped-io-peripherals',
-    level: 7,
-    levelTitle: 'Embedded Systems and Real-Time Assembly',
-    title: 'Chapter 36: Memory-Mapped I/O and Peripheral Control',
-    subtitle: 'MMIO Registers, Bitfields, Atomic BSRR Operations, and UART Transmission',
-    learningObjectives: [
-      'Understand how memory-mapped I/O (MMIO) enables direct hardware control through normal memory access.',
-      'Control peripherals by reading and writing memory-mapped register addresses.',
-      'Master reading from and writing to peripheral registers using load and store instructions.',
-      'Perform safe Read-Modify-Write (RMW) bit operations (ORR, BIC, EOR).',
-      'Use bit manipulation techniques (OR, AND, XOR, shifts) to modify specific fields within registers.',
-      'Configure UART serial communication (baud rate, TX/RX, status polling).',
-      'Use atomic bit set/reset registers (BSRR) to eliminate race conditions.',
-      'Control common peripherals: GPIO, UART, and timers on ARM Cortex-M.'
+    "id": 36,
+    "slug": "chapter-36-memory-mapped-io-peripherals",
+    "level": 7,
+    "levelTitle": "Embedded Systems and Real-Time Assembly",
+    "title": "Chapter 36: Memory-Mapped I/O and Peripheral Control",
+    "subtitle": "MMIO Registers, Bitfields, Atomic BSRR Operations, and UART Transmission",
+    "learningObjectives": [
+      "Understand how memory-mapped I/O (MMIO) enables direct hardware control through normal memory access.",
+      "Master reading from and writing to peripheral registers using load and store instructions.",
+      "Use bit manipulation techniques (OR, AND, XOR, shifts) to modify specific fields within registers.",
+      "Implement read-modify-write sequences safely, especially for registers with side effects.",
+      "Control common peripherals: GPIO, UART, and timers on an ARM Cortex-M microcontroller.",
+      "Write bare-metal assembly programs that configure and use peripherals without an operating system.",
+      "Recognize the importance of volatile access and memory barriers when interacting with hardware.",
+      "Prepare for more advanced topics: interrupts and DMA (covered in later chapters)."
     ],
-    prerequisites: ['Chapters 1–35'],
-    keyConcepts: [
-      'Memory-mapped I/O (MMIO): Peripheral registers are mapped into the processor address space.',
-      'Peripheral register: Hardware location that controls or reports state of a peripheral.',
-      'Read-modify-write (RMW): Sequence of read, mask/set bits, and write back.',
-      'Bit fields: Groups of bits within a register holding specific configuration values.',
-      'Atomic access: Use bit-banding or exclusive access to avoid race conditions.',
-      'Side effects: Reading/writing certain registers triggers hardware actions.',
-      'Clock gating: Peripherals must be powered and clocked before use.',
-      'BSRR allows atomic pin toggles in a single instruction without RMW.',
-      'UART transmits serial data by polling the TXE status flag.'
+    "prerequisites": [
+      "Solid understanding of assembly programming fundamentals (Chapters 1–13).",
+      "Knowledge of embedded systems and microcontrollers (Chapter 35).",
+      "Familiarity with ARM Cortex-M architecture and instruction set (Chapter 35).",
+      "Basic understanding of digital electronics: pins, clocks, and serial communication (conceptual).",
+      "Experience with bitwise operations and logic instructions (Chapter 7)."
     ],
-    diagramType: 'mmio_peripherals',
-    sections: [
+    "keyConcepts": [
+      "Memory-mapped I/O (MMIO): Peripheral registers are mapped into the processor’s address space; software accesses them with load/store instructions.",
+      "Peripheral register: A hardware location that controls or reports the state of a peripheral (e.g., GPIO direction, UART data).",
+      "Read-modify-write (RMW): A sequence of read, mask/set bits, and write back to change a subset of bits without affecting others.",
+      "Bit fields: Groups of bits within a register that hold a specific configuration value (e.g., mode bits for a pin).",
+      "Atomic access: For multi-bit fields or single-bit flags, use bit-banding or exclusive access to avoid race conditions with interrupts/DMA.",
+      "Side effects: Reading or writing certain registers triggers hardware actions (e.g., clearing an interrupt flag). Compilers/CPUs must not optimize away such accesses.",
+      "Clock gating: Peripherals must be powered and clocked before use; enable via a clock enable register (e.g., RCC_AHB1ENR on STM32).",
+      "Pull-up/pull-down: Internal resistors that bias a pin to a known level when not driven.",
+      "Baud rate: Speed of UART serial communication (bits per second)."
+    ],
+    "diagramType": "mmio_peripherals",
+    "sections": [
       {
-        id: 'sec-36-1',
-        title: '36.1 Introduction to Peripheral Control',
-        content: `In embedded systems, the CPU interacts with the outside world through peripherals: GPIO pins, serial ports, timers, ADCs, etc. These peripherals are controlled by reading and writing special registers located at fixed memory addresses. This mechanism—memory-mapped I/O (MMIO)—allows software to treat hardware registers as ordinary memory variables.
-
-Because assembly language gives direct access to load/store instructions, it is an excellent tool for writing efficient and precise peripheral control code.
-
-### Why MMIO?
-• Direct hardware control without special I/O instructions
-• Same load/store instructions used for regular memory
-• Simple programming model
-• Portable across architectures (AVR, ARM, RISC-V)
-
-### Accessing Registers in Assembly
-To read or write a peripheral register, use load (LDR) and store (STR) instructions with an absolute address:
-
-LDR R0, =0x40020C14   ; load address into R0
-LDR R1, [R0]          ; read register value
-
-LDR R0, =0x40020C14
-MOV R1, #0x1000       ; value to write
-STR R1, [R0]          ; write to register
-
-Important: Peripheral registers can change at any time. In assembly, we simply perform the load/store each time. We must also ensure the CPU does not reorder or eliminate the access.`,
-        codeSnippets: [
+        "id": "sec-36-1",
+        "title": "36.1 Introduction to Peripheral Control",
+        "content": "In embedded systems, the CPU interacts with the outside world through peripherals: GPIO pins, serial ports, timers, ADCs, etc. These peripherals are controlled by reading and writing special registers located at fixed memory addresses. This mechanism—memory-mapped I/O (MMIO)—allows software to treat hardware registers as ordinary memory variables.\n\nBecause assembly language gives direct access to load/store instructions, it is an excellent tool for writing efficient and precise peripheral control code. In this chapter, we will explore how to use MMIO to configure and use common peripherals on an ARM Cortex-M microcontroller (specifically the STM32F4 series for concrete examples). The principles apply to other architectures (AVR, MSP430, RISC-V) with minor variations."
+      },
+      {
+        "id": "sec-36-2",
+        "title": "36.2 Memory-Mapped I/O Fundamentals",
+        "content": ""
+      },
+      {
+        "id": "sec-36-2-1",
+        "title": "36.2.1 The Memory Map",
+        "content": "Every microcontroller has a fixed memory map that assigns address ranges to different regions: flash (code), SRAM (data), and peripherals. On the STM32F407, for example:\n\n- 0x00000000–0x1FFFFFFF: Code (Flash, system memory, etc.)\n- 0x20000000–0x3FFFFFFF: SRAM (data)\n- 0x40000000–0x5FFFFFFF: Peripherals (GPIO, UART, SPI, timers, etc.)\n- 0xE0000000–0xFFFFFFFF: System control (NVIC, debug)\n\nPeripheral registers are placed within the peripheral region. For instance, the GPIO port D registers are located from 0x40020C00 to 0x40020FFF. Each register has a specific offset from the base address. The base addresses and offsets are defined in the microcontroller’s reference manual.\n\nClarification: These are architectural regions, not promises that all addresses are implemented. GPIOD occupies an address window, but only documented register offsets are valid. Consult the STM32F407 reference manual for actual SRAM/peripheral sizes."
+      },
+      {
+        "id": "sec-36-2-2",
+        "title": "36.2.2 Accessing Registers in Assembly",
+        "content": "To read or write a peripheral register, we use load (LDR) and store (STR) instructions with an absolute address. For example, to read the value of the GPIO D output data register (GPIOD_ODR at address 0x40020C14):\n\nClarification: LDR Rn,=constant is a pseudo-instruction: the assembler may use an immediate instruction or a literal pool. Peripheral space is generally Device memory, not ordinary strongly-ordered RAM. Volatile retains compiler-visible accesses; barriers address ordering/completion and do not make RMW atomic.",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'Basic MMIO Access',
-            code: `; Read GPIO input
-LDR R0, =0x40020C10   ; GPIOD_IDR
-LDR R1, [R0]          ; read all pin states
-
-; Write GPIO output
-LDR R0, =0x40020C14   ; GPIOD_ODR
-MOV R1, #0x1000       ; set bit 12
-STR R1, [R0]          ; write to register`
+            "language": "arm",
+            "title": "36.2.2 Accessing Registers in Assembly — listing 1",
+            "code": "LDR R0, =0x40020C14   ; load address into R0\nLDR R1, [R0]          ; read register value into R1",
+            "explanation": "To write a value:"
+          },
+          {
+            "language": "arm",
+            "title": "36.2.2 Accessing Registers in Assembly — listing 2",
+            "code": "LDR R0, =0x40020C14\nMOV R1, #0x1000       ; value to write (bit 12 high)\nSTR R1, [R0]          ; write to register",
+            "explanation": "In ARM assembly, the = symbol indicates a literal constant; the assembler places the constant in a literal pool and emits a PC-relative load.\n\nImportant: Because peripheral registers can change at any time (e.g., input data register), the compiler must not cache their values. In C, we use volatile; in assembly, we simply perform the load/store each time. We must also ensure the CPU does not reorder or eliminate the access—on Cortex-M, normal loads/stores to strongly-ordered memory (default) are not reordered, but adding a memory barrier (DMB) may be necessary when ordering with other operations."
           }
         ]
       },
       {
-        id: 'sec-36-2',
-        title: '36.2 Peripheral Register Access Patterns',
-        content: `### Simple Write
-Some registers are write-only. We write a full 32-bit value.
-
-### Read-Modify-Write (RMW)
-Often we need to change a subset of bits while leaving others unchanged:
-1. Read the register
-2. Modify the desired bits using bitwise operations
-3. Write the result back
-
-Example: Set bit 12 of GPIO D ODR (turn on LED) without affecting other pins:
-
-### Bit Manipulation Techniques
-| Technique | ARM Instruction | Example |
-|-----------|-----------------|---------|
-| Set bits | ORR Rn, Rn, #mask | ORR R1, R1, #(1<<12) |
-| Clear bits | BIC Rn, Rn, #mask | BIC R1, R1, #(1<<12) |
-| Toggle bits | EOR Rn, Rn, #mask | EOR R1, R1, #(1<<12) |
-| Test bit | TST Rn, #mask | TST R1, #(1<<12) |
-| Extract field | UBFX Rd, Rn, #lsb, #width | UBFX R0, R1, #4, #3 |
-| Insert field | BFI Rd, Rn, #lsb, #width | BFI R0, R1, #4, #3 |
-
-### Atomicity and Interrupts
-If an interrupt occurs between the read and write of an RMW sequence, the interrupt service routine might modify the same register, causing a lost update. To prevent this:
-• Disable interrupts around the RMW (CPSID i / CPSIE i)
-• Use bit-banding for single-bit operations
-• Use exclusive load/store (LDREX/STREX) for multi-bit atomic updates`,
-        codeSnippets: [
+        "id": "sec-36-3",
+        "title": "36.3 Peripheral Register Access Patterns",
+        "content": ""
+      },
+      {
+        "id": "sec-36-3-1",
+        "title": "36.3.1 Simple Write",
+        "content": "Some registers are write-only (or write-1-to-clear). We write a full 32-bit value.\n\nClarification: Use the access width and write semantics specified for each register. Write-one-to-clear and write-zero-to-clear are different; do not copy an RMW recipe between them. Some read-only or reserved bits have constrained write values."
+      },
+      {
+        "id": "sec-36-3-2",
+        "title": "36.3.2 Read-Modify-Write (RMW)",
+        "content": "Often we need to change a subset of bits while leaving others unchanged. The sequence is:\n\n1. Read the register.\n2. Modify the desired bits using bitwise operations (AND to clear, OR to set).\n3. Write the result back.\n\nExample: Set bit 12 of GPIO D ODR (turn on LED) without affecting other pins:",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'Read-Modify-Write Examples',
-            code: `; Set bit 12 (LED ON)
-LDR R0, =0x40020C14   ; GPIOD_ODR
-LDR R1, [R0]
-ORR R1, R1, #(1<<12)
-STR R1, [R0]
-
-; Clear bit 12 (LED OFF)
-LDR R0, =0x40020C14
-LDR R1, [R0]
-BIC R1, R1, #(1<<12)
-STR R1, [R0]
-
-; Toggle bit 12
-LDR R0, =0x40020C14
-LDR R1, [R0]
-EOR R1, R1, #(1<<12)
-STR R1, [R0]
-
-; Set mode of pin 12 to output (MODER bits 24-25 = 01)
-LDR R0, =0x40020C00   ; GPIOD_MODER
-LDR R1, [R0]
-BIC R1, R1, #(3<<24)  ; clear bits 24-25
-ORR R1, R1, #(1<<24)  ; set to 01
-STR R1, [R0]`
+            "language": "arm",
+            "title": "36.3.2 Read-Modify-Write (RMW) — listing 1",
+            "code": "LDR R0, =0x40020C14   ; GPIOD_ODR\nLDR R1, [R0]          ; read current value\nORR R1, R1, #(1<<12)  ; set bit 12\nSTR R1, [R0]          ; write back",
+            "explanation": "To clear bit 12:"
+          },
+          {
+            "language": "arm",
+            "title": "36.3.2 Read-Modify-Write (RMW) — listing 2",
+            "code": "LDR R1, [R0]\nBIC R1, R1, #(1<<12)  ; clear bit 12\nSTR R1, [R0]",
+            "explanation": "For setting a field of multiple bits (e.g., two bits for mode), we first clear the field, then OR the new value:"
+          },
+          {
+            "language": "arm",
+            "title": "Set mode of pin 12 to output (bits 24-25 = 01)",
+            "code": "; Set mode of pin 12 to output (bits 24-25 = 01)\nLDR R0, =0x40020C00   ; GPIOD_MODER\nLDR R1, [R0]\nBIC R1, R1, #(3<<24)  ; clear bits 24-25\nORR R1, R1, #(1<<24)  ; set to 01 (binary)\nSTR R1, [R0]"
           }
         ]
       },
       {
-        id: 'sec-36-3',
-        title: '36.3 General Purpose I/O (GPIO) Control',
-        content: `GPIO pins are the simplest peripheral. Each pin can be configured as input, output, alternate function, or analog.
-
-### Enabling the GPIO Clock
-Before using any GPIO port, its clock must be enabled in the Reset and Clock Control (RCC) peripheral. On STM32F4, RCC_AHB1ENR at 0x40023830. GPIOD is bit 3.
-
-### Configuring Pin Mode
-The GPIO port mode register (GPIOx_MODER) uses two bits per pin:
-• 00: Input
-• 01: General purpose output
-• 10: Alternate function
-• 11: Analog
-
-### GPIO Registers Overview
-| Register | Address Offset | Purpose |
-|----------|----------------|---------|
-| MODER | 0x00 | Mode selection (2 bits per pin) |
-| OTYPER | 0x04 | Output type (push-pull/open-drain) |
-| OSPEEDR | 0x08 | Output speed |
-| PUPDR | 0x0C | Pull-up/pull-down |
-| IDR | 0x10 | Input data (read pins) |
-| ODR | 0x14 | Output data (read/write) |
-| BSRR | 0x18 | Bit set/reset (write-only, atomic) |
-| LCKR | 0x1C | Configuration lock |
-| AFRL | 0x20 | Alternate function low |
-| AFRH | 0x24 | Alternate function high |
-
-### Writing and Reading Pin States
-• ODR: Each bit sets pin high (1) or low (0). Can be read to see current state.
-• BSRR: Writing 1 to lower 16 bits sets corresponding pin; upper 16 bits resets. Atomic!
-
-Example to set PD12 high using BSRR:
-LDR R0, =0x40020C18   ; GPIOD_BSRR
-MOV R1, #(1<<12)      ; set bit 12 (lower half)
-STR R1, [R0]
-
-To reset, use upper half: MOV R1, #(1<<(12+16))
-
-For input, read the input data register (IDR).`,
-        codeSnippets: [
+        "id": "sec-36-3-3",
+        "title": "36.3.3 Bit-Banding (Optional)",
+        "content": "Cortex-M3/M4 provide a bit-banding feature that maps each bit of a peripheral or SRAM word to a separate address in a bit-band alias region. This allows atomic single-bit set/clear without RMW. However, it is optional and often not used for simplicity."
+      },
+      {
+        "id": "sec-36-3-4",
+        "title": "36.3.4 Atomicity and Interrupts",
+        "content": "If an interrupt can occur between the read and write of an RMW sequence, the interrupt service routine might modify the same register, causing a lost update. To prevent this, you can:\n\n- Disable interrupts around the RMW (using CPSID i / CPSIE i).\n- Use bit-banding for single-bit operations.\n- Use exclusive load/store (LDREX/STREX) for multi-bit atomic updates (more advanced).\n\nFor simple polled applications, this may not be an issue, but it's important in real systems.\n\nClarification: Save/restore the prior PRIMASK rather than unconditionally executing CPSIE i afterward. Masking CPU interrupts does not stop DMA or hardware updates. Cortex-M exclusive operations are not a general solution for Device-memory MMIO; prefer peripheral atomic commands or documented synchronization.",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'GPIO Configuration',
-            code: `; Enable GPIOD clock (bit 3 in RCC_AHB1ENR)
-LDR R0, =0x40023830
-LDR R1, [R0]
-ORR R1, R1, #(1<<3)
-STR R1, [R0]
-
-; Configure PD12 as output
-LDR R0, =0x40020C00   ; GPIOD_MODER
-LDR R1, [R0]
-BIC R1, R1, #(3<<24)  ; clear bits 24-25
-ORR R1, R1, #(1<<24)  ; set to 01
-STR R1, [R0]
-
-; Set PD12 high using BSRR (atomic)
-LDR R0, =0x40020C18   ; GPIOD_BSRR
-MOV R1, #(1<<12)
-STR R1, [R0]
-
-; Reset PD12 using BSRR (atomic)
-MOV R1, #(1<<(12+16))
-STR R1, [R0]`
+            "language": "arm",
+            "title": "Preserve interrupt mask around a GPIO configuration RMW",
+            "code": ".syntax unified\n.cpu cortex-m4\n.thumb\nmrs r2,PRIMASK\ncpsid i\nldr r0,=0x40020c00\nldr r1,[r0]\nbic r1,r1,#(3<<24)\norr r1,r1,#(1<<24)\nstr r1,[r0]\nmsr PRIMASK,r2",
+            "explanation": "R2 is caller-saved. The prior PRIMASK is restored even if interrupts were already disabled. This does not serialize NMI, DMA or unrelated bus masters."
           }
         ]
       },
       {
-        id: 'sec-36-4',
-        title: '36.4 UART Serial Communication',
-        content: `A UART (Universal Asynchronous Receiver/Transmitter) provides serial communication. We'll configure USART2 on STM32F4 as an example.
-
-### UART Configuration Steps
-1. Enable clocks (GPIOA and USART2)
-2. Configure GPIO pins for alternate function (PA2=TX, PA3=RX)
-3. Set baud rate (BRR register)
-4. Enable transmitter (TE), receiver (RE), and UART (UE)
-
-### UART Registers
-| Register | Address | Purpose |
-|----------|---------|---------|
-| USART_SR | 0x40004400 | Status register (TXE, RXNE flags) |
-| USART_DR | 0x40004404 | Data register (send/receive) |
-| USART_BRR | 0x40004408 | Baud rate register |
-| USART_CR1 | 0x4000440C | Control register 1 (TE, RE, UE) |
-| USART_CR2 | 0x40004410 | Control register 2 |
-| USART_CR3 | 0x40004414 | Control register 3 |
-
-### Baud Rate Calculation
-For 16 MHz APB1 clock and 9600 baud:
-BRR = 16000000 / 9600 = 1667 = 0x683
-
-### Sending a Character
-Poll the TXE flag (bit 7 in USART_SR), then write to DR:
-wait_txe:
-    LDR R0, =USART2_SR
-    LDR R1, [R0]
-    TST R1, #(1<<7)   ; TXE flag
-    BEQ wait_txe
-    LDR R0, =USART2_DR
-    STR R2, [R0]      ; send character in R2
-
-### Receiving a Character
-Poll the RXNE flag (bit 5 in USART_SR), then read DR.`,
-        codeSnippets: [
+        "id": "sec-36-4",
+        "title": "36.4 Bit Manipulation Techniques",
+        "content": "Efficient bit manipulation is essential for peripheral control. Common techniques:\n\n- Set bits: ORR Rn, Rn, #mask\n- Clear bits: BIC Rn, Rn, #mask\n- Toggle bits: EOR Rn, Rn, #mask\n- Test bit: TST Rn, #mask (sets Z flag if all masked bits are zero)\n- Extract field: UBFX Rd, Rn, #lsb, #width (unsigned bitfield extract)\n- Insert field: BFI Rd, Rn, #lsb, #width (bitfield insert)\n\nIn ARM Thumb-2, immediate constants are limited but can encode many useful masks. If a mask is too complex, load it from a literal pool.",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'UART Initialization and Echo',
-            code: `.equ RCC_AHB1ENR, 0x40023830
-.equ RCC_APB1ENR, 0x40023840
-.equ GPIOA_MODER, 0x40020000
-.equ GPIOA_AFRL,  0x40020020
-.equ USART2_SR,   0x40004400
-.equ USART2_DR,   0x40004404
-.equ USART2_BRR,  0x40004408
-.equ USART2_CR1,  0x4000440C
-
-Reset_Handler:
-    ; Enable GPIOA clock (bit 0)
-    LDR R0, =RCC_AHB1ENR
-    LDR R1, [R0]
-    ORR R1, R1, #1
-    STR R1, [R0]
-
-    ; Enable USART2 clock (bit 17)
-    LDR R0, =RCC_APB1ENR
-    LDR R1, [R0]
-    ORR R1, R1, #(1<<17)
-    STR R1, [R0]
-
-    ; Configure PA2 (TX) and PA3 (RX) as AF7
-    LDR R0, =GPIOA_MODER
-    LDR R1, [R0]
-    BIC R1, R1, #(3<<4)    ; PA2
-    ORR R1, R1, #(2<<4)
-    BIC R1, R1, #(3<<6)    ; PA3
-    ORR R1, R1, #(2<<6)
-    STR R1, [R0]
-
-    ; Set AF7 for PA2/PA3
-    LDR R0, =GPIOA_AFRL
-    LDR R1, [R0]
-    BIC R1, R1, #(0xF<<8)
-    ORR R1, R1, #(7<<8)
-    BIC R1, R1, #(0xF<<12)
-    ORR R1, R1, #(7<<12)
-    STR R1, [R0]
-
-    ; Configure USART2: 9600 baud
-    LDR R0, =USART2_BRR
-    MOV R1, #0x683
-    STR R1, [R0]
-
-    ; Enable TE, RE, UE
-    LDR R0, =USART2_CR1
-    LDR R1, [R0]
-    ORR R1, R1, #(1<<3)    ; TE
-    ORR R1, R1, #(1<<2)    ; RE
-    ORR R1, R1, #(1<<13)   ; UE
-    STR R1, [R0]
-
-main_loop:
-    ; Wait for RXNE
-    LDR R0, =USART2_SR
-wait_rx:
-    LDR R1, [R0]
-    TST R1, #(1<<5)
-    BEQ wait_rx
-
-    ; Read byte
-    LDR R0, =USART2_DR
-    LDR R2, [R0]
-
-    ; Echo back
-    LDR R0, =USART2_SR
-wait_tx:
-    LDR R1, [R0]
-    TST R1, #(1<<7)
-    BEQ wait_tx
-
-    LDR R0, =USART2_DR
-    STR R2, [R0]
-
-    B main_loop`
+            "language": "nasm",
+            "title": "Original source: Solution 36.1",
+            "code": "LDR R0, =0x40020C00   ; GPIOD_MODER\nLDR R1, [R0]\n; PD15: bits 30-31 = 01 (output)\nBIC R1, R1, #(3<<30)\nORR R1, R1, #(1<<30)\n; PD14: bits 28-29 = 00 (input) - already cleared by default, but ensure\nBIC R1, R1, #(3<<28)\nSTR R1, [R0]",
+            "explanation": "Original source Solution 36.1; the exercise version uses GNU Arm comment syntax."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 36.2",
+            "code": "LDR R0, =0x40020C14   ; GPIOD_ODR\nLDR R1, [R0]\nEOR R1, R1, #( (1<<12) | (1<<13) | (1<<14) )  ; toggle bits\nSTR R1, [R0]",
+            "explanation": "Original source Solution 36.2; the exercise version uses GNU Arm comment syntax."
           }
         ]
       },
       {
-        id: 'sec-36-5',
-        title: '36.5 Timers and PWM',
-        content: `Timers are used for delays, periodic interrupts, and PWM (Pulse Width Modulation). We'll briefly cover timer configuration for a simple delay.
-
-### Timer Basics
-A timer like TIM2 counts up from 0 to a value in the auto-reload register (ARR). The prescaler (PSC) divides the input clock.
-
-### Timer Registers (TIM2)
-| Register | Offset | Purpose |
-|----------|--------|---------|
-| CR1 | 0x00 | Control register 1 (CEN bit) |
-| CR2 | 0x04 | Control register 2 |
-| DIER | 0x0C | DMA/interrupt enable |
-| SR | 0x10 | Status register (UIF flag) |
-| EGR | 0x14 | Event generation |
-| CNT | 0x24 | Current counter value |
-| PSC | 0x28 | Prescaler |
-| ARR | 0x2C | Auto-reload register |
-
-### Creating a Delay
-1. Enable TIM2 clock (APB1, bit 0)
-2. Set prescaler and ARR
-3. Enable counter (CEN bit in CR1)
-4. Wait for update flag (UIF in SR), then clear it
-
-For 1 ms delay at 16 MHz:
-PSC = 16000-1 (1 kHz timer clock)
-ARR = 1 (1 ms period)
-
-### PWM Basics
-PWM (Pulse Width Modulation) generates a square wave with configurable duty cycle. Use cases include:
-• LED brightness control
-• Motor speed control
-• Servo positioning
-
-Configure timer in PWM mode 1 or 2, set compare value (CCR) for duty cycle.`,
-        codeSnippets: [
+        "id": "sec-36-5",
+        "title": "36.5 General Purpose I/O (GPIO) Control",
+        "content": "GPIO pins are the simplest peripheral. Each pin can be configured as input, output, alternate function, or analog. Configuration is done via mode registers."
+      },
+      {
+        "id": "sec-36-5-1",
+        "title": "36.5.1 Enabling the GPIO Clock",
+        "content": "Before using any GPIO port, its clock must be enabled in the Reset and Clock Control (RCC) peripheral. On STM32F4, the AHB1 peripheral clock enable register is RCC_AHB1ENR at address 0x40023830. Each bit enables a peripheral; GPIOD is bit 3.\n\nExample:",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'Timer Delay',
-            code: `.equ TIM2_CR1,  0x40000000
-.equ TIM2_SR,   0x40000010
-.equ TIM2_PSC,  0x40000028
-.equ TIM2_ARR,  0x4000002C
-
-; Configure TIM2 for 1 ms delay
-LDR R0, =TIM2_PSC
-MOV R1, #16000-1     ; 16 MHz / 16000 = 1 kHz
-STR R1, [R0]
-
-LDR R0, =TIM2_ARR
-MOV R1, #1           ; 1 ms
-STR R1, [R0]
-
-; Enable timer
-LDR R0, =TIM2_CR1
-LDR R1, [R0]
-ORR R1, R1, #1       ; CEN
-STR R1, [R0]
-
-; Wait for update flag
-wait:
-    LDR R0, =TIM2_SR
-    LDR R1, [R0]
-    TST R1, #1        ; UIF
-    BEQ wait
-    ; Clear UIF
-    BIC R1, R1, #1
-    STR R1, [R0]`
+            "language": "arm",
+            "title": "36.5.1 Enabling the GPIO Clock — listing 1",
+            "code": "LDR R0, =0x40023830   ; RCC_AHB1ENR\nLDR R1, [R0]\nORR R1, R1, #(1<<3)   ; enable GPIOD clock\nSTR R1, [R0]"
           }
         ]
       },
       {
-        id: 'sec-36-6',
-        title: '36.6 Practical Example: Echo Program via UART',
-        content: `We'll write a complete assembly program that echoes back any character received on USART2. This combines GPIO, UART, and polling.
-
-### Complete Program Flow
-1. Initialize system clock (if needed)
-2. Enable GPIOA and USART2 clocks
-3. Configure PA2/PA3 as alternate function (AF7)
-4. Set baud rate and enable UART
-5. Main loop: wait for RXNE, read byte, wait for TXE, send byte
-
-### Polling vs Interrupts
-This example uses polling (checking flags in a loop). Polling is simple but wastes CPU cycles. Interrupt-driven I/O (covered in Chapter 37) is more efficient.
-
-### Common UART Issues
-1. Baud rate mismatch: Both ends must use the same speed
-2. Framing error: Check start/stop bits
-3. Overrun error: Read DR before next byte arrives
-4. Noise error: Check signal integrity
-
-### Testing the Echo Program
-1. Connect USB-to-serial adapter to PA2/PA3
-2. Open terminal (115200 baud, 8N1)
-3. Type characters - they should echo back`,
-        codeSnippets: [
+        "id": "sec-36-5-2",
+        "title": "36.5.2 Configuring Pin Mode",
+        "content": "The GPIO port mode register (GPIOx_MODER) uses two bits per pin to set the mode:\n\n- 00: Input\n- 01: General purpose output\n- 10: Alternate function\n- 11: Analog\n\nFor port D, MODER is at 0x40020C00. To set PD12 as output, we modify bits 24-25 as shown earlier."
+      },
+      {
+        "id": "sec-36-5-3",
+        "title": "36.5.3 Setting Output Type, Speed, and Pull-up/down (Optional)",
+        "content": "- Output type register (OTYPER): push-pull (0) or open-drain (1).\n- Output speed register (OSPEEDR): low, medium, high, very high.\n- Pull-up/pull-down register (PUPDR): no pull, pull-up, pull-down.\n\nFor simple LED blinking, defaults are fine.\n\nClarification: Reset defaults vary by pin and device, and earlier firmware may have changed them. Explicit output type/speed/pull configuration makes a reusable example independent of that history."
+      },
+      {
+        "id": "sec-36-5-4",
+        "title": "36.5.4 Writing and Reading Pin States",
+        "content": "- Output data register (ODR): each bit sets the pin high (1) or low (0). Can be read to see current state.\n- Bit set/reset register (BSRR): writing 1 to lower 16 bits sets corresponding pin; writing 1 to upper 16 bits resets. Atomic set/reset without RMW.\n\nExample to set PD12 high using BSRR:\n\nClarification: ODR reports the output latch; IDR samples the pin. These can differ with open-drain drive or external circuitry. BSRR can set/reset selected pins atomically, but toggling based on an old ODR read still needs exclusive ownership or synchronization.",
+        "codeSnippets": [
           {
-            language: 'arm',
-            title: 'Complete UART Echo Program',
-            code: `.syntax unified
-.cpu cortex-m4
-.thumb
-
-.equ RCC_AHB1ENR, 0x40023830
-.equ RCC_APB1ENR, 0x40023840
-.equ GPIOA_MODER, 0x40020000
-.equ GPIOA_AFRL,  0x40020020
-.equ USART2_SR,   0x40004400
-.equ USART2_DR,   0x40004404
-.equ USART2_BRR,  0x40004408
-.equ USART2_CR1,  0x4000440C
-
-.section .isr_vector, "a"
-.word _estack
-.word Reset_Handler
-
-.section .text
-.thumb_func
-.global Reset_Handler
-Reset_Handler:
-    ; Enable GPIOA clock
-    LDR R0, =RCC_AHB1ENR
-    LDR R1, [R0]
-    ORR R1, R1, #1
-    STR R1, [R0]
-
-    ; Enable USART2 clock
-    LDR R0, =RCC_APB1ENR
-    LDR R1, [R0]
-    ORR R1, R1, #(1<<17)
-    STR R1, [R0]
-
-    ; Configure PA2/PA3 as AF7
-    LDR R0, =GPIOA_MODER
-    LDR R1, [R0]
-    BIC R1, R1, #(3<<4)
-    ORR R1, R1, #(2<<4)
-    BIC R1, R1, #(3<<6)
-    ORR R1, R1, #(2<<6)
-    STR R1, [R0]
-
-    LDR R0, =GPIOA_AFRL
-    LDR R1, [R0]
-    BIC R1, R1, #(0xF<<8)
-    ORR R1, R1, #(7<<8)
-    BIC R1, R1, #(0xF<<12)
-    ORR R1, R1, #(7<<12)
-    STR R1, [R0]
-
-    ; Configure USART2: 9600 baud
-    LDR R0, =USART2_BRR
-    MOV R1, #0x683
-    STR R1, [R0]
-
-    ; Enable TE, RE, UE
-    LDR R0, =USART2_CR1
-    LDR R1, [R0]
-    ORR R1, R1, #(1<<3)
-    ORR R1, R1, #(1<<2)
-    ORR R1, R1, #(1<<13)
-    STR R1, [R0]
-
-main_loop:
-    LDR R0, =USART2_SR
-wait_rx:
-    LDR R1, [R0]
-    TST R1, #(1<<5)
-    BEQ wait_rx
-
-    LDR R0, =USART2_DR
-    LDR R2, [R0]
-
-    LDR R0, =USART2_SR
-wait_tx:
-    LDR R1, [R0]
-    TST R1, #(1<<7)
-    BEQ wait_tx
-
-    LDR R0, =USART2_DR
-    STR R2, [R0]
-
-    B main_loop
-
-.section .bss
-.align 3
-_estack: .space 0x400`
+            "language": "arm",
+            "title": "36.5.4 Writing and Reading Pin States — listing 1",
+            "code": "LDR R0, =0x40020C18   ; GPIOD_BSRR\nMOV R1, #(1<<12)      ; set bit 12 (lower half)\nSTR R1, [R0]",
+            "explanation": "To reset, use upper half: MOV R1, #(1<<(12+16)).\n\nFor input, read the input data register (IDR)."
+          }
+        ]
+      },
+      {
+        "id": "sec-36-6",
+        "title": "36.6 UART Serial Communication",
+        "content": "A UART (Universal Asynchronous Receiver/Transmitter) provides serial communication. We'll configure USART2 on STM32F4 as an example."
+      },
+      {
+        "id": "sec-36-6-1",
+        "title": "36.6.1 Enable Clocks",
+        "content": "USART2 is connected to APB1 bus, and its clock is enabled via RCC_APB1ENR (address 0x40023840). USART2 is bit 17. Also need to enable GPIOA clock for the TX/RX pins (PA2, PA3) via RCC_AHB1ENR bit 0."
+      },
+      {
+        "id": "sec-36-6-2",
+        "title": "36.6.2 Configure GPIO Pins for Alternate Function",
+        "content": "PA2 (TX) and PA3 (RX) must be set to alternate function mode (AF7 for USART2). This requires:\n\n- Set MODER for PA2/PA3 to 10 (alternate function).\n- Set alternate function register (AFR) to select AF7 for those pins."
+      },
+      {
+        "id": "sec-36-6-3",
+        "title": "36.6.3 Configure UART Parameters",
+        "content": "Registers in USART2:\n- USART_BRR (Baud rate register): set baud rate divisor.\n- USART_CR1 (Control register 1): enable transmitter (TE), receiver (RE), and UART (UE).\n- USART_DR (Data register): write to send, read to receive.\n- USART_SR (Status register): TXE (transmit data register empty), RXNE (receive data register not empty).\n\nClarification: The completed example assumes PCLK1=16 MHz, oversampling by 16, 9600 baud and 8N1, giving BRR=0x683. The CPU clock and peripheral clock need not match. TXE means DR can accept data; TC means transmission completed."
+      },
+      {
+        "id": "sec-36-6-4",
+        "title": "36.6.4 Sending a Character",
+        "content": "Poll the TXE flag, then write to DR:",
+        "codeSnippets": [
+          {
+            "language": "arm",
+            "title": "36.6.4 Sending a Character — listing 1",
+            "code": "wait_txe:\n    LDR R0, =USART2_SR\n    LDR R1, [R0]\n    TST R1, #(1<<7)   ; TXE flag (bit 7)\n    BEQ wait_txe\n    LDR R0, =USART2_DR\n    STR R2, [R0]      ; send character in R2"
+          }
+        ]
+      },
+      {
+        "id": "sec-36-6-5",
+        "title": "36.6.5 Receiving a Character",
+        "content": "Poll the RXNE flag, then read DR."
+      },
+      {
+        "id": "sec-36-7",
+        "title": "36.7 Timers and PWM",
+        "content": "Timers are used for delays, periodic interrupts, and PWM (Pulse Width Modulation). We'll briefly cover timer configuration for a simple delay.\n\nA timer like TIM2 counts up from 0 to a value in the auto-reload register (ARR). The prescaler (PSC) divides the input clock. We can poll the update flag or use interrupts.\n\nTo create a delay:\n\n1. Enable TIM2 clock (APB1, bit 0).\n2. Set prescaler and ARR.\n3. Enable counter (CEN bit in CR1).\n4. Wait for update flag (UIF in SR), then clear it.\n\nExample:\n\nClarification: PSC and ARR encode divisor/count minus one. PSC=15999 and ARR=1 gives two milliseconds at 16 MHz, not one. TIM2 on STM32F407 has a 32-bit ARR. The companion uses PSC=15 and ARR=milliseconds*1000−1, avoiding ARR=0, generates UG to load PSC, and clears initialization UIF before starting. PWM addition retained from the existing ebook: edge-aligned PWM uses the timer period and a CCR compare value; with normal active-high PWM mode 1, duty is approximately CCR/(ARR+1), subject to endpoint and preload semantics.",
+        "codeSnippets": [
+          {
+            "language": "arm",
+            "title": "Configure TIM2 for 1 ms delay",
+            "code": "; Configure TIM2 for 1 ms delay\nLDR R0, =TIM2_PSC\nMOV R1, #16000-1     ; assuming 16 MHz clock -> 1 kHz\nSTR R1, [R0]\nLDR R0, =TIM2_ARR\nMOV R1, #1           ; 1 ms\nSTR R1, [R0]\nLDR R0, =TIM2_CR1\nLDR R1, [R0]\nORR R1, R1, #1       ; CEN\nSTR R1, [R0]\n\nwait:\n    LDR R0, =TIM2_SR\n    LDR R1, [R0]\n    TST R1, #1        ; UIF\n    BEQ wait\n    ; Clear UIF by writing 0\n    BIC R1, R1, #1\n    STR R1, [R0]",
+            "explanation": "This is a basic polling approach; interrupts are better for real-time."
+          }
+        ]
+      },
+      {
+        "id": "sec-36-8",
+        "title": "36.8 Interrupt Enable and Disable (Brief)",
+        "content": "Peripherals can generate interrupts. To enable an interrupt, we must:\n\n1. Enable the interrupt in the peripheral’s control register (e.g., TXEIE in USART_CR1).\n2. Set the priority in the NVIC.\n3. Enable the interrupt in the NVIC (ISER register).\n4. Globally enable interrupts (clear PRIMASK via CPSIE i).\n\nWe'll cover interrupts in detail in Chapter 37.\n\nClarification: Configure/clear the peripheral source before unmasking it, and restore masks deliberately. Enabling TXEIE with no data to send can create an interrupt storm because TXE remains set. Chapter 37 handles receive interrupts and shared state."
+      },
+      {
+        "id": "sec-36-9",
+        "title": "36.9 Practical Example: Echo Program via UART",
+        "content": "We'll write an assembly program that echoes back any character received on USART2. This combines GPIO, UART, and polling.\n\nClarification: The original places _estack at the bottom of a reserved block and omits a full startup/linker contract. The companion reuses the complete Chapter 35 startup/linker design, initializes USART2 explicitly and checks receive error flags. Hardware wiring must match PA2 TX / PA3 RX with compatible logic levels and common ground. Polling remains blocking; this is not an RTOS driver.",
+        "codeSnippets": [
+          {
+            "language": "arm",
+            "title": "Original UART echo specimen — incomplete startup/link contract",
+            "code": "; uart_echo.s\n.syntax unified\n.cpu cortex-m4\n.thumb\n\n.equ RCC_AHB1ENR, 0x40023830\n.equ RCC_APB1ENR, 0x40023840\n.equ GPIOA_BASE,  0x40020000\n.equ GPIOA_MODER, 0x40020000\n.equ GPIOA_AFRL,  0x40020020\n.equ USART2_BASE, 0x40004400\n.equ USART2_SR,   0x40004400\n.equ USART2_DR,   0x40004404\n.equ USART2_BRR,  0x40004408\n.equ USART2_CR1,  0x4000440C\n\n.section .isr_vector, \"a\"\n.word _estack\n.word Reset_Handler\n\n.section .text\n.thumb_func\n.global Reset_Handler\nReset_Handler:\n    ; Enable GPIOA clock (bit 0) and USART2 clock (bit 17)\n    LDR R0, =RCC_AHB1ENR\n    LDR R1, [R0]\n    ORR R1, R1, #1\n    STR R1, [R0]\n\n    LDR R0, =RCC_APB1ENR\n    LDR R1, [R0]\n    ORR R1, R1, #(1<<17)\n    STR R1, [R0]\n\n    ; Configure PA2 (TX) and PA3 (RX) as alternate function (AF7)\n    LDR R0, =GPIOA_MODER\n    LDR R1, [R0]\n    ; PA2: bits 4-5 = 10 (alternate function)\n    BIC R1, R1, #(3<<4)\n    ORR R1, R1, #(2<<4)\n    ; PA3: bits 6-7 = 10\n    BIC R1, R1, #(3<<6)\n    ORR R1, R1, #(2<<6)\n    STR R1, [R0]\n\n    ; Set alternate function AF7 for PA2/PA3\n    LDR R0, =GPIOA_AFRL\n    LDR R1, [R0]\n    ; PA2: AFRL bits 8-11 = 7\n    BIC R1, R1, #(0xF<<8)\n    ORR R1, R1, #(7<<8)\n    ; PA3: AFRL bits 12-15 = 7\n    BIC R1, R1, #(0xF<<12)\n    ORR R1, R1, #(7<<12)\n    STR R1, [R0]\n\n    ; Configure USART2: 9600 baud, enable TX and RX\n    ; Assuming 16 MHz clock, BRR = 16000000/9600 = 1667 = 0x683\n    LDR R0, =USART2_BRR\n    MOV R1, #0x683\n    STR R1, [R0]\n\n    LDR R0, =USART2_CR1\n    LDR R1, [R0]\n    ORR R1, R1, #(1<<3)  ; TE\n    ORR R1, R1, #(1<<2)  ; RE\n    ORR R1, R1, #(1<<13) ; UE\n    STR R1, [R0]\n\nmain_loop:\n    ; Wait for RXNE\n    LDR R0, =USART2_SR\nwait_rx:\n    LDR R1, [R0]\n    TST R1, #(1<<5)   ; RXNE\n    BEQ wait_rx\n\n    ; Read received character\n    LDR R0, =USART2_DR\n    LDR R2, [R0]      ; character in R2\n\n    ; Wait for TXE\n    LDR R0, =USART2_SR\nwait_tx:\n    LDR R1, [R0]\n    TST R1, #(1<<7)   ; TXE\n    BEQ wait_tx\n\n    ; Transmit same character\n    LDR R0, =USART2_DR\n    STR R2, [R0]\n\n    B main_loop\n\n.section .bss\n.align 3\n_estack: .space 0x400",
+            "explanation": "This program polls the UART status flags to receive and transmit."
+          },
+          {
+            "language": "arm",
+            "title": "Complete peripheral routines: peripherals.s",
+            "code": "/* peripherals.s -- STM32F407, 16 MHz PCLK1 and TIM2 input clock.\n   Exclusive peripheral ownership; USART2 PA2/PA3, 9600 baud, 8N1. */\n.syntax unified\n.cpu cortex-m4\n.thumb\n.text\n.global uart_init,uart_putc,uart_getc,send_string,delay_ms\n.thumb_func\nuart_init:\n    ldr r0,=0x40023830\n    ldr r1,[r0]\n    orr r1,r1,#1\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40023840\n    ldr r1,[r0]\n    orr r1,r1,#(1<<17)\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40020000       @ GPIOA_MODER\n    ldr r1,[r0]\n    bic r1,r1,#0xf0\n    orr r1,r1,#0xa0\n    str r1,[r0]\n    ldr r1,[r0,#4]         @ push-pull PA2/PA3\n    bic r1,r1,#0x0c\n    str r1,[r0,#4]\n    ldr r1,[r0,#8]         @ low-speed output configuration\n    bic r1,r1,#0xf0\n    str r1,[r0,#8]\n    ldr r1,[r0,#12]        @ RX pull-up, TX no pull\n    bic r1,r1,#0xf0\n    orr r1,r1,#0x40\n    str r1,[r0,#12]\n    ldr r1,[r0,#0x20]      @ AF7 on PA2 and PA3\n    bic r1,r1,#0xff00\n    orr r1,r1,#0x7700\n    str r1,[r0,#0x20]\n    ldr r0,=0x40004400\n    movs r1,#0\n    str r1,[r0,#12]        @ CR1: disable while configuring\n    str r1,[r0,#16]        @ CR2: one stop bit\n    str r1,[r0,#20]        @ CR3: no flow control/DMA\n    ldr r1,=0x683          @ nearest BRR for 16 MHz / 9600, OVER8=0\n    str r1,[r0,#8]\n    ldr r1,=0x200c         @ UE|TE|RE, 8-bit data, no parity\n    str r1,[r0,#12]\n    bx lr\n.thumb_func\nuart_putc:\n    uxtb r2,r0             @ preserve the character before loading MMIO address\n    ldr r1,=0x40004400\n1:\n    ldr r3,[r1]\n    tst r3,#(1<<7)\n    beq 1b\n    str r2,[r1,#4]\n    bx lr\n.thumb_func\nuart_getc:\n    ldr r1,=0x40004400\n1:\n    ldr r2,[r1]\n    tst r2,#0x2f           @ RXNE or PE/FE/NF/ORE\n    beq 1b\n    ldr r0,[r1,#4]         @ SR then DR clears receive-error sequence\n    tst r2,#0x0f\n    bne 1b                 @ discard a frame with reported receive errors\n    uxtb r0,r0\n    bx lr\n.thumb_func\nsend_string:\n    push {r4,lr}\n    mov r4,r0\n1:\n    ldrb r0,[r4],#1\n    cbz r0,2f\n    bl uart_putc\n    b 1b\n2:\n    pop {r4,pc}\n/* delay_ms(R0): 0..4294967 milliseconds, R0=0 success/-1 invalid.\n   TIM2 is 32-bit on STM32F407. Uses 1 MHz tick to avoid ARR=0. */\n.thumb_func\ndelay_ms:\n    cbz r0,3f\n    ldr r1,=4294967\n    cmp r0,r1\n    bhi 4f\n    movw r1,#1000\n    mul r2,r0,r1\n    subs r2,r2,#1          @ ARR=(milliseconds*1000)-1\n    ldr r0,=0x40023840\n    ldr r1,[r0]\n    orr r1,r1,#1\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40000000     @ TIM2 base\n    movs r1,#0\n    str r1,[r0]            @ CR1 stop\n    str r1,[r0,#4]         @ CR2 default\n    str r1,[r0,#8]         @ SMCR internal clock\n    str r1,[r0,#12]        @ DIER: polling only\n    movs r1,#15\n    str r1,[r0,#0x28]      @ PSC=15 => 16 MHz /16 =1 MHz\n    str r2,[r0,#0x2c]      @ ARR\n    movs r1,#1\n    str r1,[r0,#0x14]      @ EGR.UG loads PSC and resets count\n    movs r1,#0\n    str r1,[r0,#0x10]      @ clear initialization UIF before timing\n    movs r1,#9\n    str r1,[r0]            @ OPM|CEN, stop automatically on update\n1:\n    ldr r1,[r0,#0x10]\n    tst r1,#1\n    beq 1b\n    movs r1,#0\n    str r1,[r0,#0x10]\n3:\n    movs r0,#0\n    bx lr\n4:\n    movs r0,#0\n    mvns r0,r0\n    bx lr",
+            "explanation": "Provides UART initialization, byte transmit/receive, string transmit and TIM2 delay. Functions use GNU Arm syntax and AAPCS register preservation. UART errors are discarded after the documented status/data-read sequence. Clock and physical I/O behavior require board testing."
+          },
+          {
+            "language": "arm",
+            "title": "Complete startup and echo main: uart_echo.s",
+            "code": "/* blink.s: STM32F407VG Discovery, PD12 LED, Cortex-M4 Thumb. */\n.syntax unified\n.cpu cortex-m4\n.thumb\n.ifndef LED_PIN\n.equ LED_PIN,12\n.endif\n.equ RCC_AHB1ENR,0x40023830\n.equ GPIOD_MODER,0x40020c00\n.equ GPIOD_OTYPER,0x40020c04\n.equ GPIOD_OSPEEDR,0x40020c08\n.equ GPIOD_PUPDR,0x40020c0c\n.equ GPIOD_BSRR,0x40020c18\n.section .isr_vector,\"a\",%progbits\n.global vectors\nvectors:\n    .word _estack,Reset_Handler\n    .word Default_Handler,Default_Handler,Default_Handler\n    .word Default_Handler,Default_Handler\n    .word 0,0,0,0\n    .word Default_Handler,Default_Handler,0\n    .word Default_Handler,Default_Handler\n    .rept 82\n    .word Default_Handler\n    .endr\n.section .text.Reset_Handler,\"ax\",%progbits\n.global Reset_Handler\n.type Reset_Handler,%function\n.thumb_func\nReset_Handler:\n    ldr r0,=0xe000ed08      @ VTOR: use the linked vector-table address\n    ldr r1,=vectors\n    str r1,[r0]\n    dsb\n    isb\n    ldr r0,=_sdata\n    ldr r1,=_edata\n    ldr r2,=_sidata\n1:\n    cmp r0,r1\n    bhs 2f\n    ldr r3,[r2],#4\n    str r3,[r0],#4\n    b 1b\n2:\n    ldr r0,=_sbss\n    ldr r1,=_ebss\n    movs r2,#0\n3:\n    cmp r0,r1\n    bhs 4f\n    str r2,[r0],#4\n    b 3b\n4:\n    bl main\n    b .\n.size Reset_Handler,.-Reset_Handler\n\n.section .text,\"ax\",%progbits\n.thumb_func\nDefault_Handler:\n    b .\n.global main\n.thumb_func\nmain:\n    bl uart_init\n1:\n    bl uart_getc\n    bl uart_putc\n    b 1b",
+            "explanation": "Use stm32f4.ld from Chapter 35. Vectors have valid default handlers, the initial stack is supplied by the linker, and data/BSS initialization precedes the polling loop."
+          },
+          {
+            "language": "bash",
+            "title": "Build the complete UART program",
+            "code": "arm-none-eabi-as -mcpu=cortex-m4 -mthumb -g peripherals.s -o peripherals.o\narm-none-eabi-as -mcpu=cortex-m4 -mthumb -g uart_echo.s -o uart_echo.o\narm-none-eabi-ld -T stm32f4.ld uart_echo.o peripherals.o -o uart_echo.elf\narm-none-eabi-objdump -d uart_echo.elf",
+            "explanation": "Configure the connected serial terminal for 9600 baud, 8 data bits, no parity, one stop bit and no flow control. Check clock, AF selection, TX/RX crossing and voltage levels if output is absent or garbled. These troubleshooting topics are retained from the newer ebook expansion."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 36.3",
+            "code": "send_string:\n    ; R0 = pointer to string\n    push {r4, lr}\n    mov r4, r0\n.loop:\n    ldrb r2, [r4], #1      ; load byte, increment pointer\n    cmp r2, #0\n    beq .done\n    ; wait TXE\n    ldr r3, =USART2_SR\n.wait_tx:\n    ldr r1, [r3]\n    tst r1, #(1<<7)\n    beq .wait_tx\n    ; send\n    ldr r3, =USART2_DR\n    str r2, [r3]\n    b .loop\n.done:\n    pop {r4, pc}",
+            "explanation": "Original source Solution 36.3; the complete peripheral routines supply missing constants and corrected behavior."
+          },
+          {
+            "language": "nasm",
+            "title": "Original source: Solution 36.4",
+            "code": "delay_ms:\n    ; R0 = milliseconds\n    push {r4, r5, lr}\n    ; Assume TIM2 PSC already set to 16000-1, ARR set to 1\n    ; We'll use loop: for each ms, start timer, wait for UIF, clear.\n    mov r5, r0\n1:\n    cmp r5, #0\n    beq .done\n    ; Start timer (CEN = 1)\n    ldr r3, =TIM2_CR1\n    ldr r1, [r3]\n    orr r1, r1, #1\n    str r1, [r3]\n    ; Wait for UIF\n    ldr r3, =TIM2_SR\n.wait:\n    ldr r1, [r3]\n    tst r1, #1\n    beq .wait\n    ; Clear UIF (write 0)\n    bic r1, r1, #1\n    str r1, [r3]\n    ; Stop timer (CEN = 0)\n    ldr r3, =TIM2_CR1\n    ldr r1, [r3]\n    bic r1, r1, #1\n    str r1, [r3]\n    subs r5, r5, #1\n    bne 1b\n.done:\n    pop {r4, r5, pc}",
+            "explanation": "Original source Solution 36.4; the complete peripheral routines supply missing constants and corrected behavior."
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-36-1',
-        title: 'Exercise 36.1: Atomic Pin Set with BSRR',
-        description: 'Set PD12 high using GPIOD_BSRR without an RMW sequence.',
-        solution: `LDR R0, =0x40020C18   ; GPIOD_BSRR
-MOV R1, #(1 << 12)     ; lower 16 bits set pin
-STR R1, [R0]`,
-        solutionLanguage: 'arm'
+        "id": "ex-36-1",
+        "title": "Exercise 36.1: GPIO Register Manipulation",
+        "description": "Given GPIOD_MODER address 0x40020C00, write ARM assembly code to configure PD15 as output and PD14 as input. Show the RMW sequence.",
+        "solution": ".syntax unified\n.cpu cortex-m4\n.thumb\n.text\nLDR R0, =0x40020C00   @ GPIOD_MODER\nLDR R1, [R0]\n@ PD15: bits 30-31 = 01 (output)\nBIC R1, R1, #(3<<30)\nORR R1, R1, #(1<<30)\n@ PD14: bits 28-29 = 00 (input) - already cleared by default, but ensure\nBIC R1, R1, #(3<<28)\nSTR R1, [R0]",
+        "solutionLanguage": "arm",
+        "solutionExplanation": " Initialization fragment: enable GPIOD first. If another context modifies the same register, use the documented synchronization protocol; this RMW sequence is not itself atomic."
       },
       {
-        id: 'ex-36-2',
-        title: 'Exercise 36.2: Toggle Multiple Pins',
-        description: 'Write code to toggle PD12, PD13, PD14 simultaneously using ODR. What is the mask?',
-        solution: `LDR R0, =0x40020C14   ; GPIOD_ODR
-LDR R1, [R0]
-EOR R1, R1, #((1<<12) | (1<<13) | (1<<14))
-STR R1, [R0]
-; Mask = 0x7000`,
-        solutionLanguage: 'arm'
+        "id": "ex-36-2",
+        "title": "Exercise 36.2: Toggle Multiple Pins",
+        "description": "Write code to toggle PD12, PD13, PD14 simultaneously using the ODR register. Use a single RMW operation. What is the mask?",
+        "solution": ".syntax unified\n.cpu cortex-m4\n.thumb\n.text\nLDR R0, =0x40020C14   @ GPIOD_ODR\nLDR R1, [R0]\nEOR R1, R1, #( (1<<12) | (1<<13) | (1<<14) )  @ toggle bits\nSTR R1, [R0]",
+        "solutionLanguage": "arm",
+        "solutionExplanation": "Mask = 0x7000. Initialization fragment: enable GPIOD first. If another context modifies the same register, use the documented synchronization protocol; this RMW sequence is not itself atomic."
       },
       {
-        id: 'ex-36-3',
-        title: 'Exercise 36.3: UART Transmit String',
-        description: 'Write an assembly routine that transmits a null-terminated string via UART using polling.',
-        solution: 'Loop through string bytes, wait for TXE flag, write to DR. Use LDRB to load each byte and compare with 0 for null terminator.',
-        solutionLanguage: 'arm'
+        "id": "ex-36-3",
+        "title": "Exercise 36.3: UART Transmit String",
+        "description": "Write an assembly routine that transmits a null-terminated string via UART using the polling method. Assume R0 points to the string, and the UART is already initialized. Implement a loop that sends each character until null.",
+        "solution": "/* peripherals.s -- STM32F407, 16 MHz PCLK1 and TIM2 input clock.\n   Exclusive peripheral ownership; USART2 PA2/PA3, 9600 baud, 8N1. */\n.syntax unified\n.cpu cortex-m4\n.thumb\n.text\n.global uart_init,uart_putc,uart_getc,send_string,delay_ms\n.thumb_func\nuart_init:\n    ldr r0,=0x40023830\n    ldr r1,[r0]\n    orr r1,r1,#1\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40023840\n    ldr r1,[r0]\n    orr r1,r1,#(1<<17)\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40020000       @ GPIOA_MODER\n    ldr r1,[r0]\n    bic r1,r1,#0xf0\n    orr r1,r1,#0xa0\n    str r1,[r0]\n    ldr r1,[r0,#4]         @ push-pull PA2/PA3\n    bic r1,r1,#0x0c\n    str r1,[r0,#4]\n    ldr r1,[r0,#8]         @ low-speed output configuration\n    bic r1,r1,#0xf0\n    str r1,[r0,#8]\n    ldr r1,[r0,#12]        @ RX pull-up, TX no pull\n    bic r1,r1,#0xf0\n    orr r1,r1,#0x40\n    str r1,[r0,#12]\n    ldr r1,[r0,#0x20]      @ AF7 on PA2 and PA3\n    bic r1,r1,#0xff00\n    orr r1,r1,#0x7700\n    str r1,[r0,#0x20]\n    ldr r0,=0x40004400\n    movs r1,#0\n    str r1,[r0,#12]        @ CR1: disable while configuring\n    str r1,[r0,#16]        @ CR2: one stop bit\n    str r1,[r0,#20]        @ CR3: no flow control/DMA\n    ldr r1,=0x683          @ nearest BRR for 16 MHz / 9600, OVER8=0\n    str r1,[r0,#8]\n    ldr r1,=0x200c         @ UE|TE|RE, 8-bit data, no parity\n    str r1,[r0,#12]\n    bx lr\n.thumb_func\nuart_putc:\n    uxtb r2,r0             @ preserve the character before loading MMIO address\n    ldr r1,=0x40004400\n1:\n    ldr r3,[r1]\n    tst r3,#(1<<7)\n    beq 1b\n    str r2,[r1,#4]\n    bx lr\n.thumb_func\nuart_getc:\n    ldr r1,=0x40004400\n1:\n    ldr r2,[r1]\n    tst r2,#0x2f           @ RXNE or PE/FE/NF/ORE\n    beq 1b\n    ldr r0,[r1,#4]         @ SR then DR clears receive-error sequence\n    tst r2,#0x0f\n    bne 1b                 @ discard a frame with reported receive errors\n    uxtb r0,r0\n    bx lr\n.thumb_func\nsend_string:\n    push {r4,lr}\n    mov r4,r0\n1:\n    ldrb r0,[r4],#1\n    cbz r0,2f\n    bl uart_putc\n    b 1b\n2:\n    pop {r4,pc}\n/* delay_ms(R0): 0..4294967 milliseconds, R0=0 success/-1 invalid.\n   TIM2 is 32-bit on STM32F407. Uses 1 MHz tick to avoid ARR=0. */\n.thumb_func\ndelay_ms:\n    cbz r0,3f\n    ldr r1,=4294967\n    cmp r0,r1\n    bhi 4f\n    movw r1,#1000\n    mul r2,r0,r1\n    subs r2,r2,#1          @ ARR=(milliseconds*1000)-1\n    ldr r0,=0x40023840\n    ldr r1,[r0]\n    orr r1,r1,#1\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40000000     @ TIM2 base\n    movs r1,#0\n    str r1,[r0]            @ CR1 stop\n    str r1,[r0,#4]         @ CR2 default\n    str r1,[r0,#8]         @ SMCR internal clock\n    str r1,[r0,#12]        @ DIER: polling only\n    movs r1,#15\n    str r1,[r0,#0x28]      @ PSC=15 => 16 MHz /16 =1 MHz\n    str r2,[r0,#0x2c]      @ ARR\n    movs r1,#1\n    str r1,[r0,#0x14]      @ EGR.UG loads PSC and resets count\n    movs r1,#0\n    str r1,[r0,#0x10]      @ clear initialization UIF before timing\n    movs r1,#9\n    str r1,[r0]            @ OPM|CEN, stop automatically on update\n1:\n    ldr r1,[r0,#0x10]\n    tst r1,#1\n    beq 1b\n    movs r1,#0\n    str r1,[r0,#0x10]\n3:\n    movs r0,#0\n    bx lr\n4:\n    movs r0,#0\n    mvns r0,r0\n    bx lr",
+        "solutionLanguage": "arm",
+        "solutionExplanation": "The complete send_string implementation saves R4/LR, keeps the pointer in R4 across uart_putc, and stops before transmitting the NUL. uart_putc preserves the byte while polling TXE. Assemble this file once and call send_string with R0 pointing to an accessible terminated string after uart_init."
       },
       {
-        id: 'ex-36-4',
-        title: 'Exercise 36.4: Timer Delay Function',
-        description: 'Implement a delay_ms function that takes milliseconds in R0 and blocks using TIM2 polling.',
-        solution: 'Configure TIM2 with PSC=16000-1 for 1 kHz. For each ms, set ARR=1, enable timer, wait for UIF, clear flag, disable timer.',
-        solutionLanguage: 'arm'
+        "id": "ex-36-4",
+        "title": "Exercise 36.4: Timer Delay Function",
+        "description": "Implement a function delay_ms that takes a delay in milliseconds in R0 and blocks for that duration using TIM2 polling. Assume timer clock is 16 MHz, prescaler 16000 (so timer counts at 1 kHz). Use ARR = delay for simple delay, but note maximum delay is limited by 16-bit ARR. Show code.",
+        "solution": "/* peripherals.s -- STM32F407, 16 MHz PCLK1 and TIM2 input clock.\n   Exclusive peripheral ownership; USART2 PA2/PA3, 9600 baud, 8N1. */\n.syntax unified\n.cpu cortex-m4\n.thumb\n.text\n.global uart_init,uart_putc,uart_getc,send_string,delay_ms\n.thumb_func\nuart_init:\n    ldr r0,=0x40023830\n    ldr r1,[r0]\n    orr r1,r1,#1\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40023840\n    ldr r1,[r0]\n    orr r1,r1,#(1<<17)\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40020000       @ GPIOA_MODER\n    ldr r1,[r0]\n    bic r1,r1,#0xf0\n    orr r1,r1,#0xa0\n    str r1,[r0]\n    ldr r1,[r0,#4]         @ push-pull PA2/PA3\n    bic r1,r1,#0x0c\n    str r1,[r0,#4]\n    ldr r1,[r0,#8]         @ low-speed output configuration\n    bic r1,r1,#0xf0\n    str r1,[r0,#8]\n    ldr r1,[r0,#12]        @ RX pull-up, TX no pull\n    bic r1,r1,#0xf0\n    orr r1,r1,#0x40\n    str r1,[r0,#12]\n    ldr r1,[r0,#0x20]      @ AF7 on PA2 and PA3\n    bic r1,r1,#0xff00\n    orr r1,r1,#0x7700\n    str r1,[r0,#0x20]\n    ldr r0,=0x40004400\n    movs r1,#0\n    str r1,[r0,#12]        @ CR1: disable while configuring\n    str r1,[r0,#16]        @ CR2: one stop bit\n    str r1,[r0,#20]        @ CR3: no flow control/DMA\n    ldr r1,=0x683          @ nearest BRR for 16 MHz / 9600, OVER8=0\n    str r1,[r0,#8]\n    ldr r1,=0x200c         @ UE|TE|RE, 8-bit data, no parity\n    str r1,[r0,#12]\n    bx lr\n.thumb_func\nuart_putc:\n    uxtb r2,r0             @ preserve the character before loading MMIO address\n    ldr r1,=0x40004400\n1:\n    ldr r3,[r1]\n    tst r3,#(1<<7)\n    beq 1b\n    str r2,[r1,#4]\n    bx lr\n.thumb_func\nuart_getc:\n    ldr r1,=0x40004400\n1:\n    ldr r2,[r1]\n    tst r2,#0x2f           @ RXNE or PE/FE/NF/ORE\n    beq 1b\n    ldr r0,[r1,#4]         @ SR then DR clears receive-error sequence\n    tst r2,#0x0f\n    bne 1b                 @ discard a frame with reported receive errors\n    uxtb r0,r0\n    bx lr\n.thumb_func\nsend_string:\n    push {r4,lr}\n    mov r4,r0\n1:\n    ldrb r0,[r4],#1\n    cbz r0,2f\n    bl uart_putc\n    b 1b\n2:\n    pop {r4,pc}\n/* delay_ms(R0): 0..4294967 milliseconds, R0=0 success/-1 invalid.\n   TIM2 is 32-bit on STM32F407. Uses 1 MHz tick to avoid ARR=0. */\n.thumb_func\ndelay_ms:\n    cbz r0,3f\n    ldr r1,=4294967\n    cmp r0,r1\n    bhi 4f\n    movw r1,#1000\n    mul r2,r0,r1\n    subs r2,r2,#1          @ ARR=(milliseconds*1000)-1\n    ldr r0,=0x40023840\n    ldr r1,[r0]\n    orr r1,r1,#1\n    str r1,[r0]\n    ldr r1,[r0]\n    ldr r0,=0x40000000     @ TIM2 base\n    movs r1,#0\n    str r1,[r0]            @ CR1 stop\n    str r1,[r0,#4]         @ CR2 default\n    str r1,[r0,#8]         @ SMCR internal clock\n    str r1,[r0,#12]        @ DIER: polling only\n    movs r1,#15\n    str r1,[r0,#0x28]      @ PSC=15 => 16 MHz /16 =1 MHz\n    str r2,[r0,#0x2c]      @ ARR\n    movs r1,#1\n    str r1,[r0,#0x14]      @ EGR.UG loads PSC and resets count\n    movs r1,#0\n    str r1,[r0,#0x10]      @ clear initialization UIF before timing\n    movs r1,#9\n    str r1,[r0]            @ OPM|CEN, stop automatically on update\n1:\n    ldr r1,[r0,#0x10]\n    tst r1,#1\n    beq 1b\n    movs r1,#0\n    str r1,[r0,#0x10]\n3:\n    movs r0,#0\n    bx lr\n4:\n    movs r0,#0\n    mvns r0,r0\n    bx lr",
+        "solutionLanguage": "arm",
+        "solutionExplanation": "The complete delay_ms function owns TIM2, validates the 32-bit tick calculation, handles zero immediately, initializes PSC/ARR/UG/UIF and uses one-pulse mode. It returns zero or -1 for out-of-range milliseconds. This replaces the inaccurate PSC/ARR timing assumptions while preserving the requested blocking-delay function."
       },
       {
-        id: 'ex-36-5',
-        title: 'Exercise 36.5: Read-Modify-Write Race Condition',
-        description: 'Explain why RMW can be unsafe with interrupts enabled. Give an example.',
-        solution: 'If interrupt modifies same register between read and write, the write overwrites the change. Example: Main sets bit 12, interrupt sets bit 13 between read and write, write only has bit 12 set, bit 13 lost.',
-        solutionLanguage: 'text'
+        "id": "ex-36-5",
+        "title": "Exercise 36.5: Read-Modify-Write Race",
+        "description": "Explain why an RMW sequence can be unsafe when interrupts are enabled. Give an example of a problematic scenario. How can you prevent it?",
+        "solution": "An RMW sequence consists of read, modify, write. If an interrupt occurs between read and write and modifies the same register (e.g., sets a different bit), when the interrupted code resumes and writes its modified value, it will overwrite the interrupt's change. This is a lost update. To prevent, either disable interrupts around the RMW, use bit-banding for single-bit operations, or use exclusive load/store (LDREX/STREX).",
+        "solutionExplanation": "Correction: restore the previous mask state, and do not rely on exclusive accesses for peripheral Device memory. A GPIO set/reset operation can use BSRR directly; a valid configuration RMW may use a short critical section if only maskable interrupts share it."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'What is memory-mapped I/O? How does it differ from port-mapped I/O?',
-        answer: 'Memory-mapped I/O maps peripheral registers into the processor address space, allowing access via load/store instructions. Port-mapped I/O uses separate address space and special IN/OUT instructions. Memory-mapped is simpler and more common in ARM/MCU designs.'
+        "question": "What is memory-mapped I/O? How does it differ from port-mapped I/O?",
+        "answer": "MMIO uses addresses in the processor memory map and ordinary loads/stores with device-specific semantics. Port-mapped I/O uses a separate I/O address space and special instructions such as x86 IN/OUT. Neither makes peripheral registers ordinary RAM."
       },
       {
-        question: 'Explain the read-modify-write sequence. Why is it used?',
-        answer: 'RMW reads the current register value, modifies specific bits using AND/OR/XOR operations, and writes back. It is used to change individual bits without affecting others. For example, setting bit 12 while preserving all other bits.'
+        "question": "Explain the read-modify-write sequence. Why is it used?",
+        "answer": "Read the current value, mask/insert the desired field, then write it back to preserve unrelated writable bits. It is suitable only when reads and writes have compatible semantics and concurrent updates are excluded; it is unsafe for many status or command registers."
       },
       {
-        question: 'Why must peripheral clocks be enabled before accessing a peripheral?',
-        answer: 'Peripherals are clock-gated by default to save power. Without a clock signal, the peripheral logic cannot operate, and accessing its registers may cause a bus fault or return undefined values.'
+        "question": "Why must peripheral clocks be enabled before accessing a peripheral? How do you enable them?",
+        "answer": "Clock gating stops peripheral logic to save power. For STM32F407 GPIOD, set RCC_AHB1ENR bit 3 and perform the required enable/readback sequence before configuring registers. The enable location and readiness requirements differ by peripheral."
       },
       {
-        question: 'What is the purpose of the BSRR register in GPIO?',
-        answer: 'BSRR (Bit Set/Reset Register) provides atomic bit manipulation. Writing 1 to lower 16 bits sets the corresponding pin; writing 1 to upper 16 bits resets it. This eliminates the need for read-modify-write sequences that can have race conditions with interrupts.'
+        "question": "On an STM32F4, how do you configure a GPIO pin as an output? List the steps and registers.",
+        "answer": "Enable the GPIO port clock, select output mode 01 in the pin’s two-bit MODER field, configure type/speed/pulls and initial output level, then drive through ODR or BSRR. Use the board pin mapping and avoid changing unrelated fields."
       },
       {
-        question: 'Describe how to send a byte over UART using polling.',
-        answer: '1. Wait for TXE (Transmit Data Register Empty) flag in USART_SR. 2. Write the byte to USART_DR. The hardware serializes the data and transmits it. TXE is set when the data register is empty and ready for next byte.'
+        "question": "What is the purpose of the BSRR register in GPIO? How does it help atomic operations?",
+        "answer": "BSRR provides per-pin set commands in bits 0–15 and reset commands in bits 16–31. A direct mask write changes selected output bits without reading ODR and losing another writer’s update. It does not provide an atomic toggle command."
       },
       {
-        question: 'Why is polling less efficient than interrupts for peripheral handling?',
-        answer: 'Polling requires the CPU to continuously check status flags in a loop, wasting cycles even when no data is available. Interrupts allow the CPU to sleep or do other work until the peripheral signals readiness, improving efficiency and responsiveness.'
+        "question": "Describe how to send a byte over UART using polling. Which status flags are used?",
+        "answer": "After enabling the clock, alternate-function pins and UART configuration, poll SR.TXE until the data register can accept a byte, then write DR. TXE is not transmission-complete; wait for TC when the final stop bit must have left the pin. RXNE indicates received data."
       },
       {
-        question: 'How can you ensure atomic access to a peripheral register when interrupts are enabled?',
-        answer: 'Methods include: 1) Disable interrupts around RMW (CPSID i/CPSIE i). 2) Use bit-banding for single-bit operations. 3) Use exclusive load/store (LDREX/STREX). 4) Use atomic registers like BSRR.'
+        "question": "What is a timer prescaler and auto-reload register? How do they determine the interrupt frequency?",
+        "answer": "For a basic edge-aligned upcounter, tick frequency is fTIM/(PSC+1) and update frequency is fTIM/((PSC+1)*(ARR+1)). A prescaler value of 15999 divides by 16000. STM32 APB prescaling can double the timer clock relative to PCLK, so derive fTIM from the clock tree."
+      },
+      {
+        "question": "Why is polling less efficient than interrupts for peripheral handling?",
+        "answer": "A tight polling loop consumes cycles while waiting and can delay other work. Interrupts let the CPU work or sleep between events, but introduce entry overhead, concurrency and latency considerations. Polling can still suit simple bounded tasks."
+      },
+      {
+        "question": "What is a bit field? How do you extract and insert a bit field in ARM assembly?",
+        "answer": "A bit field occupies adjacent bits representing a value. UBFX Rd,Rn,#lsb,#width extracts an unsigned field; BFI Rd,Rn,#lsb,#width inserts low source bits into a destination register. For MMIO, an additional valid read/write protocol is still needed."
+      },
+      {
+        "question": "How can you ensure atomic access to a peripheral register when interrupts are enabled? Name at least two methods.",
+        "answer": "Use a peripheral-provided atomic set/reset register such as BSRR, or protect a valid RMW by saving PRIMASK, masking relevant interrupts and restoring the prior state. Bit-banding applies only where implemented and suitable. Do not assume LDREX/STREX works on Device-memory peripheral registers or excludes DMA."
       }
     ],
-    summary: [
-      'Memory-mapped I/O allows CPU to control hardware by reading/writing specific addresses.',
-      'Read-modify-write is the standard pattern for modifying register bits.',
-      'Clock gating: peripherals must be enabled before use.',
-      'GPIO configuration involves setting mode bits; output data via ODR or BSRR.',
-      'UART requires clock, pin alternate function, baud rate, and enabling TX/RX.',
-      'Timers provide precise delays and periodic events.',
-      'Polling flags is simple but wastes CPU; interrupts are more efficient.',
-      'Always consider atomicity when using RMW in interrupt-prone environments.'
+    "summary": [
+      "Memory-mapped I/O allows CPU to control hardware by reading/writing specific addresses.",
+      "Read-modify-write is the standard pattern for modifying register bits; use OR to set, AND/BIC to clear, XOR to toggle.",
+      "Clock gating: peripherals must be enabled before use.",
+      "GPIO configuration involves setting mode bits; output data can be set via ODR or BSRR.",
+      "UART requires clock, pin alternate function, baud rate, and enabling TX/RX.",
+      "Timers provide precise delays and periodic events.",
+      "Polling flags is simple but wastes CPU; interrupts (next chapter) are more efficient.",
+      "Always consider atomicity when using RMW in interrupt-prone environments."
     ]
   },
   {
