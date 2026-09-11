@@ -1836,737 +1836,515 @@ export const CHAPTERS_LEVEL_8: Chapter[] = [
     ]
   },
   {
-    id: 44,
-    slug: 'chapter-44-secure-coding-defensive-assembly',
-    level: 8,
-    levelTitle: 'Security and Binary Exploitation',
-    title: 'Chapter 44: Secure Coding and Defensive Assembly',
-    subtitle: 'Bounds Checking, Arithmetic Overflow Verification, Manual Canaries, and RELRO',
-    learningObjectives: [
-      'Understand secure coding principles for assembly and low-level programming.',
-      'Apply defensive programming standards to pure assembly and C interop code.',
-      'Implement bounds-checked string and memory copy routines.',
-      'Verify integer overflow on arithmetic using jo and jc flags.',
-      'Implement custom stack canaries with getrandom syscall (318).',
-      'Understand and apply compiler security flags.',
-      'Learn input validation and sanitization techniques.',
-      'Study secure memory handling and zeroization.'
+    "id": 44,
+    "slug": "chapter-44-secure-coding-defensive-assembly",
+    "level": 8,
+    "levelTitle": "Security and Binary Exploitation",
+    "title": "Chapter 44: Secure Coding and Defensive Assembly",
+    "subtitle": "Bounds Checking, Arithmetic Overflow Verification, Manual Canaries, and RELRO",
+    "learningObjectives": [
+      "Understand secure coding principles for assembly and low-level programming.",
+      "Apply defensive programming standards to pure assembly and C interop code.",
+      "Implement bounds-checked string and memory copy routines.",
+      "Verify integer overflow on arithmetic using jo and jc flags.",
+      "Implement custom stack canaries with getrandom syscall (318).",
+      "Understand and apply compiler security flags.",
+      "Learn input validation and sanitization techniques.",
+      "Study secure memory handling and zeroization."
     ],
-    prerequisites: ['Chapters 1–43'],
-    keyConcepts: [
-      'Bounds checking: Prevent memory writes beyond buffer allocations.',
-      'Arithmetic overflow: Integer operations exceeding type size.',
-      'Stack canaries: Random values to detect stack smashing.',
-      'RELRO: Read-only GOT to prevent function pointer hijacking.',
-      'Input validation: Verify all external inputs before use.',
-      'Memory zeroization: Clear sensitive data after use.',
-      'Secure coding standards: CERT C, MISRA, SEI guidelines.',
-      'Defense in depth: Multiple security layers.'
+    "prerequisites": [
+      "Chapters 1–43"
     ],
-    diagramType: 'defensive_assembly',
-    sections: [
+    "keyConcepts": [
+      "Bounds checking: Prevent memory writes beyond buffer allocations.",
+      "Arithmetic overflow: Integer operations exceeding type size.",
+      "Stack canaries: Random values to detect stack smashing.",
+      "RELRO: Read-only GOT to prevent function pointer hijacking.",
+      "Input validation: Verify all external inputs before use.",
+      "Memory zeroization: Clear sensitive data after use.",
+      "Secure coding standards: CERT C, MISRA, SEI guidelines.",
+      "Defense in depth: Multiple security layers."
+    ],
+    "diagramType": "defensive_assembly",
+    "sections": [
       {
-        id: 'sec-44-1',
-        title: '44.1 Bounds Checking and Input Validation',
-        content: `Preventing buffer overflows requires rigorous bounds checking.
-
-### Why Bounds Checking?
-• Prevents buffer overflows
-• Stops out-of-bounds reads/writes
-• Protects against integer overflow in size calculations
-• Essential for secure string handling
-
-### Bounds-Checked String Copy
-Always verify destination buffer size:
-
-; safe_strcpy: rdi=dest, rsi=src, rdx=dest_size
-safe_strcpy:
-    push rdi; push rsi; push rbx
-    mov rbx, rdx        ; remaining space
-    xor eax, eax
-.loop:
-    cmp rbx, 1
-    jle .truncated      ; leave 1 byte for null
-    mov cl, [rsi]
-    mov [rdi], cl
-    inc rsi; inc rdi; dec rbx
-    test cl, cl; jz .done
-    jmp .loop
-.truncated:
-    mov byte [rdi], 0   ; guarantee null terminator
-    mov eax, -1
-.done:
-    pop rbx; pop rsi; pop rdi; ret
-
-
-### Input Validation Patterns
-1. **Length checks**: Verify input length before copy
-2. **Character validation**: Check for allowed characters
-3. **Range validation**: Verify numeric values within bounds
-4. **Format validation**: Ensure expected structure
-5. **Null termination**: Always ensure strings are null-terminated
-
-### Safe Memory Operations
-
-; memcpy with bounds check
-; rdi=dest, rsi=src, rdx=size, rcx=dest_size
-safe_memcpy:
-    cmp rdx, rcx
-    ja .overflow        ; size > dest_size
-    ; Proceed with memcpy
-    ...
-
-
-### Integer Overflow Prevention
-Integer overflow in size calculations causes underallocation:
-
-// VULNERABLE
-size_t total = count * sizeof(int);  // Can overflow!
-int *arr = malloc(total);
-
-// SAFE
-if (count > SIZE_MAX / sizeof(int)) {
-    return NULL;  // Overflow check
-}
-size_t total = count * sizeof(int);
-
-
-### Compiler Built-in Checks
-
-// GCC/Clang overflow-checked arithmetic
-int result;
-if (__builtin_add_overflow(a, b, &result)) {
-    // Overflow occurred
-}
-
-if (__builtin_mul_overflow(a, b, &result)) {
-    // Overflow occurred
-}
-
-
-### Fuzzing for Bounds Checking
-Use fuzzing to find bounds violations:
-• AFL (American Fuzzy Lop)
-• libFuzzer
-• Honggfuzz
-• Microsoft OneFuzz`,
-        codeSnippets: [
+        "id": "sec-44-1",
+        "title": "44.1 Bounds Checking and Input Validation",
+        "content": "Preventing buffer overflows requires rigorous bounds checking."
+      },
+      {
+        "id": "sec-44-1-1",
+        "title": "44.1.1 Why Bounds Checking?",
+        "content": "• Prevents buffer overflows\n• Stops out-of-bounds reads/writes\n• Protects against integer overflow in size calculations\n• Essential for secure string handling"
+      },
+      {
+        "id": "sec-44-1-2",
+        "title": "44.1.2 Bounds-Checked String Copy",
+        "content": "Always verify destination buffer size:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'Bounds-Checked Functions',
-            code: `; safe_strncpy: Guaranteed null-terminated, bounds-checked
-; rdi=dest, rsi=src, rdx=dest_size
-global safe_strncpy
-section .text
-safe_strncpy:
-    push rdi
-    push rsi
-    push rcx
-    push rbx
-    
-    mov rbx, rdx        ; dest_size
-    test rbx, rbx
-    jz .overflow
-    
-.copy_loop:
-    dec rbx
-    jz .truncated
-    lodsb               ; AL = [RSI], RSI++
-    stosb               ; [RDI] = AL, RDI++
-    test al, al
-    jnz .copy_loop
-    jmp .done
-    
-.truncated:
-    mov byte [rdi-1], 0  ; Ensure null termination
-    mov eax, -1          ; Return truncation error
-    jmp .cleanup
-    
-.overflow:
-    xor eax, eax         ; Return 0 on zero-size
-    jmp .cleanup
-    
-.done:
-    xor eax, eax         ; Return success
-    
-.cleanup:
-    pop rbx
-    pop rcx
-    pop rsi
-    pop rdi
-    ret
-
-; memset with bounds check
-; rdi=dest, sil=value, rdx=size, rcx=dest_size
-safe_memset:
-    cmp rdx, rcx
-    ja .overflow
-    ; Proceed with memset
-    mov rcx, rdx
-    mov al, sil
-    rep stosb
-    xor eax, eax
-    ret
-.overflow:
-    mov eax, -1
-    ret`
+            "title": "Bounds-Checked String Copy — example",
+            "language": "nasm",
+            "code": "; safe_strcpy: rdi=dest, rsi=src, rdx=dest_size\nsafe_strcpy:\n    push rdi; push rsi; push rbx\n    mov rbx, rdx        ; remaining space\n    xor eax, eax\n.loop:\n    cmp rbx, 1\n    jle .truncated      ; leave 1 byte for null\n    mov cl, [rsi]\n    mov [rdi], cl\n    inc rsi; inc rdi; dec rbx\n    test cl, cl; jz .done\n    jmp .loop\n.truncated:\n    mov byte [rdi], 0   ; guarantee null terminator\n    mov eax, -1\n.done:\n    pop rbx; pop rsi; pop rdi; ret"
           }
         ]
       },
       {
-        id: 'sec-44-2',
-        title: '44.2 Arithmetic Overflow Detection',
-        content: `Detecting integer overflow is critical for secure arithmetic.
-
-### Why Integer Overflow is Dangerous
-• Buffer size underallocation
-• Unexpected negative values
-• Bypass of security checks
-• Logic errors in comparisons
-
-### x86-64 Overflow Detection Flags
-| Flag | Name | Set When |
-|------|------|----------|
-| OF | Overflow Flag | Signed overflow |
-| CF | Carry Flag | Unsigned overflow |
-| ZF | Zero Flag | Result is zero |
-| SF | Sign Flag | Result is negative |
-
-### Detecting Signed Overflow (jo/jno)
-
-; Safe addition with overflow detection
-; rdi=a, rsi=b, rdx=ptr_to_result
-safe_add:
-    mov rax, rdi
-    add rax, rsi
-    jo .overflow        ; Jump if signed overflow
-    mov [rdx], rax
-    xor eax, eax        ; Return success
-    ret
-.overflow:
-    mov eax, -1         ; Return error
-    ret
-
-
-### Detecting Unsigned Overflow (jc/jnc)
-
-; Safe multiplication with overflow detection
-; rdi=a, rsi=b, rdx=ptr_to_result
-safe_mul:
-    mov rax, rdi
-    mul rsi             ; RDX:RAX = RAX * RSI
-    jc .overflow        ; Jump if unsigned overflow (RDX != 0)
-    mov [rdx], rax
-    xor eax, eax
-    ret
-.overflow:
-    mov eax, -1
-    ret
-
-
-### Compiler Built-in Overflow Checks
-
-// GCC/Clang built-in functions
-int result;
-
-// Addition
-if (__builtin_add_overflow(a, b, &result)) {
-    handle_overflow();
-}
-
-// Multiplication
-if (__builtin_mul_overflow(a, b, &result)) {
-    handle_overflow();
-}
-
-// Subtraction
-if (__builtin_sub_overflow(a, b, &result)) {
-    handle_overflow();
-}
-
-
-### Safe Integer Library Pattern
-
-typedef struct {
-    int64_t value;
-    int overflow;
-} safe_int;
-
-safe_int safe_add(safe_int a, safe_int b) {
-    safe_int result;
-    result.overflow = a.overflow || b.overflow;
-    if (!result.overflow) {
-        result.value = a.value + b.value;
-        result.overflow = (result.value < a.value) != (b.value > 0);
-    }
-    return result;
-}
-
-
-### Common Integer Overflow Vulnerabilities
-1. **malloc(count * size)**: Multiplication overflow
-2. **Array indexing**: Signed/unsigned confusion
-3. **Buffer length calculations**: Subtraction underflow
-4. **Loop counters**: Increment overflow
-5. **Time calculations**: Wraparound issues
-
-### Mitigation Strategies
-• Use safe integer libraries
-• Check arithmetic operations with jo/jc
-• Validate all size calculations before allocation
-• Use larger types for intermediate results
-• Fuzz with extreme values`,
-        codeSnippets: [
+        "id": "sec-44-1-3",
+        "title": "44.1.3 Input Validation Patterns",
+        "content": "1. Length checks: Verify input length before copy\n2. Character validation: Check for allowed characters\n3. Range validation: Verify numeric values within bounds\n4. Format validation: Ensure expected structure\n5. Null termination: Always ensure strings are null-terminated"
+      },
+      {
+        "id": "sec-44-1-4",
+        "title": "44.1.4 Safe Memory Operations",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'Safe Arithmetic Functions',
-            code: `; safe_add: Signed addition with overflow detection
-; Input: rdi=a, rsi=b, rdx=ptr_to_result
-; Output: eax=0 success, eax=-1 overflow
-global safe_add
-section .text
-safe_add:
-    mov rax, rdi
-    add rax, rsi
-    jo .overflow
-    mov [rdx], rax
-    xor eax, eax
-    ret
-.overflow:
-    mov eax, -1
-    ret
-
-; safe_mul: Unsigned multiplication with overflow detection
-; Input: rdi=a, rsi=b, rdx=ptr_to_result
-global safe_mul
-section .text
-safe_mul:
-    mov rax, rdi
-    mul rsi             ; RDX:RAX = RAX * RSI
-    test rdx, rdx       ; Check high 64 bits
-    jnz .overflow
-    mov [rdx], rax
-    xor eax, eax
-    ret
-.overflow:
-    mov eax, -1
-    ret
-
-; safe_sub: Signed subtraction with underflow detection
-; Input: rdi=a, rsi=b, rdx=ptr_to_result
-global safe_sub
-section .text
-safe_sub:
-    mov rax, rdi
-    sub rax, rsi
-    jo .overflow
-    mov [rdx], rax
-    xor eax, eax
-    ret
-.overflow:
-    mov eax, -1
-    ret`
+            "title": "Safe Memory Operations — example",
+            "language": "nasm",
+            "code": "; memcpy with bounds check\n; rdi=dest, rsi=src, rdx=size, rcx=dest_size\nsafe_memcpy:\n    cmp rdx, rcx\n    ja .overflow        ; size > dest_size\n    ; Proceed with memcpy\n    ..."
           }
         ]
       },
       {
-        id: 'sec-44-3',
-        title: '44.3 Stack Canaries and RELRO',
-        content: `Modern compile-time protections against memory corruption.
-
-### Stack Canaries (Stack Protector)
-Random value placed before saved return address:
-
-; Function prologue
-push rbp
-mov rbp, rsp
-sub rsp, 32
-mov rax, qword [fs:0x28]    ; Load canary
-mov qword [rbp-8], rax       ; Store in stack frame
-
-; Function epilogue
-mov rax, qword [rbp-8]       ; Load canary
-xor rax, qword [fs:0x28]    ; Compare with master
-jnz .stack_chk_fail          ; Abort if modified
-leave
-ret
-
-
-### Custom Stack Canary Implementation
-
-; Custom canary using getrandom syscall
-section .text
-global _start
-
-_start:
-    ; Allocate stack frame
-    push rbp
-    mov rbp, rsp
-    sub rsp, 16
-    
-    ; Generate random canary
-    mov rax, 318        ; sys_getrandom
-    lea rdi, [rbp-8]    ; Buffer for canary
-    mov rsi, 8          ; 8 bytes
-    xor rdx, rdx        ; Flags = 0
-    syscall
-    
-    ; Store canary
-    mov rax, qword [rbp-8]
-    
-    ; ... function body ...
-    
-    ; Verify canary
-    mov rcx, qword [rbp-8]
-    xor rcx, qword [rbp-8]  ; Compare
-    jnz .canary_breach
-    
-    ; Return
-    leave
-    ret
-    
-.canary_breach:
-    ; Canary corrupted! Abort
-    mov rax, 60
-    mov rdi, 1
-    syscall
-
-
-### RELRO (Relocation Read-Only)
-Protects GOT (Global Offset Table) from modification:
-
-**Partial RELRO** (default):
-• GOT is writable
-• .dynamic section is read-only
-• Partial protection
-
-**Full RELRO** (-z relro -z now):
-• GOT is read-only after startup
-• All symbols resolved at startup
-• Strong protection against GOT hijacking
-
-### Compiler Security Flags
-
-# Stack canary
-gcc -fstack-protector-strong -o binary source.c
-
-# NX (No-Execute)
-gcc -z noexecstack -o binary source.c
-
-# RELRO
-gcc -z relro -z now -o binary source.c
-
-# PIE (Position-Independent Executable)
-gcc -pie -fPIE -o binary source.c
-
-# Fortify Source
-gcc -D_FORTIFY_SOURCE=2 -o binary source.c
-
-# Full protection
-gcc -fstack-protector-strong -z noexecstack -z relro -z now \
-    -pie -fPIE -D_FORTIFY_SOURCE=2 -o binary source.c
-
-
-### Checking Protections
-
-# checksec tool
-checksec --file=binary
-
-# readelf for NX
-readelf -l binary | grep GNU_STACK
-
-# readelf for PIE
-readelf -h binary | grep Type
-
-# readelf for RELRO
-readelf -l binary | grep GNU_RELRO
-
-
-### Limitations of Protections
-| Protection | Bypass Technique |
-|------------|------------------|
-| Stack canary | Leak canary value |
-| NX/DEP | ROP, ret2libc |
-| ASLR | Information leak |
-| PIE | Code leak |
-| RELRO | Data-only attacks |`,
-        codeSnippets: [
+        "id": "sec-44-1-5",
+        "title": "44.1.5 Integer Overflow Prevention",
+        "content": "Integer overflow in size calculations causes underallocation:",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'Custom Canary Implementation',
-            code: `; Custom stack canary with getrandom
-section .bss
-    canary_value: resq 1
-
-section .text
-global init_canary
-global check_canary
-
-; Initialize canary (call once at program start)
-init_canary:
-    push rax
-    push rdi
-    push rsi
-    push rdx
-    
-    mov rax, 318            ; sys_getrandom
-    lea rdi, [canary_value] ; Buffer
-    mov rsi, 8              ; 8 bytes
-    xor rdx, rdx            ; Flags = 0
-    syscall
-    
-    ; Ensure canary has null byte in low byte
-    ; (for string function protection)
-    mov byte [canary_value], 0
-    
-    pop rdx
-    pop rsi
-    pop rdi
-    pop rax
-    ret
-
-; Check canary (call before return)
-check_canary:
-    push rax
-    push rcx
-    
-    mov rax, qword [canary_value]
-    mov rcx, [rsp+16]       ; Saved RBP from stack frame
-    xor rax, rcx
-    jnz .breach
-    
-    pop rcx
-    pop rax
-    ret
-    
-.breach:
-    ; Canary corrupted - abort
-    mov rax, 60
-    mov rdi, 1
-    syscall`
+            "title": "Integer Overflow Prevention — example",
+            "language": "c",
+            "code": "// VULNERABLE\nsize_t total = count * sizeof(int);  // Can overflow!\nint *arr = malloc(total);\n\n// SAFE\nif (count > SIZE_MAX / sizeof(int)) {\n    return NULL;  // Overflow check\n}\nsize_t total = count * sizeof(int);"
           }
         ]
       },
       {
-        id: 'sec-44-4',
-        title: '44.4 Secure Memory Handling',
-        content: `Protecting sensitive data in memory.
-
-### Why Secure Memory Handling?
-• Prevent sensitive data leakage
-• Stop memory dump analysis
-• Protect cryptographic keys
-• Clear passwords from memory
-
-### Memory Zeroization
-Always clear sensitive data after use:
-
-; Secure memset: Clear buffer with volatile to prevent optimization
-section .text
-; rdi=buffer, rsi=size
-secure_zero:
-    push rax
-    push rcx
-    push rdi
-    
-    mov rcx, rsi
-    xor al, al
-    
-.loop:
-    mov byte [rdi], al
-    ; Compiler barrier to prevent optimization
-    ; (In real code, use volatile or inline asm)
-    inc rdi
-    dec rcx
-    jnz .loop
-    
-    pop rdi
-    pop rcx
-    pop rax
-    ret
-
-
-### Stack Variable Clearing
-Clear local variables before return:
-
-function:
-    push rbp
-    mov rbp, rsp
-    sub rsp, 64         ; Local variables
-    
-    ; ... function body ...
-    
-    ; Clear sensitive local variables
-    lea rdi, [rbp-64]
-    mov rsi, 64
-    call secure_zero
-    
-    leave
-    ret
-
-
-### Password Handling
-
-// BAD: Password stays in memory
-char password[256];
-gets(password);
-authenticate(password);
-// Password still in memory!
-
-// GOOD: Clear after use
-char password[256];
-gets(password);
-authenticate(password);
-explicit_bzero(password, sizeof(password));  // Clear
-
-
-### Cryptographic Key Handling
-• Use mlock() to prevent swapping to disk
-• Clear keys immediately after use
-• Consider using kernel keyring
-• Use constant-time operations to prevent timing attacks
-
-### Compiler Optimization Issues
-Compilers may optimize away zeroization:
-
-// May be optimized away!
-memset(sensitive_data, 0, size);
-
-// Use volatile to prevent optimization
-volatile char *p = (volatile char *)sensitive_data;
-for (size_t i = 0; i < size; i++) {
-    p[i] = 0;
-}
-
-// Or use explicit_bzero (POSIX)
-explicit_bzero(sensitive_data, size);
-
-
-### Memory Protection Techniques
-| Technique | Purpose |
-|-----------|---------|
-| mlock() | Prevent swapping to disk |
-| mprotect() | Control page permissions |
-| guard pages | Detect stack overflows |
-| ASLR | Randomize memory layout |
-| Stack canaries | Detect stack corruption |`,
-        codeSnippets: [
+        "id": "sec-44-1-6",
+        "title": "44.1.6 Compiler Built-in Checks",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'nasm',
-            title: 'Secure Memory Operations',
-            code: `; secure_memzero: Volatile zeroization
-; rdi=buffer, rsi=size
-section .text
-global secure_memzero
-secure_memzero:
-    push rax
-    push rcx
-    push rdi
-    
-    mov rcx, rsi
-    xor al, al
-    
-.loop:
-    ; Use volatile write (prevent optimization)
-    mov byte [rdi], al
-    ; Memory barrier
-    mfence
-    inc rdi
-    dec rcx
-    jnz .loop
-    
-    pop rdi
-    pop rcx
-    pop rax
-    ret
-
-; Secure string clear (for passwords)
-; rdi=string
-section .text
-secure_strclear:
-    push rax
-    push rdi
-    
-.loop:
-    lodsb               ; AL = [RSI], RSI++
-    test al, al
-    jz .done
-    stosb               ; Write zero
-    jmp .loop
-    
-.done:
-    ; Ensure null terminator cleared
-    mov byte [rdi], 0
-    
-    pop rdi
-    pop rax
-    ret`
+            "title": "Compiler Built-in Checks — example",
+            "language": "c",
+            "code": "// GCC/Clang overflow-checked arithmetic\nint result;\nif (__builtin_add_overflow(a, b, &result)) {\n    // Overflow occurred\n}\n\nif (__builtin_mul_overflow(a, b, &result)) {\n    // Overflow occurred\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-1-7",
+        "title": "44.1.7 Fuzzing for Bounds Checking",
+        "content": "Use fuzzing to find bounds violations:\n• AFL (American Fuzzy Lop)\n• libFuzzer\n• Honggfuzz\n• Microsoft OneFuzz"
+      },
+      {
+        "id": "sec-44-1-8",
+        "title": "44.1.8 Code examples",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Bounds-Checked Functions",
+            "code": "; safe_strncpy: Guaranteed null-terminated, bounds-checked\n; rdi=dest, rsi=src, rdx=dest_size\nglobal safe_strncpy\nsection .text\nsafe_strncpy:\n    push rdi\n    push rsi\n    push rcx\n    push rbx\n    \n    mov rbx, rdx        ; dest_size\n    test rbx, rbx\n    jz .overflow\n    \n.copy_loop:\n    dec rbx\n    jz .truncated\n    lodsb               ; AL = [RSI], RSI++\n    stosb               ; [RDI] = AL, RDI++\n    test al, al\n    jnz .copy_loop\n    jmp .done\n    \n.truncated:\n    mov byte [rdi-1], 0  ; Ensure null termination\n    mov eax, -1          ; Return truncation error\n    jmp .cleanup\n    \n.overflow:\n    xor eax, eax         ; Return 0 on zero-size\n    jmp .cleanup\n    \n.done:\n    xor eax, eax         ; Return success\n    \n.cleanup:\n    pop rbx\n    pop rcx\n    pop rsi\n    pop rdi\n    ret\n\n; memset with bounds check\n; rdi=dest, sil=value, rdx=size, rcx=dest_size\nsafe_memset:\n    cmp rdx, rcx\n    ja .overflow\n    ; Proceed with memset\n    mov rcx, rdx\n    mov al, sil\n    rep stosb\n    xor eax, eax\n    ret\n.overflow:\n    mov eax, -1\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-2",
+        "title": "44.2 Arithmetic Overflow Detection",
+        "content": "Detecting integer overflow is critical for secure arithmetic."
+      },
+      {
+        "id": "sec-44-2-1",
+        "title": "44.2.1 Why Integer Overflow is Dangerous",
+        "content": "• Buffer size underallocation\n• Unexpected negative values\n• Bypass of security checks\n• Logic errors in comparisons"
+      },
+      {
+        "id": "sec-44-2-2",
+        "title": "44.2.2 x86-64 Overflow Detection Flags",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Flag",
+            "Name",
+            "Set When"
+          ],
+          "rows": [
+            [
+              "OF",
+              "Overflow Flag",
+              "Signed overflow"
+            ],
+            [
+              "CF",
+              "Carry Flag",
+              "Unsigned overflow"
+            ],
+            [
+              "ZF",
+              "Zero Flag",
+              "Result is zero"
+            ],
+            [
+              "SF",
+              "Sign Flag",
+              "Result is negative"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-44-2-3",
+        "title": "44.2.3 Detecting Signed Overflow (jo/jno)",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Detecting Signed Overflow (jo/jno) — example",
+            "language": "nasm",
+            "code": "; Safe addition with overflow detection\n; rdi=a, rsi=b, rdx=ptr_to_result\nsafe_add:\n    mov rax, rdi\n    add rax, rsi\n    jo .overflow        ; Jump if signed overflow\n    mov [rdx], rax\n    xor eax, eax        ; Return success\n    ret\n.overflow:\n    mov eax, -1         ; Return error\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-2-4",
+        "title": "44.2.4 Detecting Unsigned Overflow (jc/jnc)",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Detecting Unsigned Overflow (jc/jnc) — example",
+            "language": "nasm",
+            "code": "; Safe multiplication with overflow detection\n; rdi=a, rsi=b, rdx=ptr_to_result\nsafe_mul:\n    mov rax, rdi\n    mul rsi             ; RDX:RAX = RAX * RSI\n    jc .overflow        ; Jump if unsigned overflow (RDX != 0)\n    mov [rdx], rax\n    xor eax, eax\n    ret\n.overflow:\n    mov eax, -1\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-2-5",
+        "title": "44.2.5 Compiler Built-in Overflow Checks",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Compiler Built-in Overflow Checks — example",
+            "language": "c",
+            "code": "// GCC/Clang built-in functions\nint result;\n\n// Addition\nif (__builtin_add_overflow(a, b, &result)) {\n    handle_overflow();\n}\n\n// Multiplication\nif (__builtin_mul_overflow(a, b, &result)) {\n    handle_overflow();\n}\n\n// Subtraction\nif (__builtin_sub_overflow(a, b, &result)) {\n    handle_overflow();\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-2-6",
+        "title": "44.2.6 Safe Integer Library Pattern",
+        "content": "typedef struct {\n\nsafe_int safe_add(safe_int a, safe_int b) {",
+        "codeSnippets": [
+          {
+            "title": "Safe Integer Library Pattern — example",
+            "language": "nasm",
+            "code": "    int64_t value;\n    int overflow;\n} safe_int;\n\n    safe_int result;\n    result.overflow = a.overflow || b.overflow;\n    if (!result.overflow) {\n        result.value = a.value + b.value;\n        result.overflow = (result.value < a.value) != (b.value > 0);\n    }\n    return result;\n}"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-2-7",
+        "title": "44.2.7 Common Integer Overflow Vulnerabilities",
+        "content": "1. **malloc(count * size): Multiplication overflow\n2. Array indexing: Signed/unsigned confusion\n3. Buffer length calculations: Subtraction underflow\n4. Loop counters: Increment overflow\n5. Time calculations**: Wraparound issues"
+      },
+      {
+        "id": "sec-44-2-8",
+        "title": "44.2.8 Mitigation Strategies",
+        "content": "• Use safe integer libraries\n• Check arithmetic operations with jo/jc\n• Validate all size calculations before allocation\n• Use larger types for intermediate results\n• Fuzz with extreme values"
+      },
+      {
+        "id": "sec-44-2-9",
+        "title": "44.2.9 Code examples",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Safe Arithmetic Functions",
+            "code": "; safe_add: Signed addition with overflow detection\n; Input: rdi=a, rsi=b, rdx=ptr_to_result\n; Output: eax=0 success, eax=-1 overflow\nglobal safe_add\nsection .text\nsafe_add:\n    mov rax, rdi\n    add rax, rsi\n    jo .overflow\n    mov [rdx], rax\n    xor eax, eax\n    ret\n.overflow:\n    mov eax, -1\n    ret\n\n; safe_mul: Unsigned multiplication with overflow detection\n; Input: rdi=a, rsi=b, rdx=ptr_to_result\nglobal safe_mul\nsection .text\nsafe_mul:\n    mov rax, rdi\n    mul rsi             ; RDX:RAX = RAX * RSI\n    test rdx, rdx       ; Check high 64 bits\n    jnz .overflow\n    mov [rdx], rax\n    xor eax, eax\n    ret\n.overflow:\n    mov eax, -1\n    ret\n\n; safe_sub: Signed subtraction with underflow detection\n; Input: rdi=a, rsi=b, rdx=ptr_to_result\nglobal safe_sub\nsection .text\nsafe_sub:\n    mov rax, rdi\n    sub rax, rsi\n    jo .overflow\n    mov [rdx], rax\n    xor eax, eax\n    ret\n.overflow:\n    mov eax, -1\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-3",
+        "title": "44.3 Stack Canaries and RELRO",
+        "content": "Modern compile-time protections against memory corruption."
+      },
+      {
+        "id": "sec-44-3-1",
+        "title": "44.3.1 Stack Canaries (Stack Protector)",
+        "content": "Random value placed before saved return address:",
+        "codeSnippets": [
+          {
+            "title": "Stack Canaries (Stack Protector) — example",
+            "language": "nasm",
+            "code": "; Function prologue\npush rbp\nmov rbp, rsp\nsub rsp, 32\nmov rax, qword [fs:0x28]    ; Load canary\nmov qword [rbp-8], rax       ; Store in stack frame\n\n; Function epilogue\nmov rax, qword [rbp-8]       ; Load canary\nxor rax, qword [fs:0x28]    ; Compare with master\njnz .stack_chk_fail          ; Abort if modified\nleave\nret"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-3-2",
+        "title": "44.3.2 Custom Stack Canary Implementation",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Custom Stack Canary Implementation — example",
+            "language": "nasm",
+            "code": "; Custom canary using getrandom syscall\nsection .text\nglobal _start\n\n_start:\n    ; Allocate stack frame\n    push rbp\n    mov rbp, rsp\n    sub rsp, 16\n\n; Generate random canary\n    mov rax, 318        ; sys_getrandom\n    lea rdi, [rbp-8]    ; Buffer for canary\n    mov rsi, 8          ; 8 bytes\n    xor rdx, rdx        ; Flags = 0\n    syscall\n\n; Store canary\n    mov rax, qword [rbp-8]\n\n; ... function body ...\n\n; Verify canary\n    mov rcx, qword [rbp-8]\n    xor rcx, qword [rbp-8]  ; Compare\n    jnz .canary_breach\n\n; Return\n    leave\n    ret\n\n.canary_breach:\n    ; Canary corrupted! Abort\n    mov rax, 60\n    mov rdi, 1\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-3-3",
+        "title": "44.3.3 RELRO (Relocation Read-Only)",
+        "content": "Protects GOT (Global Offset Table) from modification:\n\nPartial RELRO (default):\n• GOT is writable\n• .dynamic section is read-only\n• Partial protection\n\nFull RELRO (-z relro -z now):\n• GOT is read-only after startup\n• All symbols resolved at startup\n• Strong protection against GOT hijacking"
+      },
+      {
+        "id": "sec-44-3-4",
+        "title": "44.3.4 Compiler Security Flags",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Compiler Security Flags — example",
+            "language": "bash",
+            "code": "# Stack canary\ngcc -fstack-protector-strong -o binary source.c\n\n# NX (No-Execute)\ngcc -z noexecstack -o binary source.c\n\n# RELRO\ngcc -z relro -z now -o binary source.c\n\n# PIE (Position-Independent Executable)\ngcc -pie -fPIE -o binary source.c\n\n# Fortify Source\ngcc -D_FORTIFY_SOURCE=2 -o binary source.c\n\n# Full protection\ngcc -fstack-protector-strong -z noexecstack -z relro -z now     -pie -fPIE -D_FORTIFY_SOURCE=2 -o binary source.c"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-3-5",
+        "title": "44.3.5 Checking Protections",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Checking Protections — example",
+            "language": "nasm",
+            "code": "# checksec tool\nchecksec --file=binary\n\n# readelf for NX\nreadelf -l binary | grep GNU_STACK\n\n# readelf for PIE\nreadelf -h binary | grep Type\n\n# readelf for RELRO\nreadelf -l binary | grep GNU_RELRO"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-3-6",
+        "title": "44.3.6 Limitations of Protections",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Protection",
+            "Bypass Technique"
+          ],
+          "rows": [
+            [
+              "Stack canary",
+              "Leak canary value"
+            ],
+            [
+              "NX/DEP",
+              "ROP, ret2libc"
+            ],
+            [
+              "ASLR",
+              "Information leak"
+            ],
+            [
+              "PIE",
+              "Code leak"
+            ],
+            [
+              "RELRO",
+              "Data-only attacks"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-44-3-7",
+        "title": "44.3.7 Code examples",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Custom Canary Implementation",
+            "code": "; Custom stack canary with getrandom\nsection .bss\n    canary_value: resq 1\n\nsection .text\nglobal init_canary\nglobal check_canary\n\n; Initialize canary (call once at program start)\ninit_canary:\n    push rax\n    push rdi\n    push rsi\n    push rdx\n    \n    mov rax, 318            ; sys_getrandom\n    lea rdi, [canary_value] ; Buffer\n    mov rsi, 8              ; 8 bytes\n    xor rdx, rdx            ; Flags = 0\n    syscall\n    \n    ; Ensure canary has null byte in low byte\n    ; (for string function protection)\n    mov byte [canary_value], 0\n    \n    pop rdx\n    pop rsi\n    pop rdi\n    pop rax\n    ret\n\n; Check canary (call before return)\ncheck_canary:\n    push rax\n    push rcx\n    \n    mov rax, qword [canary_value]\n    mov rcx, [rsp+16]       ; Saved RBP from stack frame\n    xor rax, rcx\n    jnz .breach\n    \n    pop rcx\n    pop rax\n    ret\n    \n.breach:\n    ; Canary corrupted - abort\n    mov rax, 60\n    mov rdi, 1\n    syscall"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-4",
+        "title": "44.4 Secure Memory Handling",
+        "content": "Protecting sensitive data in memory."
+      },
+      {
+        "id": "sec-44-4-1",
+        "title": "44.4.1 Why Secure Memory Handling?",
+        "content": "• Prevent sensitive data leakage\n• Stop memory dump analysis\n• Protect cryptographic keys\n• Clear passwords from memory"
+      },
+      {
+        "id": "sec-44-4-2",
+        "title": "44.4.2 Memory Zeroization",
+        "content": "Always clear sensitive data after use:",
+        "codeSnippets": [
+          {
+            "title": "Memory Zeroization — example",
+            "language": "nasm",
+            "code": "; Secure memset: Clear buffer with volatile to prevent optimization\nsection .text\n; rdi=buffer, rsi=size\nsecure_zero:\n    push rax\n    push rcx\n    push rdi\n\nmov rcx, rsi\n    xor al, al\n\n.loop:\n    mov byte [rdi], al\n    ; Compiler barrier to prevent optimization\n    ; (In real code, use volatile or inline asm)\n    inc rdi\n    dec rcx\n    jnz .loop\n\npop rdi\n    pop rcx\n    pop rax\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-4-3",
+        "title": "44.4.3 Stack Variable Clearing",
+        "content": "Clear local variables before return:\n\nleave",
+        "codeSnippets": [
+          {
+            "title": "Stack Variable Clearing — example",
+            "language": "nasm",
+            "code": "function:\n    push rbp\n    mov rbp, rsp\n    sub rsp, 64         ; Local variables\n\n; ... function body ...\n\n; Clear sensitive local variables\n    lea rdi, [rbp-64]\n    mov rsi, 64\n    call secure_zero\n\n    ret"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-4-4",
+        "title": "44.4.4 Password Handling",
+        "content": "",
+        "codeSnippets": [
+          {
+            "title": "Password Handling — example",
+            "language": "c",
+            "code": "// BAD: Password stays in memory\nchar password[256];\ngets(password);\nauthenticate(password);\n// Password still in memory!\n\n// GOOD: Clear after use\nchar password[256];\ngets(password);\nauthenticate(password);\nexplicit_bzero(password, sizeof(password));  // Clear"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-4-5",
+        "title": "44.4.5 Cryptographic Key Handling",
+        "content": "• Use mlock() to prevent swapping to disk\n• Clear keys immediately after use\n• Consider using kernel keyring\n• Use constant-time operations to prevent timing attacks"
+      },
+      {
+        "id": "sec-44-4-6",
+        "title": "44.4.6 Compiler Optimization Issues",
+        "content": "Compilers may optimize away zeroization:",
+        "codeSnippets": [
+          {
+            "title": "Compiler Optimization Issues — example",
+            "language": "nasm",
+            "code": "// May be optimized away!\nmemset(sensitive_data, 0, size);"
+          },
+          {
+            "title": "Compiler Optimization Issues — example",
+            "language": "c",
+            "code": "// Use volatile to prevent optimization\nvolatile char *p = (volatile char *)sensitive_data;\nfor (size_t i = 0; i < size; i++) {\n    p[i] = 0;\n}"
+          },
+          {
+            "title": "Compiler Optimization Issues — example",
+            "language": "nasm",
+            "code": "// Or use explicit_bzero (POSIX)\nexplicit_bzero(sensitive_data, size);"
+          }
+        ]
+      },
+      {
+        "id": "sec-44-4-7",
+        "title": "44.4.7 Memory Protection Techniques",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Technique",
+            "Purpose"
+          ],
+          "rows": [
+            [
+              "mlock()",
+              "Prevent swapping to disk"
+            ],
+            [
+              "mprotect()",
+              "Control page permissions"
+            ],
+            [
+              "guard pages",
+              "Detect stack overflows"
+            ],
+            [
+              "ASLR",
+              "Randomize memory layout"
+            ],
+            [
+              "Stack canaries",
+              "Detect stack corruption"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-44-4-8",
+        "title": "44.4.8 Code examples",
+        "content": "",
+        "codeSnippets": [
+          {
+            "language": "nasm",
+            "title": "Secure Memory Operations",
+            "code": "; secure_memzero: Volatile zeroization\n; rdi=buffer, rsi=size\nsection .text\nglobal secure_memzero\nsecure_memzero:\n    push rax\n    push rcx\n    push rdi\n    \n    mov rcx, rsi\n    xor al, al\n    \n.loop:\n    ; Use volatile write (prevent optimization)\n    mov byte [rdi], al\n    ; Memory barrier\n    mfence\n    inc rdi\n    dec rcx\n    jnz .loop\n    \n    pop rdi\n    pop rcx\n    pop rax\n    ret\n\n; Secure string clear (for passwords)\n; rdi=string\nsection .text\nsecure_strclear:\n    push rax\n    push rdi\n    \n.loop:\n    lodsb               ; AL = [RSI], RSI++\n    test al, al\n    jz .done\n    stosb               ; Write zero\n    jmp .loop\n    \n.done:\n    ; Ensure null terminator cleared\n    mov byte [rdi], 0\n    \n    pop rdi\n    pop rax\n    ret"
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-44-1',
-        title: 'Exercise 44.1: Manual Stack Canary Implementation',
-        description: 'Read a random 64-bit word with sys_getrandom (318), store at [rbp-8], and verify before return.',
-        solution: `sub rsp, 8\nmov rax, 318; mov rdi, rsp; mov rsi, 8; xor rdx, rdx; syscall\nmov rax, [rsp]; add rsp, 8\n; store in stack frame\nmov [rbp-8], rax\n; ... body ...\nmov rcx, [rbp-8]; cmp rax, rcx; jne .abort`,
-        solutionLanguage: 'nasm'
+        "id": "ex-44-1",
+        "title": "Exercise 44.1: Manual Stack Canary Implementation",
+        "description": "Read a random 64-bit word with sys_getrandom (318), store at [rbp-8], and verify before return.",
+        "solution": "sub rsp, 8\nmov rax, 318; mov rdi, rsp; mov rsi, 8; xor rdx, rdx; syscall\nmov rax, [rsp]; add rsp, 8\n; store in stack frame\nmov [rbp-8], rax\n; ... body ...\nmov rcx, [rbp-8]; cmp rax, rcx; jne .abort",
+        "solutionLanguage": "nasm"
       },
       {
-        id: 'ex-44-2',
-        title: 'Exercise 44.2: Bounds-Checked Memory Copy',
-        description: 'Implement a memory copy function that validates destination buffer size.',
-        solution: 'Function takes dest, src, copy_size, dest_size. Check if copy_size > dest_size. If overflow, return error. Otherwise, copy bytes with loop and return success.'
+        "id": "ex-44-2",
+        "title": "Exercise 44.2: Bounds-Checked Memory Copy",
+        "description": "Implement a memory copy function that validates destination buffer size.",
+        "solution": "Function takes dest, src, copy_size, dest_size. Check if copy_size > dest_size. If overflow, return error. Otherwise, copy bytes with loop and return success."
       },
       {
-        id: 'ex-44-3',
-        title: 'Exercise 44.3: Integer Overflow Check',
-        description: 'Write a function that checks if multiplying two 64-bit integers would overflow.',
-        solution: 'Use mul instruction which stores result in RDX:RAX. If RDX != 0, overflow occurred. Or use: if (a > UINT64_MAX / b) overflow.'
+        "id": "ex-44-3",
+        "title": "Exercise 44.3: Integer Overflow Check",
+        "description": "Write a function that checks if multiplying two 64-bit integers would overflow.",
+        "solution": "Use mul instruction which stores result in RDX:RAX. If RDX != 0, overflow occurred. Or use: if (a > UINT64_MAX / b) overflow."
       },
       {
-        id: 'ex-44-4',
-        title: 'Exercise 44.4: Secure Password Buffer',
-        description: 'Implement a secure password buffer that clears itself after use.',
-        solution: 'Allocate buffer on stack. After password is used, call secure_memzero to clear. Use volatile writes to prevent compiler optimization from removing the clear operation.'
+        "id": "ex-44-4",
+        "title": "Exercise 44.4: Secure Password Buffer",
+        "description": "Implement a secure password buffer that clears itself after use.",
+        "solution": "Allocate buffer on stack. After password is used, call secure_memzero to clear. Use volatile writes to prevent compiler optimization from removing the clear operation."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'What is Full RELRO and how does it prevent exploitation?',
-        answer: 'Full RELRO (Relocation Read-Only) resolves all dynamic symbols at program startup and marks the Global Offset Table (GOT) as completely read-only. This prevents attackers from overwriting GOT entries to redirect function calls, which is a common exploitation technique for hijacking control flow.'
+        "question": "What is Full RELRO and how does it prevent exploitation?",
+        "answer": "Full RELRO (Relocation Read-Only) resolves all dynamic symbols at program startup and marks the Global Offset Table (GOT) as completely read-only. This prevents attackers from overwriting GOT entries to redirect function calls, which is a common exploitation technique for hijacking control flow."
       },
       {
-        question: 'Why is bounds checking essential for secure code?',
-        answer: 'Bounds checking prevents buffer overflows by verifying that memory writes stay within allocated buffer boundaries. Without bounds checking, writing past a buffer can overwrite adjacent memory, including return addresses, function pointers, or other critical data, leading to code execution or crashes.'
+        "question": "Why is bounds checking essential for secure code?",
+        "answer": "Bounds checking prevents buffer overflows by verifying that memory writes stay within allocated buffer boundaries. Without bounds checking, writing past a buffer can overwrite adjacent memory, including return addresses, function pointers, or other critical data, leading to code execution or crashes."
       },
       {
-        question: 'How do stack canaries detect buffer overflows?',
-        answer: 'Stack canaries place a random value before the saved return address. Before returning, the function verifies the canary value matches the original. If an overflow overwrites the canary, the check fails and the program terminates, preventing exploitation of the corrupted return address.'
+        "question": "How do stack canaries detect buffer overflows?",
+        "answer": "Stack canaries place a random value before the saved return address. Before returning, the function verifies the canary value matches the original. If an overflow overwrites the canary, the check fails and the program terminates, preventing exploitation of the corrupted return address."
       },
       {
-        question: 'What is integer overflow and why is it dangerous?',
-        answer: 'Integer overflow occurs when an arithmetic operation produces a value outside the representable range. It is dangerous because it can cause: buffer size underallocation (leading to overflow), bypass of security checks (if size check uses small type), or logic errors that enable exploitation.'
+        "question": "What is integer overflow and why is it dangerous?",
+        "answer": "Integer overflow occurs when an arithmetic operation produces a value outside the representable range. It is dangerous because it can cause: buffer size underallocation (leading to overflow), bypass of security checks (if size check uses small type), or logic errors that enable exploitation."
       },
       {
-        question: 'Why must sensitive data be cleared from memory?',
-        answer: 'Sensitive data (passwords, cryptographic keys) must be cleared to prevent: memory dump analysis (extracting secrets from core dumps), swap file exposure (data written to disk), cold boot attacks (reading DRAM contents), and memory disclosure vulnerabilities (reading process memory).'
+        "question": "Why must sensitive data be cleared from memory?",
+        "answer": "Sensitive data (passwords, cryptographic keys) must be cleared to prevent: memory dump analysis (extracting secrets from core dumps), swap file exposure (data written to disk), cold boot attacks (reading DRAM contents), and memory disclosure vulnerabilities (reading process memory)."
       },
       {
-        question: 'What compiler flags improve security?',
-        answer: 'Key flags: -fstack-protector-strong (stack canaries), -z noexecstack (NX), -z relro -z now (Full RELRO), -pie -fPIE (ASLR), -D_FORTIFY_SOURCE=2 (buffer overflow checks). These provide defense-in-depth against common vulnerabilities.'
+        "question": "What compiler flags improve security?",
+        "answer": "Key flags: -fstack-protector-strong (stack canaries), -z noexecstack (NX), -z relro -z now (Full RELRO), -pie -fPIE (ASLR), -D_FORTIFY_SOURCE=2 (buffer overflow checks). These provide defense-in-depth against common vulnerabilities."
       }
     ],
-    summary: [
-      'Bounds checking prevents buffer overflows and out-of-bounds access.',
-      'Arithmetic overflow detection uses jo/jc flags or compiler built-ins.',
-      'Stack canaries detect stack smashing before return.',
-      'RELRO protects GOT from modification.',
-      'Secure memory handling clears sensitive data after use.',
-      'Compiler flags provide automatic security protections.',
-      'Defense in depth uses multiple security layers.',
-      'Secure coding is essential for reliable software.'
+    "summary": [
+      "Bounds checking prevents buffer overflows and out-of-bounds access.",
+      "Arithmetic overflow detection uses jo/jc flags or compiler built-ins.",
+      "Stack canaries detect stack smashing before return.",
+      "RELRO protects GOT from modification.",
+      "Secure memory handling clears sensitive data after use.",
+      "Compiler flags provide automatic security protections.",
+      "Defense in depth uses multiple security layers.",
+      "Secure coding is essential for reliable software."
     ]
   }
 ];
