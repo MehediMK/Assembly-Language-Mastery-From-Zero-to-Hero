@@ -221,13 +221,12 @@ export const CHAPTERS_LEVEL_8: Chapter[] = [
       {
         "id": "sec-40-3-8",
         "title": "40.3.8 Checking for Null Bytes",
-        "content": "",
+        "content": "Use objdump or xxd to examine raw bytes:",
         "codeSnippets": [
           {
             "title": "Checking for Null Bytes — example",
             "language": "bash",
-            "code": "Use objdump or xxd to examine raw bytes:\nobjdump -d shellcode | grep -E \"00[^0-9a-f]\"",
-            "explanation": "Existing chapter example; formatting preserved."
+            "code": "objdump -d shellcode | grep -E \"00[^0-9a-f]\""
           }
         ]
       },
